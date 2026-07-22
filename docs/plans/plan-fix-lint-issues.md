@@ -25,10 +25,10 @@ Fix ~200 lint issues across 10 files in the SignalForge codebase. Combine linter
 
 ### Task 1: Install golangci-lint and run auto-fix
 
-- [ ] Install golangci-lint: `go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest`
-- [ ] Run `golangci-lint run --fix ./...` to auto-fix formatting, imports, gofumpt
-- [ ] Run `golangci-lint run ./...` to see remaining issues
-- [ ] Run tests
+- [x] Install golangci-lint: `go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest`
+- [x] Run `golangci-lint run --fix ./...` to auto-fix formatting, imports, gofumpt (attempted; formatter conflicts prevented safe changes)
+- [x] Run `golangci-lint run ./...` to see remaining issues
+- [x] Run tests
 
 ### Task 2: Fix errcheck, gosec, gocritic octal issues
 
