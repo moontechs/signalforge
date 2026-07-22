@@ -60,20 +60,20 @@ expose the collector through a new collect CLI command.
 - Create: internal/sources/github/client_test.go
 - Create: testdata/github/
 
-[ ] implement an HTTP-backed GitHub client with explicit timeout,
+[x] implement an HTTP-backed GitHub client with explicit timeout,
   retry/backoff, request context propagation, and token-based authentication
   via GITHUB_TOKEN without logging secrets
-[ ] support REST requests for issues and issue comments, plus GraphQL
+[x] support REST requests for issues and issue comments, plus GraphQL
   requests for discussions and discussion comments, keeping request
   construction isolated from parsing
-[ ] add typed error handling for rate limiting, authentication failure,
+[x] add typed error handling for rate limiting, authentication failure,
   malformed responses, and non-retryable API errors so the collector can make
   deterministic decisions
-[ ] enforce configured request ceilings and expose request counters/hooks
+[x] enforce configured request ceilings and expose request counters/hooks
   needed for run stats
-[ ] create fake transport or fake client fixtures so tests cover success,
+[x] create fake transport or fake client fixtures so tests cover success,
   pagination, retry, rate-limit, and failure paths with no network access
-[ ] run package tests for the new GitHub client before moving to task 3
+[x] run package tests for the new GitHub client before moving to task 3
 
 ### Task 3: Parse GitHub responses into RawSignal records
 

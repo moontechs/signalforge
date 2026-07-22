@@ -1,0 +1,67 @@
+{
+  "data": {
+    "search": {
+      "pageInfo": {
+        "endCursor": "cursor-1",
+        "hasNextPage": true
+      },
+      "nodes": [
+        {
+          "id": "D_kwDOAA",
+          "number": 12,
+          "title": "Need better discovery",
+          "body": "The collector misses discussions.",
+          "url": "https://github.com/openai/codex/discussions/12",
+          "locked": false,
+          "closed": false,
+          "createdAt": "2026-07-19T08:00:00Z",
+          "updatedAt": "2026-07-21T08:30:00Z",
+          "repository": {
+            "nameWithOwner": "openai/codex"
+          },
+          "category": {
+            "name": "Ideas"
+          },
+          "labels": {
+            "nodes": [
+              {
+                "name": "feedback"
+              }
+            ]
+          },
+          "comments": {
+            "totalCount": 1,
+            "pageInfo": {
+              "endCursor": null,
+              "hasNextPage": false
+            },
+            "nodes": [
+              {
+                "id": "DC_kwDOAA",
+                "body": "Same problem here",
+                "url": "https://github.com/openai/codex/discussions/12#discussioncomment-1",
+                "createdAt": "2026-07-20T08:00:00Z",
+                "updatedAt": "2026-07-20T08:10:00Z",
+                "replyCount": 0,
+                "isAnswer": false,
+                "author": {
+                  "login": "bob"
+                },
+                "reactions": {
+                  "totalCount": 2
+                }
+              }
+            ]
+          },
+          "reactions": {
+            "totalCount": 5
+          },
+          "upvoteCount": 3,
+          "author": {
+            "login": "maintainer"
+          }
+        }
+      ]
+    }
+  }
+}
