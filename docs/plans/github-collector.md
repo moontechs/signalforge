@@ -83,21 +83,21 @@ expose the collector through a new collect CLI command.
 - Modify: internal/domain/types.go (only if additional metadata fields are
   strictly necessary)
 
-[ ] implement mapping from GitHub issues and discussions into domain.
+[x] implement mapping from GitHub issues and discussions into domain.
   RawSignal, including title, body, URL, labels/tags, repository, community,
   timestamps, engagement counts, and bounded comments
-[ ] normalize source_type values so issues and discussions remain
+[x] normalize source_type values so issues and discussions remain
   distinguishable while still using source=github
-[ ] compute stable content hashes from normalized content and ensure
+[x] compute stable content hashes from normalized content and ensure
   metadata captures GitHub-specific facts that are useful later without
   leaking tokens or over-modeling
-[ ] define how empty bodies, deleted comments, locked/closed items, and
+[x] define how empty bodies, deleted comments, locked/closed items, and
   items with partial data are handled in MVP and encode that behavior in
   parser tests
-[ ] add fixture-driven tests for issue-to-RawSignal and discussion-to-
+[x] add fixture-driven tests for issue-to-RawSignal and discussion-to-
   RawSignal conversion, including comment truncation and missing-field edge
   cases
-[ ] run package tests for parser coverage before moving to task 4
+[x] run package tests for parser coverage before moving to task 4
 
 ### Task 4: Implement collector orchestration, deduplication, caching, and persistence hooks
 
