@@ -54,6 +54,16 @@ testdata/                        — Test fixtures
 - `log/slog` for logging
 - Error wrapping with `fmt.Errorf("context: %w", err)`
 - No panic in production paths
+- Strict linting via `.golangci.yml` — `golangci-lint run ./...` must pass before pushing
+
+### Linting (mandatory)
+- **golangci-lint v1.64+** enforced via pre-push hook — push blocked if linting fails
+- Config: `.golangci.yml` at repo root
+- Run `golangci-lint run ./...` before every commit
+- Auto-fix: `golangci-lint run --fix ./...` for formatting and simple fixes
+- **Do not add `//nolint` directives** without a comment explaining why
+- **Do not ignore linter warnings** — fix them or justify with a nolint comment
+- **Pre-push hook:** `.githooks/pre-push` runs `golangci-lint run ./...` automatically and blocks pushes if lint fails. Enable with `git config core.hooksPath .githooks` (one-time setup after clone).
 
 ### Testing
 - `go test ./...` — must pass without API keys

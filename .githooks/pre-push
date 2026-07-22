@@ -1,0 +1,25 @@
+#!/bin/sh
+# pre-push hook — runs golangci-lint before every push
+# Blocks push if lint fails, warns if golangci-lint is not installed.
+
+if ! command -v golangci-lint >/dev/null 2>&1; then
+    echo "⚠️  golangci-lint is not installed. Skipping lint check."
+    echo "   Install: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest"
+    exit 0
+fi
+
+echo "🔍 Running golangci-lint..."
+
+golangci-lint run ./...
+exit_code=$?
+
+if [ $exit_code -ne 0 ]; then
+    echo ""
+    echo "❌ Linting failed — push blocked."
+    echo "   Fix the issues above, then try pushing again."
+    echo "   Run 'golangci-lint run --fix ./...' for auto-fixable issues."
+    exit 1
+fi
+
+echo "✅ Linting passed."
+exit 0

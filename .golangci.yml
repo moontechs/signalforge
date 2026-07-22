@@ -1,0 +1,262 @@
+# golangci-lint configuration for SignalForge
+# Docs: https://golangci-lint.run/usage/configuration/
+#
+# Run: golangci-lint run ./...
+# Run with fixes: golangci-lint run --fix ./...
+
+run:
+  issues-exit-code: 1
+  timeout: 5m
+
+linters:
+  disable-all: true
+  enable:
+    # Core — built-in or essential
+    - govet
+    - errcheck
+    - staticcheck
+    - gosimple
+    - ineffassign
+    - unused
+
+    # Formatting & style
+    - gofmt
+    - gofumpt
+    - revive
+    - gci
+    - tagalign
+    - tagliatelle
+    - whitespace
+    - decorder
+
+    # Correctness
+    - bodyclose
+    - noctx
+    - unconvert
+    - nilerr
+    - nilnil
+    - usestdlibvars
+    - musttag
+    - sloglint
+    - perfsprint
+    - mirror
+    - reassign
+    - forcetypeassert
+    - durationcheck
+    - containedctx
+    - contextcheck
+    - makezero
+    - dupword
+
+    # Security
+    - gosec
+    - prealloc
+
+    # Naming
+    - errname
+    - errorlint
+    - recvcheck
+    - usetesting
+
+    # Complexity & structure
+    - cyclop
+    - funlen
+    - nestif
+    - gocritic
+    - gocyclo
+    - nakedret
+    - predeclared
+    - gochecknoglobals
+    - gochecknoinits
+    - goconst
+    - godot
+    - godox
+    - ireturn
+    - wsl
+    - wrapcheck
+    - maintidx
+    - intrange
+
+    # Test-specific
+    - paralleltest
+    - testifylint
+    - thelper
+    - tparallel
+
+    # Import & module
+    - gomodguard
+    - gomoddirectives
+    - importas
+
+    # Misc
+    - misspell
+    - nolintlint
+    - exhaustruct
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  exclude-dirs:
+    - testdata
+    - .ralphex
+  exclude-rules:
+    # Allow globals and init functions in CLI commands (Cobra convention)
+    - path: internal/cli/
+      linters:
+        - gochecknoglobals
+        - gochecknoinits
+
+    # Allow deep-exit in doctor.go (intentional CLI health check)
+    - path: internal/cli/doctor.go
+      linters:
+        - revive
+      text: "deep-exit"
+
+    # Allow snake_case JSON tags in domain types (persisted file format)
+    - path: internal/domain/types.go
+      linters:
+        - tagliatelle
+
+    # Allow partial struct initialization in tests
+    - path: _test\.go
+      linters:
+        - exhaustruct
+        - goconst
+        - funlen
+        - maintidx
+        - gocyclo
+        - cyclop
+
+linters-settings:
+  cyclop:
+    max-complexity: 15
+    package-average: 8.0
+  funlen:
+    lines: 60
+    statements: 40
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - opinionated
+      - performance
+      - style
+    disabled-checks:
+      - ifElseChain
+      - unnamedResult
+      - whyNoLint
+  gocyclo:
+    min-complexity: 15
+  godot:
+    scope: all
+    capital: true
+  godox:
+    keywords:
+      - TODO
+      - FIXME
+      - HACK
+  gosec:
+    excludes:
+      - G115  # integer overflow conversion (too noisy)
+      - G204  # subprocess launch (not used in CLI)
+  nestif:
+    min-complexity: 4
+  revive:
+    rules:
+      - name: blank-imports
+      - name: context-as-argument
+      - name: context-keys-type
+      - name: dot-imports
+      - name: error-return
+      - name: error-strings
+      - name: error-naming
+      - name: exported
+      - name: if-return
+      - name: increment-decrement
+      - name: var-naming
+      - name: var-declaration
+      - name: package-comments
+      - name: range
+      - name: receiver-naming
+      - name: time-naming
+      - name: unexported-return
+      - name: indent-error-flow
+      - name: errorf
+      - name: redundant-import-alias
+      - name: struct-tag
+      - name: modifies-value-receiver
+      - name: constant-logical-expr
+      - name: bool-literal-in-expr
+      - name: redefines-builtin-id
+      - name: unconditional-recursion
+      - name: confusing-naming
+      - name: confusing-results
+      - name: get-return
+      - name: deep-exit
+      - name: unused-parameter
+      - name: unhandled-error
+      - name: early-return
+      - name: empty-block
+      - name: superfluous-else
+      - name: unreachable-code
+      - name: unnecessary-stmt
+      - name: use-any
+      - name: useless-break
+      - name: waitgroup-by-value
+    severity: warning
+  sloglint:
+    args-on-sep-lines: true
+    no-global: "all"
+    context: "scope"
+    attr-only: true
+  tagliatelle:
+    interface:
+      json: snake
+      yaml: kebab
+      toml: kebab
+  testifylint:
+    enable-all: true
+  wrapcheck:
+    ignoreSigs:
+      - .Errorf(
+      - errors.New(
+      - errors.Unwrap(
+      - .Wrap(
+      - .Wrapf(
+      - .WithMessage(
+      - .WithMessagef(
+  wsl:
+    strict-append: true
+    allow-assign-and-anything: false
+    allow-cuddle-declarations: false
+    allow-trailing-comment: false
+    force-case-trailing-whitespace: 0
+    force-err-cuddling: true
+    force-short-decl-cuddling: false
+  gomodguard:
+    blocked:
+      modules:
+        - github.com/pkg/errors:
+            recommendations:
+              - fmt
+              - errors
+        - gopkg.in/check.v1:
+            recommendations:
+              - testing
+        - io/ioutil:
+            recommendations:
+              - io
+              - os
+  gomoddirectives:
+    replace-allow-list:
+      - local
+  importas:
+    no-unaliased: true
+    alias:
+      - pkg: github.com/moontechs/signalforge/internal/(.+)/
+        alias: $1
+  gci:
+    sections:
+      - standard
+      - default
+      - prefix(github.com/moontechs/signalforge)
+    custom-order: true
