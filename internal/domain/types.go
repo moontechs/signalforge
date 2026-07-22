@@ -1,7 +1,10 @@
 // Package domain contains all domain models for SignalForge.
 package domain
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 // ProductType represents the type of product a solution could be.
 type ProductType string
@@ -106,46 +109,46 @@ type RawSignal struct {
 
 // ProblemSignal represents a classified problem signal.
 type ProblemSignal struct {
-	ID                  string    `json:"id"`
-	RawSignalID         string    `json:"raw_signal_id"`
-	Source              string    `json:"source"`
-	URL                 string    `json:"url"`
-	IsProblemSignal     bool      `json:"is_problem_signal"`
-	Relevance           float64   `json:"relevance"`
-	Problem             string    `json:"problem"`
-	TargetUser          string    `json:"target_user"`
-	Context             string    `json:"context"`
-	CurrentWorkaround   string    `json:"current_workaround"`
-	DesiredOutcome      string    `json:"desired_outcome"`
-	Recurring           bool      `json:"recurring"`
-	ProductSolvable     bool      `json:"product_solvable"`
-	IsTemporaryIncident bool      `json:"is_temporary_incident"`
-	IsSupportQuestion   bool      `json:"is_support_question"`
-	IsExistingBug       bool      `json:"is_existing_bug"`
-	IsConfigurationIssue bool     `json:"is_configuration_issue"`
-	IsFeatureRequest    bool      `json:"is_feature_request"`
-	SeverityHint        float64   `json:"severity_hint"`
-	FrequencyHint       float64   `json:"frequency_hint"`
-	PaymentHint         float64   `json:"payment_hint"`
-	FrustrationHint     float64   `json:"frustration_hint"`
-	Keywords            []string  `json:"keywords"`
-	Entities            []string  `json:"entities"`
-	Actions             []string  `json:"actions"`
-	Constraints         []string  `json:"constraints"`
-	ClassificationModel string    `json:"classification_model"`
-	ClassifiedAt        time.Time `json:"classified_at"`
+	ID                   string    `json:"id"`
+	RawSignalID          string    `json:"raw_signal_id"`
+	Source               string    `json:"source"`
+	URL                  string    `json:"url"`
+	IsProblemSignal      bool      `json:"is_problem_signal"`
+	Relevance            float64   `json:"relevance"`
+	Problem              string    `json:"problem"`
+	TargetUser           string    `json:"target_user"`
+	Context              string    `json:"context"`
+	CurrentWorkaround    string    `json:"current_workaround"`
+	DesiredOutcome       string    `json:"desired_outcome"`
+	Recurring            bool      `json:"recurring"`
+	ProductSolvable      bool      `json:"product_solvable"`
+	IsTemporaryIncident  bool      `json:"is_temporary_incident"`
+	IsSupportQuestion    bool      `json:"is_support_question"`
+	IsExistingBug        bool      `json:"is_existing_bug"`
+	IsConfigurationIssue bool      `json:"is_configuration_issue"`
+	IsFeatureRequest     bool      `json:"is_feature_request"`
+	SeverityHint         float64   `json:"severity_hint"`
+	FrequencyHint        float64   `json:"frequency_hint"`
+	PaymentHint          float64   `json:"payment_hint"`
+	FrustrationHint      float64   `json:"frustration_hint"`
+	Keywords             []string  `json:"keywords"`
+	Entities             []string  `json:"entities"`
+	Actions              []string  `json:"actions"`
+	Constraints          []string  `json:"constraints"`
+	ClassificationModel  string    `json:"classification_model"`
+	ClassifiedAt         time.Time `json:"classified_at"`
 }
 
 // ProblemScorecard holds scores for a problem cluster.
 type ProblemScorecard struct {
-	EvidenceStrength     float64 `json:"evidence_strength"`
-	Recurrence           float64 `json:"recurrence"`
-	Severity             float64 `json:"severity"`
-	WorkaroundCost       float64 `json:"workaround_cost"`
-	SourceDiversity      float64 `json:"source_diversity"`
-	Longevity            float64 `json:"longevity"`
-	UserSpecificity      float64 `json:"user_specificity"`
-	ProductSolvability   float64 `json:"product_solvability"`
+	EvidenceStrength   float64 `json:"evidence_strength"`
+	Recurrence         float64 `json:"recurrence"`
+	Severity           float64 `json:"severity"`
+	WorkaroundCost     float64 `json:"workaround_cost"`
+	SourceDiversity    float64 `json:"source_diversity"`
+	Longevity          float64 `json:"longevity"`
+	UserSpecificity    float64 `json:"user_specificity"`
+	ProductSolvability float64 `json:"product_solvability"`
 }
 
 // ProblemScorecardWeights returns the weights for each scoring dimension.
@@ -179,32 +182,32 @@ func (ps ProblemScorecard) Total() float64 {
 
 // ProblemCluster represents a cluster of related problem signals.
 type ProblemCluster struct {
-	ID                     string          `json:"id"`
-	CreatedAt              time.Time       `json:"created_at"`
-	UpdatedAt              time.Time       `json:"updated_at"`
-	Title                  string          `json:"title"`
-	Summary                string          `json:"summary"`
-	Problem                string          `json:"problem"`
-	TargetUsers            []string        `json:"target_users"`
-	Contexts               []string        `json:"contexts"`
-	CurrentWorkarounds     []string        `json:"current_workarounds"`
-	DesiredOutcomes        []string        `json:"desired_outcomes"`
-	Constraints            []string        `json:"constraints"`
-	SignalIDs              []string        `json:"signal_ids"`
-	RepresentativeSignalIDs []string       `json:"representative_signal_ids"`
-	SignalCount            int             `json:"signal_count"`
-	IndependentSources     int             `json:"independent_sources"`
-	IndependentDomains     int             `json:"independent_domains"`
-	SourceTypes            []string        `json:"source_types"`
-	FirstObservedAt        time.Time       `json:"first_observed_at"`
-	LastObservedAt         time.Time       `json:"last_observed_at"`
-	Keywords               []string        `json:"keywords"`
-	Entities               []string        `json:"entities"`
-	Actions                []string        `json:"actions"`
-	ProblemScore           ProblemScorecard `json:"problem_score"`
-	ProblemTotal           float64         `json:"problem_total"`
-	Confidence             float64         `json:"confidence"`
-	Status                 string          `json:"status"`
+	ID                      string           `json:"id"`
+	CreatedAt               time.Time        `json:"created_at"`
+	UpdatedAt               time.Time        `json:"updated_at"`
+	Title                   string           `json:"title"`
+	Summary                 string           `json:"summary"`
+	Problem                 string           `json:"problem"`
+	TargetUsers             []string         `json:"target_users"`
+	Contexts                []string         `json:"contexts"`
+	CurrentWorkarounds      []string         `json:"current_workarounds"`
+	DesiredOutcomes         []string         `json:"desired_outcomes"`
+	Constraints             []string         `json:"constraints"`
+	SignalIDs               []string         `json:"signal_ids"`
+	RepresentativeSignalIDs []string         `json:"representative_signal_ids"`
+	SignalCount             int              `json:"signal_count"`
+	IndependentSources      int              `json:"independent_sources"`
+	IndependentDomains      int              `json:"independent_domains"`
+	SourceTypes             []string         `json:"source_types"`
+	FirstObservedAt         time.Time        `json:"first_observed_at"`
+	LastObservedAt          time.Time        `json:"last_observed_at"`
+	Keywords                []string         `json:"keywords"`
+	Entities                []string         `json:"entities"`
+	Actions                 []string         `json:"actions"`
+	ProblemScore            ProblemScorecard `json:"problem_score"`
+	ProblemTotal            float64          `json:"problem_total"`
+	Confidence              float64          `json:"confidence"`
+	Status                  string           `json:"status"`
 }
 
 // JobToBeDone represents a job to be done derived from a cluster.
@@ -225,17 +228,17 @@ type JobToBeDone struct {
 
 // Evidence represents a piece of evidence for a solution hypothesis.
 type Evidence struct {
-	ID                 string    `json:"id"`
-	Type               string    `json:"type"`
-	Source             string    `json:"source"`
-	URL                string    `json:"url"`
-	Title              string    `json:"title"`
-	Snippet            string    `json:"snippet"`
-	Query              string    `json:"query,omitempty"`
-	IsDirectObservation bool     `json:"is_direct_observation"`
-	IsInference        bool     `json:"is_inference"`
-	Relevance          float64   `json:"relevance"`
-	CollectedAt        time.Time `json:"collected_at"`
+	ID                  string    `json:"id"`
+	Type                string    `json:"type"`
+	Source              string    `json:"source"`
+	URL                 string    `json:"url"`
+	Title               string    `json:"title"`
+	Snippet             string    `json:"snippet"`
+	Query               string    `json:"query,omitempty"`
+	IsDirectObservation bool      `json:"is_direct_observation"`
+	IsInference         bool      `json:"is_inference"`
+	Relevance           float64   `json:"relevance"`
+	CollectedAt         time.Time `json:"collected_at"`
 }
 
 // ValidEvidenceTypes returns valid evidence types.
@@ -250,43 +253,43 @@ func ValidEvidenceTypes() []string {
 
 // Competitor represents a competitor or alternative solution.
 type Competitor struct {
-	Name              string   `json:"name"`
-	URL               string   `json:"url"`
-	Domain            string   `json:"domain"`
-	ProductType       string   `json:"product_type"`
-	Description       string   `json:"description"`
-	TargetUser        string   `json:"target_user"`
-	PricingText       string   `json:"pricing_text"`
-	RatingText        string   `json:"rating_text"`
-	UsersText         string   `json:"users_text"`
-	ActivityText      string   `json:"activity_text"`
-	Strengths         []string `json:"strengths"`
-	Weaknesses        []string `json:"weaknesses"`
+	Name                string   `json:"name"`
+	URL                 string   `json:"url"`
+	Domain              string   `json:"domain"`
+	ProductType         string   `json:"product_type"`
+	Description         string   `json:"description"`
+	TargetUser          string   `json:"target_user"`
+	PricingText         string   `json:"pricing_text"`
+	RatingText          string   `json:"rating_text"`
+	UsersText           string   `json:"users_text"`
+	ActivityText        string   `json:"activity_text"`
+	Strengths           []string `json:"strengths"`
+	Weaknesses          []string `json:"weaknesses"`
 	MissingCapabilities []string `json:"missing_capabilities"`
-	EvidenceIDs       []string `json:"evidence_ids"`
+	EvidenceIDs         []string `json:"evidence_ids"`
 }
 
 // ImplementationAnalysis holds implementation analysis for a solution.
 type ImplementationAnalysis struct {
-	Complexity              string   `json:"complexity"`
-	EstimatedDaysMin        int      `json:"estimated_days_min"`
-	EstimatedDaysMax        int      `json:"estimated_days_max"`
-	NeedsBackend            bool     `json:"needs_backend"`
-	NeedsAuth               bool     `json:"needs_auth"`
-	NeedsPayments           bool     `json:"needs_payments"`
-	NeedsMobileApp          bool     `json:"needs_mobile_app"`
-	NeedsBrowserExtension   bool     `json:"needs_browser_extension"`
-	NeedsDesktopClient      bool     `json:"needs_desktop_client"`
-	NeedsExternalAPI        bool     `json:"needs_external_api"`
-	NeedsAI                 bool     `json:"needs_ai"`
-	StoresUserData          bool     `json:"stores_user_data"`
-	ProcessesSensitiveData  bool     `json:"processes_sensitive_data"`
-	PlatformDependencies    []string `json:"platform_dependencies"`
-	ExternalIntegrations    []string `json:"external_integrations"`
-	Permissions             []string `json:"permissions"`
-	TechnicalRisks          []string `json:"technical_risks"`
-	PolicyRisks             []string `json:"policy_risks"`
-	DataRisks               []string `json:"data_risks"`
+	Complexity             string   `json:"complexity"`
+	EstimatedDaysMin       int      `json:"estimated_days_min"`
+	EstimatedDaysMax       int      `json:"estimated_days_max"`
+	NeedsBackend           bool     `json:"needs_backend"`
+	NeedsAuth              bool     `json:"needs_auth"`
+	NeedsPayments          bool     `json:"needs_payments"`
+	NeedsMobileApp         bool     `json:"needs_mobile_app"`
+	NeedsBrowserExtension  bool     `json:"needs_browser_extension"`
+	NeedsDesktopClient     bool     `json:"needs_desktop_client"`
+	NeedsExternalAPI       bool     `json:"needs_external_api"`
+	NeedsAI                bool     `json:"needs_ai"`
+	StoresUserData         bool     `json:"stores_user_data"`
+	ProcessesSensitiveData bool     `json:"processes_sensitive_data"`
+	PlatformDependencies   []string `json:"platform_dependencies"`
+	ExternalIntegrations   []string `json:"external_integrations"`
+	Permissions            []string `json:"permissions"`
+	TechnicalRisks         []string `json:"technical_risks"`
+	PolicyRisks            []string `json:"policy_risks"`
+	DataRisks              []string `json:"data_risks"`
 }
 
 // SolutionScorecard holds scores for a solution hypothesis.
@@ -305,15 +308,15 @@ type SolutionScorecard struct {
 // SolutionScorecardWeights returns the weights for each solution scoring dimension.
 func SolutionScorecardWeights() map[string]float64 {
 	return map[string]float64{
-		"problem_fit":             0.20,
-		"product_type_fit":        0.15,
-		"competition_gap":         0.15,
-		"build_simplicity":        0.10,
-		"distribution_potential":  0.10,
-		"monetization_potential":  0.10,
-		"retention_potential":     0.08,
-		"platform_safety":         0.07,
-		"defensibility":           0.05,
+		"problem_fit":            0.20,
+		"product_type_fit":       0.15,
+		"competition_gap":        0.15,
+		"build_simplicity":       0.10,
+		"distribution_potential": 0.10,
+		"monetization_potential": 0.10,
+		"retention_potential":    0.08,
+		"platform_safety":        0.07,
+		"defensibility":          0.05,
 	}
 }
 
@@ -335,54 +338,54 @@ func (ss SolutionScorecard) Total() float64 {
 
 // SolutionHypothesis represents a proposed solution for a problem cluster.
 type SolutionHypothesis struct {
-	ID                  string                 `json:"id"`
-	ProblemClusterID    string                 `json:"problem_cluster_id"`
-	JobID               string                 `json:"job_id"`
-	Title               string                 `json:"title"`
-	Summary             string                 `json:"summary"`
-	ProductType         ProductType            `json:"product_type"`
-	ProductTypeConfid   float64                `json:"product_type_confidence"`
-	ProductTypeReason   string                 `json:"product_type_reason"`
-	TargetUser          string                 `json:"target_user"`
-	Problem             string                 `json:"problem"`
-	ProposedSolution    string                 `json:"proposed_solution"`
-	CoreWorkflow        string                 `json:"core_workflow"`
-	Differentiation     string                 `json:"differentiation"`
-	MustHaveFeatures    []string               `json:"must_have_features"`
-	OptionalFeatures    []string               `json:"optional_features"`
-	NonGoals            []string               `json:"non_goals"`
-	Competitors         []Competitor           `json:"competitors"`
-	Evidence            []Evidence             `json:"evidence"`
-	Implementation      ImplementationAnalysis `json:"implementation"`
-	SolutionScore       SolutionScorecard      `json:"solution_score"`
-	SolutionTotal       float64                `json:"solution_total"`
-	Confidence          float64                `json:"confidence"`
-	Strengths           []string               `json:"strengths"`
-	Weaknesses          []string               `json:"weaknesses"`
-	Risks               []string               `json:"risks"`
-	Unknowns            []string               `json:"unknowns"`
-	Recommendation      Recommendation         `json:"recommendation"`
-	CreatedAt           time.Time              `json:"created_at"`
-	UpdatedAt           time.Time              `json:"updated_at"`
+	ID                string                 `json:"id"`
+	ProblemClusterID  string                 `json:"problem_cluster_id"`
+	JobID             string                 `json:"job_id"`
+	Title             string                 `json:"title"`
+	Summary           string                 `json:"summary"`
+	ProductType       ProductType            `json:"product_type"`
+	ProductTypeConfid float64                `json:"product_type_confidence"`
+	ProductTypeReason string                 `json:"product_type_reason"`
+	TargetUser        string                 `json:"target_user"`
+	Problem           string                 `json:"problem"`
+	ProposedSolution  string                 `json:"proposed_solution"`
+	CoreWorkflow      string                 `json:"core_workflow"`
+	Differentiation   string                 `json:"differentiation"`
+	MustHaveFeatures  []string               `json:"must_have_features"`
+	OptionalFeatures  []string               `json:"optional_features"`
+	NonGoals          []string               `json:"non_goals"`
+	Competitors       []Competitor           `json:"competitors"`
+	Evidence          []Evidence             `json:"evidence"`
+	Implementation    ImplementationAnalysis `json:"implementation"`
+	SolutionScore     SolutionScorecard      `json:"solution_score"`
+	SolutionTotal     float64                `json:"solution_total"`
+	Confidence        float64                `json:"confidence"`
+	Strengths         []string               `json:"strengths"`
+	Weaknesses        []string               `json:"weaknesses"`
+	Risks             []string               `json:"risks"`
+	Unknowns          []string               `json:"unknowns"`
+	Recommendation    Recommendation         `json:"recommendation"`
+	CreatedAt         time.Time              `json:"created_at"`
+	UpdatedAt         time.Time              `json:"updated_at"`
 }
 
 // PipelineRun represents a pipeline run.
 type PipelineRun struct {
-	ID                  string            `json:"id"`
-	StartedAt           time.Time         `json:"started_at"`
-	UpdatedAt           time.Time         `json:"updated_at"`
-	FinishedAt          *time.Time        `json:"finished_at,omitempty"`
-	Command             string            `json:"command"`
-	Stage               string            `json:"stage"`
-	Status              RunStatus         `json:"status"`
-	Sources             []string          `json:"sources"`
-	CursorState         map[string]any    `json:"cursor_state"`
-	ProcessedRawSignals int               `json:"processed_raw_signals"`
-	ClassifiedSignals   int               `json:"classified_signals"`
-	ClustersCreated     int               `json:"clusters_created"`
-	IdeasCreated        int               `json:"ideas_created"`
-	Errors              []RunError        `json:"errors"`
-	Stats               ResearchStats     `json:"stats"`
+	ID                  string         `json:"id"`
+	StartedAt           time.Time      `json:"started_at"`
+	UpdatedAt           time.Time      `json:"updated_at"`
+	FinishedAt          *time.Time     `json:"finished_at,omitempty"`
+	Command             string         `json:"command"`
+	Stage               string         `json:"stage"`
+	Status              RunStatus      `json:"status"`
+	Sources             []string       `json:"sources"`
+	CursorState         map[string]any `json:"cursor_state"`
+	ProcessedRawSignals int            `json:"processed_raw_signals"`
+	ClassifiedSignals   int            `json:"classified_signals"`
+	ClustersCreated     int            `json:"clusters_created"`
+	IdeasCreated        int            `json:"ideas_created"`
+	Errors              []RunError     `json:"errors"`
+	Stats               ResearchStats  `json:"stats"`
 }
 
 // RunError represents an error during a pipeline run.
@@ -395,41 +398,41 @@ type RunError struct {
 
 // ResearchStats holds statistics for a pipeline run.
 type ResearchStats struct {
-	RawSignalsCollected  int `json:"raw_signals_collected"`
-	RawSignalsSkipped    int `json:"raw_signals_skipped"`
-	ProblemSignalsFound  int `json:"problem_signals_found"`
-	NoiseSignals         int `json:"noise_signals"`
-	ClustersCreated      int `json:"clusters_created"`
-	JobsCreated          int `json:"jobs_created"`
-	IdeasCreated         int `json:"ideas_created"`
-	DuplicateIdeas       int `json:"duplicate_ideas"`
-	GitHubRequests       int `json:"github_requests"`
-	HackerNewsRequests   int `json:"hackernews_requests"`
-	StackExchangeReqs    int `json:"stackexchange_requests"`
-	RedditRequests       int `json:"reddit_requests"`
-	SERPRequests         int `json:"serp_requests"`
-	UnlockerRequests     int `json:"unlocker_requests"`
-	LLMRequests          int `json:"llm_requests"`
-	GitHubCacheHits      int `json:"github_cache_hits"`
-	HackerNewsCacheHits  int `json:"hackernews_cache_hits"`
-	StackExchangeCache   int `json:"stackexchange_cache_hits"`
-	RedditCacheHits      int `json:"reddit_cache_hits"`
-	SERPCacheHits        int `json:"serp_cache_hits"`
-	UnlockerCacheHits    int `json:"unlocker_cache_hits"`
+	RawSignalsCollected int `json:"raw_signals_collected"`
+	RawSignalsSkipped   int `json:"raw_signals_skipped"`
+	ProblemSignalsFound int `json:"problem_signals_found"`
+	NoiseSignals        int `json:"noise_signals"`
+	ClustersCreated     int `json:"clusters_created"`
+	JobsCreated         int `json:"jobs_created"`
+	IdeasCreated        int `json:"ideas_created"`
+	DuplicateIdeas      int `json:"duplicate_ideas"`
+	GitHubRequests      int `json:"github_requests"`
+	HackerNewsRequests  int `json:"hackernews_requests"`
+	StackExchangeReqs   int `json:"stackexchange_requests"`
+	RedditRequests      int `json:"reddit_requests"`
+	SERPRequests        int `json:"serp_requests"`
+	UnlockerRequests    int `json:"unlocker_requests"`
+	LLMRequests         int `json:"llm_requests"`
+	GitHubCacheHits     int `json:"github_cache_hits"`
+	HackerNewsCacheHits int `json:"hackernews_cache_hits"`
+	StackExchangeCache  int `json:"stackexchange_cache_hits"`
+	RedditCacheHits     int `json:"reddit_cache_hits"`
+	SERPCacheHits       int `json:"serp_cache_hits"`
+	UnlockerCacheHits   int `json:"unlocker_cache_hits"`
 }
 
 // Memory represents the persistent memory of the system.
 type Memory struct {
-	Version             int                     `json:"version"`
-	UpdatedAt           time.Time               `json:"updated_at"`
-	RawSignalIDs        map[string]string       `json:"raw_signal_ids"`
-	ContentHashes       map[string]string       `json:"content_hashes"`
-	ProblemFingerprints map[string]string       `json:"problem_fingerprints"`
-	ClusterFingerprints map[string]string       `json:"cluster_fingerprints"`
-	IdeaFingerprints    map[string]string       `json:"idea_fingerprints"`
-	UsedQueries         map[string]QueryMemory  `json:"used_queries"`
-	RejectedPatterns    []RejectedPattern       `json:"rejected_patterns"`
-	Stats               ResearchStats           `json:"stats"`
+	Version             int                    `json:"version"`
+	UpdatedAt           time.Time              `json:"updated_at"`
+	RawSignalIDs        map[string]string      `json:"raw_signal_ids"`
+	ContentHashes       map[string]string      `json:"content_hashes"`
+	ProblemFingerprints map[string]string      `json:"problem_fingerprints"`
+	ClusterFingerprints map[string]string      `json:"cluster_fingerprints"`
+	IdeaFingerprints    map[string]string      `json:"idea_fingerprints"`
+	UsedQueries         map[string]QueryMemory `json:"used_queries"`
+	RejectedPatterns    []RejectedPattern      `json:"rejected_patterns"`
+	Stats               ResearchStats          `json:"stats"`
 }
 
 // QueryMemory stores information about a previously used query.
@@ -449,19 +452,24 @@ type RejectedPattern struct {
 // SourceCollector interface for collecting signals from a source.
 type SourceCollector interface {
 	Name() string
-	Collect(ctx any, req CollectRequest) ([]RawSignal, error)
+	Collect(ctx context.Context, req CollectRequest) ([]RawSignal, error)
 }
 
 // CollectRequest represents a collection request for a source.
 type CollectRequest struct {
-	Since     string
-	Until     string
-	MaxItems  int
-	Language  string
-	Force     bool
-	DryRun    bool
-	Sources   []string
-	Subreddits []string
+	Since              time.Time
+	Until              time.Time
+	SinceWindow        time.Duration
+	MaxItems           int
+	MaxCommentsPerItem int
+	Force              bool
+	DryRun             bool
+	Sources            []string
+	Repositories       []string
+	Languages          []string
+	Labels             []string
+	Subreddits         []string
+	Cursor             map[string]string
 }
 
 // SearchResult represents a search result from Bright Data.
@@ -479,8 +487,8 @@ type SearchItem struct {
 
 // PageResult represents a fetched page.
 type PageResult struct {
-	URL     string `json:"url"`
-	Body    string `json:"body"`
+	URL     string            `json:"url"`
+	Body    string            `json:"body"`
 	Headers map[string]string `json:"headers,omitempty"`
 }
 
@@ -496,12 +504,12 @@ type LLMClient interface {
 
 // CompletionRequest represents an LLM completion request.
 type CompletionRequest struct {
-	Model       string            `json:"model"`
-	Prompt      string            `json:"prompt"`
-	System      string            `json:"system"`
-	Temperature float64           `json:"temperature"`
-	MaxTokens   int               `json:"max_tokens"`
-	Schema      any               `json:"schema,omitempty"`
+	Model       string  `json:"model"`
+	Prompt      string  `json:"prompt"`
+	System      string  `json:"system"`
+	Temperature float64 `json:"temperature"`
+	MaxTokens   int     `json:"max_tokens"`
+	Schema      any     `json:"schema,omitempty"`
 }
 
 // CompletionResponse represents an LLM completion response.

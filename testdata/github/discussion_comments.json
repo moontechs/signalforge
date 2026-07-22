@@ -1,0 +1,30 @@
+{
+  "data": {
+    "node": {
+      "comments": {
+        "totalCount": 2,
+        "pageInfo": {
+          "endCursor": "cursor-2",
+          "hasNextPage": false
+        },
+        "nodes": [
+          {
+            "id": "DC_kwDOAB",
+            "body": "Adding another detail here.",
+            "url": "https://github.com/openai/codex/discussions/12#discussioncomment-2",
+            "createdAt": "2026-07-21T08:00:00Z",
+            "updatedAt": "2026-07-21T08:10:00Z",
+            "replyCount": 1,
+            "isAnswer": true,
+            "author": {
+              "login": "dana"
+            },
+            "reactions": {
+              "totalCount": 4
+            }
+          }
+        ]
+      }
+    }
+  }
+}

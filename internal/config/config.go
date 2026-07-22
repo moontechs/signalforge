@@ -6,15 +6,16 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Config represents the entire application configuration.
 type Config struct {
-	OpenRouter  OpenRouterConfig  `json:"openrouter"`
-	Sources     SourcesConfig     `json:"sources"`
-	BrightData  BrightDataConfig  `json:"brightdata"`
-	Pipeline    PipelineConfig    `json:"pipeline"`
-	Limits      LimitsConfig      `json:"limits"`
+	OpenRouter OpenRouterConfig `json:"openrouter"`
+	Sources    SourcesConfig    `json:"sources"`
+	BrightData BrightDataConfig `json:"brightdata"`
+	Pipeline   PipelineConfig   `json:"pipeline"`
+	Limits     LimitsConfig     `json:"limits"`
 }
 
 // OpenRouterConfig holds OpenRouter-specific configuration.
@@ -41,51 +42,51 @@ type SourcesConfig struct {
 
 // GitHubConfig holds GitHub-specific configuration.
 type GitHubConfig struct {
-	Enabled          bool     `json:"enabled"`
-	SearchIssues     bool     `json:"search_issues"`
-	SearchDiscussions bool    `json:"search_discussions"`
-	MaxItemsPerRun   int      `json:"max_items_per_run"`
-	MaxCommentsPerItem int    `json:"max_comments_per_item"`
-	Repositories     []string `json:"repositories"`
-	Languages        []string `json:"languages"`
-	Labels           []string `json:"labels"`
+	Enabled            bool     `json:"enabled"`
+	SearchIssues       bool     `json:"search_issues"`
+	SearchDiscussions  bool     `json:"search_discussions"`
+	MaxItemsPerRun     int      `json:"max_items_per_run"`
+	MaxCommentsPerItem int      `json:"max_comments_per_item"`
+	Repositories       []string `json:"repositories"`
+	Languages          []string `json:"languages"`
+	Labels             []string `json:"labels"`
 }
 
 // HackerNewsConfig holds Hacker News-specific configuration.
 type HackerNewsConfig struct {
-	Enabled          bool     `json:"enabled"`
-	Feeds            []string `json:"feeds"`
-	MaxItemsPerRun   int      `json:"max_items_per_run"`
-	MaxCommentsPerItem int    `json:"max_comments_per_item"`
-	MinimumScore     int      `json:"minimum_score"`
+	Enabled            bool     `json:"enabled"`
+	Feeds              []string `json:"feeds"`
+	MaxItemsPerRun     int      `json:"max_items_per_run"`
+	MaxCommentsPerItem int      `json:"max_comments_per_item"`
+	MinimumScore       int      `json:"minimum_score"`
 }
 
 // StackExchangeConfig holds Stack Exchange-specific configuration.
 type StackExchangeConfig struct {
-	Enabled       bool     `json:"enabled"`
-	Sites         []string `json:"sites"`
-	MaxItemsPerSite int    `json:"max_items_per_site"`
-	MinimumScore  int      `json:"minimum_score"`
-	MinimumViews  int      `json:"minimum_views"`
+	Enabled         bool     `json:"enabled"`
+	Sites           []string `json:"sites"`
+	MaxItemsPerSite int      `json:"max_items_per_site"`
+	MinimumScore    int      `json:"minimum_score"`
+	MinimumViews    int      `json:"minimum_views"`
 }
 
 // RedditConfig holds Reddit-specific configuration.
 type RedditConfig struct {
-	Enabled          bool     `json:"enabled"`
-	Subreddits       []string `json:"subreddits"`
-	MaxPostsPerRun   int      `json:"max_posts_per_run"`
-	MaxCommentsPerPost int    `json:"max_comments_per_post"`
+	Enabled            bool     `json:"enabled"`
+	Subreddits         []string `json:"subreddits"`
+	MaxPostsPerRun     int      `json:"max_posts_per_run"`
+	MaxCommentsPerPost int      `json:"max_comments_per_post"`
 }
 
 // BrightDataConfig holds Bright Data-specific configuration.
 type BrightDataConfig struct {
-	Endpoint            string `json:"endpoint"`
-	Country             string `json:"country"`
-	Language            string `json:"language"`
-	RequestTimeoutSec   int    `json:"request_timeout_seconds"`
-	MaxRetries          int    `json:"max_retries"`
-	MaxConcurrency      int    `json:"max_concurrency"`
-	MaxResponseBytes    int    `json:"max_response_bytes"`
+	Endpoint          string `json:"endpoint"`
+	Country           string `json:"country"`
+	Language          string `json:"language"`
+	RequestTimeoutSec int    `json:"request_timeout_seconds"`
+	MaxRetries        int    `json:"max_retries"`
+	MaxConcurrency    int    `json:"max_concurrency"`
+	MaxResponseBytes  int    `json:"max_response_bytes"`
 }
 
 // PipelineConfig holds pipeline-specific configuration.
@@ -101,13 +102,24 @@ type PipelineConfig struct {
 
 // LimitsConfig holds technical request limits.
 type LimitsConfig struct {
-	MaxGitHubRequests     int `json:"max_github_requests_per_run"`
-	MaxHNRequests         int `json:"max_hn_requests_per_run"`
-	MaxStackExchangeReqs  int `json:"max_stackexchange_requests_per_run"`
-	MaxRedditRequests     int `json:"max_reddit_requests_per_run"`
-	MaxSERPRequests       int `json:"max_serp_requests_per_run"`
-	MaxUnlockerRequests   int `json:"max_unlocker_requests_per_run"`
-	MaxLLMRequests        int `json:"max_llm_requests_per_run"`
+	MaxGitHubRequests    int `json:"max_github_requests_per_run"`
+	MaxHNRequests        int `json:"max_hn_requests_per_run"`
+	MaxStackExchangeReqs int `json:"max_stackexchange_requests_per_run"`
+	MaxRedditRequests    int `json:"max_reddit_requests_per_run"`
+	MaxSERPRequests      int `json:"max_serp_requests_per_run"`
+	MaxUnlockerRequests  int `json:"max_unlocker_requests_per_run"`
+	MaxLLMRequests       int `json:"max_llm_requests_per_run"`
+}
+
+var sourceAliases = map[string]string{
+	"gh":             "github",
+	"github":         "github",
+	"hn":             "hackernews",
+	"hackernews":     "hackernews",
+	"reddit":         "reddit",
+	"se":             "stackexchange",
+	"stackexchange":  "stackexchange",
+	"stack-overflow": "stackexchange",
 }
 
 // DefaultConfig returns the default configuration.
@@ -127,14 +139,14 @@ func DefaultConfig() *Config {
 		},
 		Sources: SourcesConfig{
 			GitHub: GitHubConfig{
-				Enabled:           true,
-				SearchIssues:      true,
-				SearchDiscussions: true,
-				MaxItemsPerRun:    500,
+				Enabled:            true,
+				SearchIssues:       true,
+				SearchDiscussions:  true,
+				MaxItemsPerRun:     500,
 				MaxCommentsPerItem: 20,
-				Repositories:      []string{},
-				Languages:         []string{},
-				Labels:            []string{},
+				Repositories:       []string{},
+				Languages:          []string{},
+				Labels:             []string{},
 			},
 			HackerNews: HackerNewsConfig{
 				Enabled:            true,
@@ -144,16 +156,16 @@ func DefaultConfig() *Config {
 				MinimumScore:       2,
 			},
 			StackExchange: StackExchangeConfig{
-				Enabled:        true,
-				Sites:          []string{"stackoverflow", "superuser", "webapps"},
+				Enabled:         true,
+				Sites:           []string{"stackoverflow", "superuser", "webapps"},
 				MaxItemsPerSite: 200,
-				MinimumScore:   0,
-				MinimumViews:   0,
+				MinimumScore:    0,
+				MinimumViews:    0,
 			},
 			Reddit: RedditConfig{
-				Enabled:          false,
-				Subreddits:       []string{},
-				MaxPostsPerRun:   200,
+				Enabled:            false,
+				Subreddits:         []string{},
+				MaxPostsPerRun:     200,
 				MaxCommentsPerPost: 20,
 			},
 		},
@@ -201,7 +213,55 @@ func LoadConfig(dir string) (*Config, error) {
 	if err := json.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("parse config: %w", err)
 	}
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
 	return cfg, nil
+}
+
+// Validate checks the loaded configuration for invalid values.
+func (c *Config) Validate() error {
+	if c == nil {
+		return fmt.Errorf("config is nil")
+	}
+	if err := c.Sources.GitHub.Validate(); err != nil {
+		return fmt.Errorf("validate github config: %w", err)
+	}
+	return nil
+}
+
+// Validate checks the GitHub collector configuration for invalid values.
+func (c GitHubConfig) Validate() error {
+	if c.MaxItemsPerRun <= 0 {
+		return fmt.Errorf("max_items_per_run must be greater than zero")
+	}
+	if c.MaxCommentsPerItem < 0 {
+		return fmt.Errorf("max_comments_per_item must be zero or greater")
+	}
+	if !c.SearchIssues && !c.SearchDiscussions {
+		return fmt.Errorf("at least one of search_issues or search_discussions must be enabled")
+	}
+	for _, repo := range c.Repositories {
+		repo = strings.TrimSpace(repo)
+		if repo == "" {
+			return fmt.Errorf("repositories must not contain empty values")
+		}
+		parts := strings.Split(repo, "/")
+		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+			return fmt.Errorf("repository %q must use owner/name format", repo)
+		}
+	}
+	for _, language := range c.Languages {
+		if strings.TrimSpace(language) == "" {
+			return fmt.Errorf("languages must not contain empty values")
+		}
+	}
+	for _, label := range c.Labels {
+		if strings.TrimSpace(label) == "" {
+			return fmt.Errorf("labels must not contain empty values")
+		}
+	}
+	return nil
 }
 
 // SaveConfig saves configuration to the given directory.
@@ -240,24 +300,31 @@ func GetSignalForgeDir() (string, error) {
 // DefaultDirStructure returns the default directory structure.
 func DefaultDirStructure() map[string]string {
 	return map[string]string{
-		"sources/github":        "",
-		"sources/hackernews":    "",
-		"sources/stackexchange": "",
-		"sources/reddit":        "",
-		"raw-signals":           "",
-		"problem-signals":       "",
-		"clusters":              "",
-		"jobs":                  "",
-		"ideas":                 "",
-		"runs":                  "",
-		"cache/github":          "",
-		"cache/hackernews":      "",
-		"cache/stackexchange":   "",
-		"cache/reddit":          "",
-		"cache/brightdata/serp": "",
+		"sources/github":            "",
+		"sources/hackernews":        "",
+		"sources/stackexchange":     "",
+		"sources/reddit":            "",
+		"raw-signals":               "",
+		"problem-signals":           "",
+		"clusters":                  "",
+		"jobs":                      "",
+		"ideas":                     "",
+		"runs":                      "",
+		"cache/github":              "",
+		"cache/hackernews":          "",
+		"cache/stackexchange":       "",
+		"cache/reddit":              "",
+		"cache/brightdata/serp":     "",
 		"cache/brightdata/unlocker": "",
-		"cache/openrouter":      "",
-		"backups":               "",
-		"exports":               "",
+		"cache/openrouter":          "",
+		"backups":                   "",
+		"exports":                   "",
 	}
+}
+
+// NormalizeSourceName resolves a user-facing source alias to its canonical name.
+func NormalizeSourceName(name string) (string, bool) {
+	normalized := strings.ToLower(strings.TrimSpace(name))
+	canonical, ok := sourceAliases[normalized]
+	return canonical, ok
 }

@@ -8,8 +8,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/spf13/cobra"
 	"github.com/moontechs/signalforge/internal/cli"
+	"github.com/spf13/cobra"
 )
 
 const version = "0.1.0"
@@ -42,6 +42,7 @@ classifies them, clusters recurring problems, and generates evidence-backed prod
 func init() {
 	rootCmd.AddCommand(cli.InitCmd)
 	rootCmd.AddCommand(cli.DoctorCmd)
+	rootCmd.AddCommand(cli.CollectCmd)
 	rootCmd.AddCommand(cli.ListCmd)
 	rootCmd.AddCommand(cli.ShowCmd)
 	rootCmd.AddCommand(cli.AnalyzeCmd)

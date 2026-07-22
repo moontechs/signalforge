@@ -3,6 +3,7 @@ package memory
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"sync"
 	"time"
@@ -48,6 +49,9 @@ func (m *DefaultMemory) Load() error {
 
 	var mem domain.Memory
 	if err := m.store.LoadJSON(m.path, &mem); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
 		return fmt.Errorf("load memory: %w", err)
 	}
 
@@ -233,6 +237,17 @@ func (m *DefaultMemory) IncrementStat(field string) {
 	case "duplicate_ideas":
 		m.mem.Stats.DuplicateIdeas++
 	}
+}
+
+// AddGitHubRequests increments the GitHub request count.
+func (m *DefaultMemory) AddGitHubRequests(count int) {
+	if count <= 0 {
+		return
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.mem.Stats.GitHubRequests += count
 }
 
 // GetMemory returns the full memory struct (for serialization).

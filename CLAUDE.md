@@ -88,6 +88,15 @@ collect → classify → cluster → discover → research → rank
 
 Each stage is resumable. The `pipeline` command runs all stages sequentially.
 
+## GitHub collector MVP
+
+- The implemented CLI collection path is `signalforge collect --sources github --since 30d`
+- GitHub collection requires `GITHUB_TOKEN` before network calls begin
+- The collector reads public GitHub Issues through REST and Discussions through GraphQL
+- Raw signals are appended under `raw-signals/`, and dedup state is persisted in `memory.json`
+- Repeat runs skip previously seen GitHub source IDs and duplicate content hashes
+- Cursor-aware request fields exist in the collector, but the current MVP CLI uses a since-window rather than saved resume cursors
+
 ## MVP scope (4 milestones)
 
 | Milestone | What | Status |

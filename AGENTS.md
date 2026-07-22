@@ -17,7 +17,7 @@ go build ./cmd/signalforge/
 ./signalforge doctor
 
 # Collect signals from sources
-./signalforge collect --sources github,hn,stackexchange
+./signalforge collect --sources github
 
 # Classify raw signals
 ./signalforge classify
@@ -41,6 +41,14 @@ go build ./cmd/signalforge/
 | `OPENROUTER_MODEL` | No | OpenRouter model override (default: from config) |
 | `BRIGHTDATA_API_KEY` | No (post-MVP) | Bright Data API key |
 | `SIGNALFORGE_HOME` | No | Overrides ~/.signalforge data directory |
+
+## GitHub collector MVP behavior
+
+- `collect` currently supports `github` end to end in the CLI flow
+- GitHub collection requires `GITHUB_TOKEN` and only reads public Issues and Discussions
+- `--since` accepts Go duration values such as `24h` and day shorthands such as `7d`
+- Deduplication is persisted in `memory.json`, so repeat runs skip already-seen source IDs and duplicate content hashes
+- Initial MVP runs use a since-window and per-run limits; cursor inputs are accepted internally but not persisted as resumable state yet
 
 ## Running tests
 

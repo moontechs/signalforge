@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/spf13/cobra"
 	"github.com/moontechs/signalforge/internal/config"
 	"github.com/moontechs/signalforge/internal/storage"
+	"github.com/spf13/cobra"
 )
 
 // checkResult represents the result of a single doctor check.
@@ -60,18 +60,25 @@ func init() {
 
 func runChecks(verbose bool) []checkResult {
 	var results []checkResult
+	var cfg *config.Config
 
 	// 1. Check signalforge directory
 	results = append(results, checkSignalForgeDir())
 
 	// 2. Check config.json
 	results = append(results, checkConfig())
+	if dir, err := config.GetSignalForgeDir(); err == nil {
+		loadedCfg, loadErr := config.LoadConfig(dir)
+		if loadErr == nil {
+			cfg = loadedCfg
+		}
+	}
 
 	// 3. Check directory structure
 	results = append(results, checkDirectoryStructure())
 
 	// 4. Check environment variables
-	results = append(results, checkEnvVars()...)
+	results = append(results, checkEnvVars(cfg)...)
 
 	// 5. Check memory.json
 	results = append(results, checkMemory())
@@ -201,21 +208,32 @@ func checkDirectoryStructure() checkResult {
 	}
 }
 
-func checkEnvVars() []checkResult {
+func checkEnvVars(cfg *config.Config) []checkResult {
 	var results []checkResult
 
-	// Required
-	if os.Getenv("GITHUB_TOKEN") != "" {
-		results = append(results, checkResult{
-			Name:   "GITHUB_TOKEN",
-			Status: "✅",
-			Detail: "Set",
-		})
+	if cfg == nil {
+		cfg = config.DefaultConfig()
+	}
+
+	if cfg.Sources.GitHub.Enabled {
+		if os.Getenv("GITHUB_TOKEN") != "" {
+			results = append(results, checkResult{
+				Name:   "GITHUB_TOKEN",
+				Status: "✅",
+				Detail: "Set",
+			})
+		} else {
+			results = append(results, checkResult{
+				Name:   "GITHUB_TOKEN",
+				Status: "❌",
+				Detail: "Not set (required for GitHub collection)",
+			})
+		}
 	} else {
 		results = append(results, checkResult{
 			Name:   "GITHUB_TOKEN",
-			Status: "❌",
-			Detail: "Not set (required for GitHub collection)",
+			Status: "ℹ️",
+			Detail: "Not required while GitHub collection is disabled",
 		})
 	}
 
