@@ -63,10 +63,10 @@ type configValues struct {
 
 // cachedResponse holds response data for the on-disk cache.
 type cachedResponse struct {
-	Body         []byte
-	ETag         string
-	LastModified string
-	CollectedAt  time.Time
+	Body         []byte    `json:"body"`
+	ETag         string    `json:"etag,omitempty"`
+	LastModified string    `json:"last_modified,omitempty"`
+	CollectedAt  time.Time `json:"collected_at"`
 }
 
 // rateLimitCounters tracks remaining quota for REST and GraphQL APIs.

@@ -151,13 +151,13 @@ The collector accepts a `transport` in its constructor. Tests inject `fakeTransp
 - Create: internal/sources/github/cache.go
 - Add tests: internal/sources/github/cache_test.go
 
-- [ ] implement a small cache helper backed by internal/storage.Storage and the existing cache/github directory
-- [ ] design stable cache keys from request shape only (method + endpoint + normalized params), excluding tokens and other secrets
-- [ ] store response body + ETag + Last-Modified + collected-at timestamp
-- [ ] cache hit logic: if within TTL → return cached; if expired but has ETag/LM → conditional request; if expired and no ETag → re-fetch
-- [ ] integrate cache lookup/write/conditional paths for both REST and GraphQL requests in the client layer
-- [ ] write tests for key generation, secret exclusion, cache hit/miss behavior, stale/conditional handling, and storage round-trips
-- [ ] run go test ./internal/sources/github/... and fix failures before task 4
+- [x] implement a small cache helper backed by internal/storage.Storage and the existing cache/github directory
+- [x] design stable cache keys from request shape only (method + endpoint + normalized params), excluding tokens and other secrets
+- [x] store response body + ETag + Last-Modified + collected-at timestamp
+- [x] cache hit logic: if within TTL → return cached; if expired but has ETag/LM → conditional request; if expired and no ETag → re-fetch
+- [x] integrate cache lookup/write/conditional paths for both REST and GraphQL requests in the client layer
+- [x] write tests for key generation, secret exclusion, cache hit/miss behavior, stale/conditional handling, and storage round-trips
+- [x] run go test ./internal/sources/github/... and fix failures before task 4
 
 ### Task 4: Parse GitHub issues and discussions into RawSignal
 

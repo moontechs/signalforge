@@ -15,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/moontechs/signalforge/internal/storage"
 )
 
 const (
@@ -35,7 +37,8 @@ type etagEntry struct {
 }
 
 // githubClient handles HTTP communication with the GitHub API.
-// It provides retry, rate-limit tracking, and conditional request support.
+// It provides retry, rate-limit tracking, conditional request support,
+// and optional on-disk response caching.
 type githubClient struct {
 	transport    transport
 	token        string
@@ -52,6 +55,8 @@ type githubClient struct {
 	etags map[string]etagEntry
 	etagMutex sync.RWMutex
 	statsMutex sync.Mutex
+
+	cache *responseCache
 }
 
 // requestOptions describes an HTTP request to the GitHub API.
@@ -93,6 +98,14 @@ func newClient(transport transport, maxRequests int) *githubClient {
 		gqlRemaining:  gqlRateLimitMax,
 		etags:         make(map[string]etagEntry),
 	}
+}
+
+// WithCache attaches an on-disk response cache to the client.
+// All subsequent requests will check the cache before making HTTP calls
+// and will store successful responses in the cache.
+func (c *githubClient) WithCache(store *storage.Storage) *githubClient {
+	c.cache = newResponseCache(store)
+	return c
 }
 
 // checkRateLimit returns an error if the applicable rate limit is exhausted.
@@ -200,6 +213,29 @@ func (c *githubClient) doRequest(ctx context.Context, opts requestOptions) (*htt
 		return nil, err
 	}
 
+	// 2a. Check disk cache for fresh entry
+	if opts.CacheKey != "" && c.cache != nil {
+		if entry, fresh := c.cache.get(opts.CacheKey); fresh {
+			// Cache hit — return cached response without making HTTP request
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(bytes.NewReader(entry.Body)),
+			}, nil
+		} else if entry != nil {
+			// Expired but has ETag/LM — preload into in-memory cache for conditional request
+			if entry.ETag != "" || entry.LastModified != "" {
+				c.etagMutex.Lock()
+				c.etags[opts.CacheKey] = etagEntry{
+					Etag:         entry.ETag,
+					LastModified: entry.LastModified,
+					Body:         entry.Body,
+				}
+				c.etagMutex.Unlock()
+			}
+		}
+	}
+
 	// 3. Build URL
 	reqURL := opts.Path
 	if !strings.HasPrefix(reqURL, "http") && !strings.HasPrefix(reqURL, "https://") {
@@ -304,6 +340,11 @@ func (c *githubClient) doRequest(ctx context.Context, opts requestOptions) (*htt
 		if resp.StatusCode == http.StatusNotModified {
 			resp.Body.Close()
 
+			// Extend TTL for disk cache entry on 304
+			if c.cache != nil && opts.CacheKey != "" {
+				c.cache.touch(opts.CacheKey)
+			}
+
 			c.etagMutex.RLock()
 			entry, ok := c.etags[opts.CacheKey]
 			c.etagMutex.RUnlock()
@@ -332,7 +373,7 @@ func (c *githubClient) doRequest(ctx context.Context, opts requestOptions) (*htt
 				return nil, fmt.Errorf("read response body: %w", err)
 			}
 
-			// Store ETag/Last-Modified for conditional requests
+			// Store ETag/Last-Modified for conditional requests and disk cache
 			etag := resp.Header.Get("ETag")
 			lm := resp.Header.Get("Last-Modified")
 			if (etag != "" || lm != "") && opts.CacheKey != "" {
@@ -343,6 +384,11 @@ func (c *githubClient) doRequest(ctx context.Context, opts requestOptions) (*htt
 					Body:         body,
 				}
 				c.etagMutex.Unlock()
+			}
+
+			// Save to disk cache if configured
+			if c.cache != nil && opts.CacheKey != "" {
+				c.cache.set(opts.CacheKey, body, etag, lm)
 			}
 
 			return &http.Response{
