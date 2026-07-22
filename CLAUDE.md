@@ -80,6 +80,16 @@ testdata/                        — Test fixtures
 - Light tasks: `ralphex --config-dir /opt/ralphex-profiles/pi docs/plans/<plan>.md`
 - Plans are markdown files in `.hermes/plans/` or `docs/plans/`
 
+### Source collectors
+- Each external source implements `SourceCollector` interface under `internal/sources/<name>/`
+- Package structure follows: `client.go` (HTTP), `parser.go` (response→domain mapping), `errors.go` (typed errors), `collector.go` (orchestration)
+- **Collection strategy:** If `Config.GitHub.Repositories` is non-empty, use per-repo API (`GET /repos/{owner}/{repo}/issues`) for precise collection; if empty, use search API (`GET /search/issues`) for broader coverage
+- **Sort order:** Collect in ascending update time (`sort=updated&direction=asc`) so repeated runs pick up only new/updated items since the last cursor
+- **Rate-limit tracking:** REST and GraphQL have separate rate-limit counters. Both check `x-ratelimit-remaining` headers before making requests. Secondary rate limits (HTTP 403 + `Retry-After`) are handled identically to primary limits (backoff + retry)
+- **Conditional requests:** Store `ETag` / `Last-Modified` headers per endpoint. Send `If-None-Match` / `If-Modified-Since` on subsequent requests. HTTP 304 extends cache TTL without replacing content
+- **Comments pagination:** Fetch comments via paginated endpoints (`per_page=100`) with a configurable `MaxCommentsPerItem` cap, ordered by `created_at` asc
+- **Fake transport for tests:** Clients accept a `transport` interface; tests inject `fakeTransport` with registered responses, avoiding httptest.NewServer overhead and external credentials
+
 ## Pipeline stages
 
 ```

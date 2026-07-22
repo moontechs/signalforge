@@ -196,5 +196,5 @@ The collector accepts a `transport` in its constructor. Tests inject `fakeTransp
 
 ### Task 7: Update documentation
 
-- [ ] document the GitHub collector pattern in CLAUDE.md (empty repos → search API, populated → per-repo, rate-limit tracking, ETag caching)
-- [ ] keep docs unchanged if no new durable project pattern was introduced
+- [x] document the GitHub collector pattern in CLAUDE.md (empty repos → search API, populated → per-repo, rate-limit tracking, ETag caching)
+- [x] keep docs unchanged if no new durable project pattern was introduced
