@@ -105,7 +105,7 @@ func runCollect(cmd *cobra.Command, _ []string) error {
 				return fmt.Errorf("create github collector: %w", err)
 			}
 
-			// Attach disk cache
+			// Attach disk cache.
 			collector.WithCache(store)
 			collectors = append(collectors, collector)
 
@@ -128,7 +128,7 @@ func runCollect(cmd *cobra.Command, _ []string) error {
 			return fmt.Errorf("%s collection completed with errors: %w", collector.Name(), err)
 		}
 
-		// Save memory after collection
+		// Save memory after collection.
 		for _, s := range signals {
 			mem.AddRawSignal(s.Source, s.SourceID)
 		}

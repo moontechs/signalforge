@@ -89,7 +89,7 @@ func (m *DefaultMemory) Save() error {
 
 	m.mem.UpdatedAt = time.Now()
 
-	// Create backup before saving
+	// Create backup before saving.
 	if err := m.store.BackupJSON(m.path); err != nil {
 		return fmt.Errorf("backup memory: %w", err)
 	}

@@ -3,6 +3,7 @@ package storage
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -72,7 +73,7 @@ func (s *Storage) SaveJSON(path string, v any) error {
 		return fmt.Errorf("rename: %w", err)
 	}
 
-	// Sync directory
+	// Sync directory.
 	if f, err := os.Open(dir); err == nil {
 		_ = f.Sync()
 		_ = f.Close()
@@ -150,7 +151,7 @@ func (s *Storage) ReadJSONL(path string) ([][]byte, error) {
 	}
 
 	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
-	var results [][]byte
+	results := make([][]byte, 0, len(lines))
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -168,7 +169,7 @@ func (s *Storage) ReadJSONLInto(path string, into any) error {
 		return err
 	}
 
-	// Ensure into is a pointer to slice
+	// Ensure into is a pointer to slice.
 	for _, line := range lines {
 		if err := json.Unmarshal(line, into); err != nil {
 			return fmt.Errorf("unmarshal line: %w", err)
@@ -256,7 +257,7 @@ func ContentHash(parts ...string) string {
 	for _, p := range parts {
 		_, _ = io.WriteString(h, p)
 	}
-	return fmt.Sprintf("%x", h.Sum(nil))
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 // BackupJSON creates a backup of a JSON file before modification.
@@ -300,7 +301,7 @@ func (s *Storage) JSONLRecovery(path string) error {
 	}
 
 	if !json.Valid([]byte(lastLine)) {
-		// Remove the last line
+		// Remove the last line.
 		content := strings.Join(lines[:len(lines)-2], "\n") + "\n"
 		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 			return fmt.Errorf("repair: %w", err)

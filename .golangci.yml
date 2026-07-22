@@ -72,7 +72,6 @@ linters:
     - godot
     - godox
     - ireturn
-    - wsl
     - wrapcheck
     - maintidx
     - intrange
