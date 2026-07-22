@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/moontechs/signalforge/internal/config"
 	"github.com/moontechs/signalforge/internal/storage"
+	"github.com/spf13/cobra"
 )
 
 // Valid types for list/show commands.
@@ -102,7 +102,7 @@ func listType(cmd *cobra.Command, store *storage.Storage, typeName, subDir strin
 func listItems(store *storage.Storage, subDir string, limit, offset int) ([]string, error) {
 	files, err := store.ListFiles(subDir, ".json")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list files: %w", err)
 	}
 
 	// Apply offset and limit

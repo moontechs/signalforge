@@ -27,7 +27,7 @@ var DoctorCmd = &cobra.Command{
 - Config file validity
 - Required environment variables
 - Storage integrity`,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, _ []string) error {
 		verbose, _ := cmd.Flags().GetBool("verbose")
 		results := runChecks(verbose)
 

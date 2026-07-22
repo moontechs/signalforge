@@ -49,10 +49,10 @@ Fix ~200 lint issues across 10 files in the SignalForge codebase. Combine linter
 
 ### Task 4: Fix wrapcheck, revive unhandled-error
 
-- [ ] `internal/storage/storage.go`: Wrap os.ReadFile, os.MkdirAll errors with context
-- [ ] `internal/cli/*.go`: Handle fmt.Fprintf/Fprintln errors in RunE
-- [ ] `internal/cli/*.go`: Rename unused args to `_`
-- [ ] Run tests
+- [x] `internal/storage/storage.go`: Wrap os.ReadFile, os.MkdirAll errors with context
+- [x] `internal/cli/*.go`: Handle fmt.Fprintf/Fprintln errors in RunE
+- [x] `internal/cli/*.go`: Rename unused args to `_`
+- [x] Run tests
 
 ### Task 5: Fix collect.go (gocyclo, exhaustruct, hugeParam)
 

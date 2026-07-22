@@ -18,7 +18,7 @@ var InitCmd = &cobra.Command{
 
 This command sets up the data directory, creates all required subdirectories,
 and writes a default config.json file.`,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, _ []string) error {
 		force, _ := cmd.Flags().GetBool("force")
 
 		signalForgeDir, err := config.GetSignalForgeDir()
@@ -29,8 +29,12 @@ and writes a default config.json file.`,
 		// Check if already initialized
 		configPath := filepath.Join(signalForgeDir, "config.json")
 		if _, err := os.Stat(configPath); err == nil && !force {
-			fmt.Fprintf(cmd.OutOrStdout(), "SignalForge is already initialized at %s\n", signalForgeDir)
-			fmt.Fprintf(cmd.OutOrStdout(), "Use --force to reinitialize (overwrites config.json)\n")
+			if _, err := fmt.Fprintf(cmd.OutOrStdout(), "SignalForge is already initialized at %s\n", signalForgeDir); err != nil {
+				return fmt.Errorf("write output: %w", err)
+			}
+			if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Use --force to reinitialize (overwrites config.json)\n"); err != nil {
+				return fmt.Errorf("write output: %w", err)
+			}
 			return nil
 		}
 
@@ -49,8 +53,12 @@ and writes a default config.json file.`,
 			return fmt.Errorf("save default config: %w", err)
 		}
 
-		fmt.Fprintf(cmd.OutOrStdout(), "SignalForge initialized at %s\n", signalForgeDir)
-		fmt.Fprintf(cmd.OutOrStdout(), "Default configuration written to %s\n", configPath)
+		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "SignalForge initialized at %s\n", signalForgeDir); err != nil {
+			return fmt.Errorf("write output: %w", err)
+		}
+		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Default configuration written to %s\n", configPath); err != nil {
+			return fmt.Errorf("write output: %w", err)
+		}
 		return nil
 	},
 }

@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/spf13/cobra"
 	"github.com/moontechs/signalforge/internal/config"
+	"github.com/spf13/cobra"
 )
 
 // ShowCmd represents the signalforge show command.

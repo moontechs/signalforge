@@ -124,7 +124,9 @@ func runCollect(cmd *cobra.Command, _ []string) error {
 		totalSignals += len(signals)
 		if err != nil {
 			after := mem.GetStats()
-			reportCollectSummary(cmd, collector.Name(), len(signals), statsDelta(before, after))
+			if outputErr := reportCollectSummary(cmd, collector.Name(), len(signals), statsDelta(before, after)); outputErr != nil {
+				return fmt.Errorf("write collection summary: %w", outputErr)
+			}
 			return fmt.Errorf("%s collection completed with errors: %w", collector.Name(), err)
 		}
 
@@ -139,7 +141,9 @@ func runCollect(cmd *cobra.Command, _ []string) error {
 	}
 
 	after := mem.GetStats()
-	reportCollectSummary(cmd, strings.Join(selectedSources, ","), totalSignals, statsDelta(before, after))
+	if err := reportCollectSummary(cmd, strings.Join(selectedSources, ","), totalSignals, statsDelta(before, after)); err != nil {
+		return fmt.Errorf("write collection summary: %w", err)
+	}
 	return nil
 }
 
@@ -199,11 +203,11 @@ func parseSinceWindow(raw string) (time.Duration, error) {
 
 func ensureStorageLayout(dir string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
+		return fmt.Errorf("create storage directory: %w", err)
 	}
 	for subDir := range config.DefaultDirStructure() {
 		if err := os.MkdirAll(filepath.Join(dir, subDir), 0o755); err != nil {
-			return err
+			return fmt.Errorf("create storage subdirectory %s: %w", subDir, err)
 		}
 	}
 	return nil
@@ -223,8 +227,8 @@ func statsDelta(before, after domain.ResearchStats) collectStatsDelta {
 	}
 }
 
-func reportCollectSummary(cmd *cobra.Command, source string, totalSignals int, delta collectStatsDelta) {
-	fmt.Fprintf(
+func reportCollectSummary(cmd *cobra.Command, source string, totalSignals int, delta collectStatsDelta) error {
+	_, err := fmt.Fprintf(
 		cmd.OutOrStdout(),
 		"Collected %d signals from %s. New: %d, skipped: %d, GitHub requests: %d\n",
 		totalSignals,
@@ -233,4 +237,8 @@ func reportCollectSummary(cmd *cobra.Command, source string, totalSignals int, d
 		delta.skipped,
 		delta.requests,
 	)
+	if err != nil {
+		return fmt.Errorf("write collection summary: %w", err)
+	}
+	return nil
 }

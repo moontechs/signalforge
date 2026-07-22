@@ -32,7 +32,10 @@ func (s *Storage) BaseDir() string {
 
 // ensureDir ensures a directory exists.
 func (s *Storage) ensureDir(path string) error {
-	return os.MkdirAll(path, 0o755)
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		return fmt.Errorf("create directory %s: %w", path, err)
+	}
+	return nil
 }
 
 // SaveJSON atomically writes a JSON file.
@@ -75,8 +78,12 @@ func (s *Storage) SaveJSON(path string, v any) error {
 
 	// Sync directory.
 	if f, err := os.Open(dir); err == nil {
-		_ = f.Sync()
-		_ = f.Close()
+		if err := f.Sync(); err != nil {
+			return fmt.Errorf("sync directory: %w", err)
+		}
+		if err := f.Close(); err != nil {
+			return fmt.Errorf("close directory: %w", err)
+		}
 	}
 
 	return nil
@@ -166,7 +173,7 @@ func (s *Storage) ReadJSONL(path string) ([][]byte, error) {
 func (s *Storage) ReadJSONLInto(path string, into any) error {
 	lines, err := s.ReadJSONL(path)
 	if err != nil {
-		return err
+		return fmt.Errorf("read %s: %w", path, err)
 	}
 
 	// Ensure into is a pointer to slice.
@@ -185,7 +192,7 @@ func (s *Storage) CheckLastJSONLLine(path string) error {
 		if os.IsNotExist(err) {
 			return nil
 		}
-		return err
+		return fmt.Errorf("read %s: %w", path, err)
 	}
 
 	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
@@ -227,16 +234,23 @@ func (s *Storage) Exists(path string) bool {
 
 // ReadFile reads a file's contents.
 func (s *Storage) ReadFile(path string) ([]byte, error) {
-	return os.ReadFile(path)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	return data, nil
 }
 
 // WriteFile writes data to a file.
 func (s *Storage) WriteFile(path string, data []byte) error {
 	dir := filepath.Dir(path)
 	if err := s.ensureDir(dir); err != nil {
-		return err
+		return fmt.Errorf("ensure directory: %w", err)
 	}
-	return os.WriteFile(path, data, 0o600)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		return fmt.Errorf("write %s: %w", path, err)
+	}
+	return nil
 }
 
 // Path returns the full path for a relative path under the base directory.
@@ -267,17 +281,20 @@ func (s *Storage) BackupJSON(path string) error {
 		if os.IsNotExist(err) {
 			return nil
 		}
-		return err
+		return fmt.Errorf("read backup source: %w", err)
 	}
 
 	backupDir := filepath.Join(s.baseDir, "backups")
 	if err := s.ensureDir(backupDir); err != nil {
-		return err
+		return fmt.Errorf("create backup directory: %w", err)
 	}
 
 	ts := time.Now().Format("20060102_150405")
 	backupPath := filepath.Join(backupDir, fmt.Sprintf("%s.%s.bak", filepath.Base(path), ts))
-	return os.WriteFile(backupPath, data, 0o600)
+	if err := os.WriteFile(backupPath, data, 0o600); err != nil {
+		return fmt.Errorf("write backup: %w", err)
+	}
+	return nil
 }
 
 // JSONLRecovery checks and repairs the last line of a JSONL file.
@@ -287,7 +304,7 @@ func (s *Storage) JSONLRecovery(path string) error {
 		if os.IsNotExist(err) {
 			return nil
 		}
-		return err
+		return fmt.Errorf("read recovery source: %w", err)
 	}
 
 	lines := strings.Split(string(data), "\n")
