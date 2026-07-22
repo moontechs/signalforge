@@ -131,17 +131,6 @@ func fetchIssuesSearchStrategy(ctx context.Context, c *githubClient, scope colle
 	page := 1
 
 	for {
-		count := scope.maxItems
-		if count > 0 {
-			remaining := count - len(allIssues)
-			if remaining <= 0 {
-				break
-			}
-			if remaining > 100 {
-				remaining = 100
-			}
-		}
-
 		perPage := 100
 		if scope.maxItems > 0 && scope.maxItems-len(allIssues) < 100 {
 			perPage = scope.maxItems - len(allIssues)
@@ -342,22 +331,6 @@ func buildSearchQuery(scope collectionScope) string {
 	}
 
 	return strings.Join(parts, " ")
-}
-
-// parseSince extracts the "since" timestamp from the scope.
-func parseSince(s string) string {
-	if s == "" {
-		return ""
-	}
-	t, err := time.Parse(time.RFC3339, s)
-	if err != nil {
-		t, err = time.Parse("2006-01-02", s)
-		if err != nil {
-			return s
-		}
-		return t.Format("2006-01-02T15:04:05Z")
-	}
-	return t.Format("2006-01-02T15:04:05Z")
 }
 
 // ensure interface check for unused import

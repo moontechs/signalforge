@@ -152,7 +152,7 @@ func (c *Collector) Collect(ctx context.Context, req domain.CollectRequest) ([]d
 		if err != nil {
 			errs = append(errs, fmt.Errorf("github discussions: %w", err))
 		} else {
-			parsed := parseDiscussions(ctx, discussions, scope, collectedAt)
+			parsed := parseDiscussions(discussions, scope, collectedAt)
 			signals = append(signals, parsed...)
 		}
 	}
@@ -199,9 +199,13 @@ func parseIssues(ctx context.Context, c *githubClient, issues []ghIssue, scope c
 		}
 
 		// Fetch comments if maxComments is set
+		var fetchErr error
 		var comments []ghIssueComment
 		if scope.maxComments > 0 {
-			comments, _ = fetchIssueComments(ctx, c, owner, repo, issue.Number, scope.maxComments)
+			comments, fetchErr = fetchIssueComments(ctx, c, owner, repo, issue.Number, scope.maxComments)
+			if fetchErr != nil {
+				comments = nil
+			}
 		}
 
 		signal := parseIssueToSignal(issue, owner, repo, comments, scope.maxComments, collectedAt)
@@ -213,7 +217,7 @@ func parseIssues(ctx context.Context, c *githubClient, issues []ghIssue, scope c
 
 // parseDiscussions parses a slice of graphQLDiscussionNode into domain.RawSignal.
 // Discussions where owner/repo cannot be determined from the URL are skipped.
-func parseDiscussions(ctx context.Context, discussions []graphQLDiscussionNode, scope collectionScope, collectedAt time.Time) []domain.RawSignal {
+func parseDiscussions(discussions []graphQLDiscussionNode, scope collectionScope, collectedAt time.Time) []domain.RawSignal {
 	signals := make([]domain.RawSignal, 0, len(discussions))
 
 	for i := range discussions {

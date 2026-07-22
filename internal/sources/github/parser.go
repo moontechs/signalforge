@@ -245,17 +245,4 @@ func appendTags(labels []string, category string) []string {
 	return labels
 }
 
-func tagSliceIfPrefix(items []string, prefix string) []string {
-	if len(items) == 0 {
-		return nil
-	}
-	tags := make([]string, len(items))
-	for i, item := range items {
-		if prefix != "" {
-			tags[i] = prefix + ":" + item
-		} else {
-			tags[i] = item
-		}
-	}
-	return tags
-}
+

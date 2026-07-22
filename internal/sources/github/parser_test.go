@@ -6,8 +6,6 @@ import (
 
 	"github.com/moontechs/signalforge/internal/domain"
 )
-
-// Fixed timestamps for deterministic tests.
 var (
 	t1 = time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 	t2 = time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC)
@@ -766,23 +764,5 @@ func TestParseDiscussionToSignal_ContentHashStability(t *testing.T) {
 
 	if signal1.ContentHash != signal2.ContentHash {
 		t.Fatal("content hash should be stable across identical discussion parse calls")
-	}
-}
-
-// TestParser_UnusedImport verifies no unused import compilation issues.
-func TestParser_UnusedImport(t *testing.T) {
-	// Just verify the package compiles and our helper functions work
-	if tagSliceIfPrefix(nil, "") != nil {
-		t.Fatal("expected nil for empty tag list")
-	}
-	tags := tagSliceIfPrefix([]string{"bug", "feature"}, "label")
-	if len(tags) != 2 || tags[0] != "label:bug" || tags[1] != "label:feature" {
-		t.Fatalf("unexpected prefix tags: %v", tags)
-	}
-
-	// Without prefix
-	tags = tagSliceIfPrefix([]string{"a", "b"}, "")
-	if len(tags) != 2 || tags[0] != "a" || tags[1] != "b" {
-		t.Fatalf("unexpected unprefixed tags: %v", tags)
 	}
 }
