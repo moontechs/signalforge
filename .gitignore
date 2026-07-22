@@ -1,0 +1,9 @@
+# Binaries
+*.test
+signalforge
+
+# Coverage
+coverage.out
+
+# OS
+.DS_Store
