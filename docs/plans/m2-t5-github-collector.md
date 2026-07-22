@@ -165,14 +165,14 @@ The collector accepts a `transport` in its constructor. Tests inject `fakeTransp
 - Create: internal/sources/github/parser.go
 - Add tests: internal/sources/github/parser_test.go
 
-- [ ] define private upstream response structs for issue, discussion, label, repository, reaction, and comment payloads
-- [ ] implement issue-to-domain.RawSignal mapping, including source metadata, repository/community fields, labels/tags, counts, timestamps, URLs, and content hash generation
-- [ ] implement discussion-to-domain.RawSignal mapping with equivalent normalization for titles, bodies, comments, categories, and upvote/reaction counters
-- [ ] normalize source IDs: `github_issue:{issue_id}` for issues, `github_discussion:{discussion_id}` for discussions
-- [ ] normalize source types: `github_issue`, `github_discussion`
-- [ ] truncate or cap comments according to `Config.MaxCommentsPerItem` while preserving deterministic ordering (created_at asc)
-- [ ] write focused parser tests using fixture-like inline payloads for empty fields, missing optional values, comment caps, and content-hash stability
-- [ ] run go test ./internal/sources/github/... and fix failures before task 5
+- [x] define private upstream response structs for issue, discussion, label, repository, reaction, and comment payloads
+- [x] implement issue-to-domain.RawSignal mapping, including source metadata, repository/community fields, labels/tags, counts, timestamps, URLs, and content hash generation
+- [x] implement discussion-to-domain.RawSignal mapping with equivalent normalization for titles, bodies, comments, categories, and upvote/reaction counters
+- [x] normalize source IDs: `github_issue:{issue_id}` for issues, `github_discussion:{discussion_id}` for discussions
+- [x] normalize source types: `github_issue`, `github_discussion`
+- [x] truncate or cap comments according to `Config.MaxCommentsPerItem` while preserving deterministic ordering (created_at asc)
+- [x] write focused parser tests using fixture-like inline payloads for empty fields, missing optional values, comment caps, and content-hash stability
+- [x] run go test ./internal/sources/github/... and fix failures before task 5
 
 ### Task 5: Orchestrate end-to-end collection behavior
 
