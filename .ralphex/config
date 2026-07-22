@@ -1,6 +1,0 @@
-# ralphex config: pi executor (local override)
-claude_command = /opt/ralphex-profiles/pi/scripts/pi-as-claude.sh
-claude_args =
-task_model = deepseek-v4-flash
-review_model = qwen3.7-plus
-external_review_tool = none
