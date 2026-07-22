@@ -88,12 +88,13 @@ func TestCollector_WithNow(t *testing.T) {
 	}
 }
 
-// TestCollector_Collect_Empty verifies that Collect returns empty results.
+// TestCollector_Collect_Empty verifies that Collect returns empty results
+// when both sources are disabled.
 func TestCollector_Collect_Empty(t *testing.T) {
 	c, err := New(domainCollectorConfig{
 		Enabled:           true,
-		SearchIssues:      true,
-		SearchDiscussions: true,
+		SearchIssues:      false,
+		SearchDiscussions: false,
 		MaxItemsPerRun:    500,
 		MaxRequests:       500,
 	})
@@ -101,11 +102,7 @@ func TestCollector_Collect_Empty(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	req := domain.CollectRequest{
-		Since: "2025-01-01T00:00:00Z",
-	}
-
-	signals, err := c.Collect(context.Background(), req)
+	signals, err := c.Collect(context.Background(), domain.CollectRequest{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

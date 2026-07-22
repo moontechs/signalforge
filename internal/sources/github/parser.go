@@ -216,6 +216,25 @@ func extractOwnerRepo(repoURL string) (string, string) {
 	return parts[0], parts[1]
 }
 
+// extractOwnerRepoFromHTML extracts owner and repo name from a GitHub HTML URL.
+// Handles formats like:
+//   - https://github.com/owner/repo/issues/1
+//   - https://github.com/owner/repo/discussions/1
+func extractOwnerRepoFromHTML(url string) (string, string) {
+	if url == "" {
+		return "", ""
+	}
+	// Trim the https://github.com/ prefix
+	trimmed := strings.TrimPrefix(url, "https://github.com/")
+	trimmed = strings.TrimPrefix(trimmed, "http://github.com/")
+	// Split by / to get [owner, repo, ...]
+	parts := strings.SplitN(trimmed, "/", 3)
+	if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
+		return "", ""
+	}
+	return parts[0], parts[1]
+}
+
 // tagSliceIfPrefix adds prefix to each element in the slice, filtering empties.
 // Used to create tag lists from labels and categories.
 // appendTags appends category to labels only if category is non-empty.

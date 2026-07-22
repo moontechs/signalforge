@@ -86,6 +86,7 @@ func fetchIssues(ctx context.Context, c *githubClient, scope collectionScope) ([
 func fetchIssuesPerRepoStrategy(ctx context.Context, c *githubClient, scope collectionScope) ([]ghIssue, error) {
 	var allIssues []ghIssue
 	maxItems := scope.maxItems
+	var lastErr error
 
 	for _, repo := range scope.repos {
 		if maxItems > 0 && len(allIssues) >= maxItems {
@@ -94,13 +95,14 @@ func fetchIssuesPerRepoStrategy(ctx context.Context, c *githubClient, scope coll
 
 		owner, repoName, err := parseRepo(repo)
 		if err != nil {
+			lastErr = err
 			continue // skip invalid repos
 		}
 
 		issues, err := listRepoIssues(ctx, c, owner, repoName, scope.since, maxItems)
 		if err != nil {
-			// Partial failure: continue with other repos
-			continue
+			lastErr = err
+			continue // Partial failure: continue with other repos
 		}
 
 		allIssues = append(allIssues, issues...)
@@ -108,6 +110,11 @@ func fetchIssuesPerRepoStrategy(ctx context.Context, c *githubClient, scope coll
 			allIssues = allIssues[:maxItems]
 			break
 		}
+	}
+
+	// If no issues were returned and there were errors, surface the error
+	if len(allIssues) == 0 && lastErr != nil {
+		return nil, lastErr
 	}
 
 	return allIssues, nil

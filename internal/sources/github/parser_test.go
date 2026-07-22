@@ -634,6 +634,37 @@ func TestDiscussionSourceID(t *testing.T) {
 
 // ---- Extracted helper tests ----
 
+// TestExtractOwnerRepoFromHTML verifies HTML URL parsing for owner/repo extraction.
+func TestExtractOwnerRepoFromHTML(t *testing.T) {
+	owner, repo := extractOwnerRepoFromHTML("https://github.com/owner/repo/issues/1")
+	if owner != "owner" || repo != "repo" {
+		t.Fatalf("expected owner/repo, got %s/%s", owner, repo)
+	}
+
+	owner, repo = extractOwnerRepoFromHTML("https://github.com/owner/repo/discussions/42")
+	if owner != "owner" || repo != "repo" {
+		t.Fatalf("expected owner/repo, got %s/%s", owner, repo)
+	}
+
+	// Empty
+	owner, repo = extractOwnerRepoFromHTML("")
+	if owner != "" || repo != "" {
+		t.Fatalf("expected empty, got %s/%s", owner, repo)
+	}
+
+	// Invalid
+	owner, repo = extractOwnerRepoFromHTML("not-a-github-url")
+	if owner != "" || repo != "" {
+		t.Fatalf("expected empty for invalid URL, got %s/%s", owner, repo)
+	}
+
+	// Short URL (no issue/discussion path component)
+	owner, repo = extractOwnerRepoFromHTML("https://github.com/owner/repo")
+	if owner != "owner" || repo != "repo" {
+		t.Fatalf("expected owner/repo, got %s/%s", owner, repo)
+	}
+}
+
 // TestExtractOwnerRepo verifies repository URL parsing.
 func TestExtractOwnerRepo(t *testing.T) {
 	owner, repo := extractOwnerRepo("https://api.github.com/repos/owner/repo")

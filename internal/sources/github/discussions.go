@@ -96,6 +96,7 @@ func fetchDiscussions(ctx context.Context, c *githubClient, repos []string, scop
 
 	var allDiscussions []graphQLDiscussionNode
 	maxItems := scope.maxItems
+	var lastErr error
 
 	for _, repo := range repos {
 		if maxItems > 0 && len(allDiscussions) >= maxItems {
@@ -104,13 +105,14 @@ func fetchDiscussions(ctx context.Context, c *githubClient, repos []string, scop
 
 		owner, repoName, err := parseRepo(repo)
 		if err != nil {
+			lastErr = err
 			continue
 		}
 
 		discussions, err := listRepoDiscussions(ctx, c, owner, repoName, scope.since, maxItems)
 		if err != nil {
-			// Partial failure: skip repo
-			continue
+			lastErr = err
+			continue // Partial failure: skip repo
 		}
 
 		allDiscussions = append(allDiscussions, discussions...)
@@ -118,6 +120,11 @@ func fetchDiscussions(ctx context.Context, c *githubClient, repos []string, scop
 			allDiscussions = allDiscussions[:maxItems]
 			break
 		}
+	}
+
+	// If no discussions were returned and there were errors, surface the error
+	if len(allDiscussions) == 0 && lastErr != nil {
+		return nil, lastErr
 	}
 
 	return allDiscussions, nil

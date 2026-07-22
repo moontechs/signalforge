@@ -181,12 +181,12 @@ The collector accepts a `transport` in its constructor. Tests inject `fakeTransp
 - Modify: internal/sources/github/client.go
 - Add tests: internal/sources/github/integration_test.go
 
-- [ ] implement `Collect(ctx, req)` to: (1) check config enabled, (2) derive collection scope (search vs per-repo), (3) fetch issues (REST), (4) fetch discussions (GraphQL), (5) parse both into RawSignals, (6) enforce max-item limit, (7) return combined results
-- [ ] honor config toggles for SearchIssues and SearchDiscussions
-- [ ] filter out already-seen signals using existing source/sourceID conventions so the collector is compatible with memory-based dedup
-- [ ] ensure partial-source failures are surfaced clearly — the collector should return partial results with wrapped errors rather than fail-fast
-- [ ] write end-to-end fake transport tests covering mixed issue/discussion collection, disabled source modes, deduped items, request-limit cutoff, and rate-limit exhaustion
-- [ ] run go test ./internal/sources/github/... and fix failures before task 6
+- [x] implement `Collect(ctx, req)` to: (1) check config enabled, (2) derive collection scope (search vs per-repo), (3) fetch issues (REST), (4) fetch discussions (GraphQL), (5) parse both into RawSignals, (6) enforce max-item limit, (7) return combined results
+- [x] honor config toggles for SearchIssues and SearchDiscussions
+- [x] filter out already-seen signals using existing source/sourceID conventions so the collector is compatible with memory-based dedup
+- [x] ensure partial-source failures are surfaced clearly — the collector should return partial results with wrapped errors rather than fail-fast
+- [x] write end-to-end fake transport tests covering mixed issue/discussion collection, disabled source modes, deduped items, request-limit cutoff, and rate-limit exhaustion
+- [x] run go test ./internal/sources/github/... and fix failures before task 6
 
 ### Task 6: Verify acceptance criteria
 
