@@ -131,3 +131,31 @@ func TestLoadConfigValidatesGitHubConfig(t *testing.T) {
 		t.Fatalf("expected max_items_per_run validation error, got %v", err)
 	}
 }
+
+func TestNormalizeSourceName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		input string
+		want  string
+		ok    bool
+	}{
+		{input: "github", want: "github", ok: true},
+		{input: "GH", want: "github", ok: true},
+		{input: "hn", want: "hackernews", ok: true},
+		{input: " stackexchange ", want: "stackexchange", ok: true},
+		{input: "unknown", ok: false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.input, func(t *testing.T) {
+			got, ok := NormalizeSourceName(tc.input)
+			if ok != tc.ok {
+				t.Fatalf("NormalizeSourceName(%q) ok = %v, want %v", tc.input, ok, tc.ok)
+			}
+			if got != tc.want {
+				t.Fatalf("NormalizeSourceName(%q) = %q, want %q", tc.input, got, tc.want)
+			}
+		})
+	}
+}

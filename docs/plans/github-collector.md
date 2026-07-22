@@ -136,19 +136,19 @@ expose the collector through a new collect CLI command.
 - Modify: internal/cli/doctor.go
 - Modify: internal/config/config.go
 
-[ ] add a collect command that loads config, initializes storage and memory,
+[x] add a collect command that loads config, initializes storage and memory,
   resolves source selection from flags, and invokes the GitHub collector for
   MVP-supported sources
-[ ] add CLI flags for sources and since-window in a way that matches AGENTS.
+[x] add CLI flags for sources and since-window in a way that matches AGENTS.
   md examples and does not overcommit to future pipeline orchestration details
-[ ] make doctor validate the presence of GITHUB_TOKEN when GitHub collection
+[x] make doctor validate the presence of GITHUB_TOKEN when GitHub collection
   is enabled so failures happen before network calls
-[ ] ensure collect output reports collected/skipped counts and actionable
+[x] ensure collect output reports collected/skipped counts and actionable
   errors without exposing tokens or raw API payloads
-[ ] add command-level tests using fake collectors or fake clients to verify
+[x] add command-level tests using fake collectors or fake clients to verify
   source selection, config loading, token validation, and persistence side
   effects
-[ ] run CLI/package tests before moving to task 6
+[x] run CLI/package tests before moving to task 6
 
 ### Task 6: Verify end-to-end collector behavior and update documentation
 

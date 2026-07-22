@@ -111,6 +111,17 @@ type LimitsConfig struct {
 	MaxLLMRequests       int `json:"max_llm_requests_per_run"`
 }
 
+var sourceAliases = map[string]string{
+	"gh":             "github",
+	"github":         "github",
+	"hn":             "hackernews",
+	"hackernews":     "hackernews",
+	"reddit":         "reddit",
+	"se":             "stackexchange",
+	"stackexchange":  "stackexchange",
+	"stack-overflow": "stackexchange",
+}
+
 // DefaultConfig returns the default configuration.
 func DefaultConfig() *Config {
 	return &Config{
@@ -309,4 +320,11 @@ func DefaultDirStructure() map[string]string {
 		"backups":                   "",
 		"exports":                   "",
 	}
+}
+
+// NormalizeSourceName resolves a user-facing source alias to its canonical name.
+func NormalizeSourceName(name string) (string, bool) {
+	normalized := strings.ToLower(strings.TrimSpace(name))
+	canonical, ok := sourceAliases[normalized]
+	return canonical, ok
 }
