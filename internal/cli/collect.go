@@ -89,15 +89,15 @@ func runCollect(cmd *cobra.Command, _ []string) error {
 			}
 
 			ghCfg := github.CollectorConfig{
-				Enabled:           cfg.Sources.GitHub.Enabled,
-				SearchIssues:      cfg.Sources.GitHub.SearchIssues,
-				SearchDiscussions: cfg.Sources.GitHub.SearchDiscussions,
-				MaxItemsPerRun:    cfg.Sources.GitHub.MaxItemsPerRun,
+				Enabled:            cfg.Sources.GitHub.Enabled,
+				SearchIssues:       cfg.Sources.GitHub.SearchIssues,
+				SearchDiscussions:  cfg.Sources.GitHub.SearchDiscussions,
+				MaxItemsPerRun:     cfg.Sources.GitHub.MaxItemsPerRun,
 				MaxCommentsPerItem: cfg.Sources.GitHub.MaxCommentsPerItem,
-				Repositories:      cfg.Sources.GitHub.Repositories,
-				Languages:         cfg.Sources.GitHub.Languages,
-				Labels:            cfg.Sources.GitHub.Labels,
-				MaxRequests:       cfg.Limits.MaxGitHubRequests,
+				Repositories:       cfg.Sources.GitHub.Repositories,
+				Languages:          cfg.Sources.GitHub.Languages,
+				Labels:             cfg.Sources.GitHub.Labels,
+				MaxRequests:        cfg.Limits.MaxGitHubRequests,
 			}
 
 			collector, err := github.New(ghCfg)
@@ -198,11 +198,11 @@ func parseSinceWindow(raw string) (time.Duration, error) {
 }
 
 func ensureStorageLayout(dir string) error {
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
 	for subDir := range config.DefaultDirStructure() {
-		if err := os.MkdirAll(filepath.Join(dir, subDir), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Join(dir, subDir), 0o755); err != nil {
 			return err
 		}
 	}

@@ -31,7 +31,7 @@ func (s *Storage) BaseDir() string {
 
 // ensureDir ensures a directory exists.
 func (s *Storage) ensureDir(path string) error {
-	return os.MkdirAll(path, 0755)
+	return os.MkdirAll(path, 0o755)
 }
 
 // SaveJSON atomically writes a JSON file.
@@ -53,29 +53,29 @@ func (s *Storage) SaveJSON(path string, v any) error {
 	encoder := json.NewEncoder(tmpFile)
 	encoder.SetIndent("", "  ")
 	if err := encoder.Encode(v); err != nil {
-		tmpFile.Close()
-		os.Remove(tmpPath)
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("encode: %w", err)
 	}
 
 	if err := tmpFile.Sync(); err != nil {
-		tmpFile.Close()
-		os.Remove(tmpPath)
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("sync: %w", err)
 	}
 	if err := tmpFile.Close(); err != nil {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("close: %w", err)
 	}
 	if err := os.Rename(tmpPath, path); err != nil {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("rename: %w", err)
 	}
 
 	// Sync directory
 	if f, err := os.Open(dir); err == nil {
-		f.Sync()
-		f.Close()
+		_ = f.Sync()
+		_ = f.Close()
 	}
 
 	return nil
@@ -112,22 +112,22 @@ func (s *Storage) SaveJSONL(path string, v any) error {
 		return fmt.Errorf("marshal: %w", err)
 	}
 
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("open: %w", err)
 	}
 
 	if _, err := f.Write(line); err != nil {
-		f.Close()
+		_ = f.Close()
 		return fmt.Errorf("write: %w", err)
 	}
 	if _, err := f.Write([]byte("\n")); err != nil {
-		f.Close()
+		_ = f.Close()
 		return fmt.Errorf("write newline: %w", err)
 	}
 
 	if err := f.Sync(); err != nil {
-		f.Close()
+		_ = f.Close()
 		return fmt.Errorf("sync: %w", err)
 	}
 	if err := f.Close(); err != nil {
@@ -235,7 +235,7 @@ func (s *Storage) WriteFile(path string, data []byte) error {
 	if err := s.ensureDir(dir); err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0644)
+	return os.WriteFile(path, data, 0o600)
 }
 
 // Path returns the full path for a relative path under the base directory.
@@ -246,7 +246,7 @@ func (s *Storage) Path(rel string) string {
 // GenerateID generates a unique ID based on content and timestamp.
 func GenerateID(prefix string) string {
 	h := sha256.New()
-	io.WriteString(h, fmt.Sprintf("%s-%d", prefix, time.Now().UnixNano()))
+	_, _ = io.WriteString(h, fmt.Sprintf("%s-%d", prefix, time.Now().UnixNano()))
 	return fmt.Sprintf("%s_%x", prefix, h.Sum(nil)[:16])
 }
 
@@ -254,7 +254,7 @@ func GenerateID(prefix string) string {
 func ContentHash(parts ...string) string {
 	h := sha256.New()
 	for _, p := range parts {
-		io.WriteString(h, p)
+		_, _ = io.WriteString(h, p)
 	}
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
@@ -276,7 +276,7 @@ func (s *Storage) BackupJSON(path string) error {
 
 	ts := time.Now().Format("20060102_150405")
 	backupPath := filepath.Join(backupDir, fmt.Sprintf("%s.%s.bak", filepath.Base(path), ts))
-	return os.WriteFile(backupPath, data, 0644)
+	return os.WriteFile(backupPath, data, 0o600)
 }
 
 // JSONLRecovery checks and repairs the last line of a JSONL file.
@@ -302,7 +302,7 @@ func (s *Storage) JSONLRecovery(path string) error {
 	if !json.Valid([]byte(lastLine)) {
 		// Remove the last line
 		content := strings.Join(lines[:len(lines)-2], "\n") + "\n"
-		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 			return fmt.Errorf("repair: %w", err)
 		}
 	}

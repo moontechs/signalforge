@@ -131,14 +131,14 @@ func checkSignalForgeDir() checkResult {
 	}
 	// Check writability
 	testFile := filepath.Join(dir, ".write-test")
-	if err := os.WriteFile(testFile, []byte{}, 0644); err != nil {
+	if err := os.WriteFile(testFile, []byte{}, 0o600); err != nil {
 		return checkResult{
 			Name:   "signalforge data directory",
 			Status: "❌",
 			Detail: fmt.Sprintf("Not writable: %v", err),
 		}
 	}
-	os.Remove(testFile)
+	_ = os.Remove(testFile)
 	return checkResult{
 		Name:   "signalforge data directory",
 		Status: "✅",

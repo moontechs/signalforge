@@ -6,8 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/spf13/cobra"
 	"github.com/moontechs/signalforge/internal/config"
+	"github.com/spf13/cobra"
 )
 
 // InitCmd represents the signalforge init command.
@@ -38,7 +38,7 @@ and writes a default config.json file.`,
 		dirs := config.DefaultDirStructure()
 		for dir := range dirs {
 			path := filepath.Join(signalForgeDir, dir)
-			if err := os.MkdirAll(path, 0755); err != nil {
+			if err := os.MkdirAll(path, 0o755); err != nil {
 				return fmt.Errorf("create directory %s: %w", dir, err)
 			}
 		}

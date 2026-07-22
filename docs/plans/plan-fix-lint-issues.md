@@ -32,12 +32,12 @@ Fix ~200 lint issues across 10 files in the SignalForge codebase. Combine linter
 
 ### Task 2: Fix errcheck, gosec, gocritic octal issues
 
-- [ ] `internal/storage/storage.go`: Handle f.Close(), f.Sync(), io.WriteString errors
-- [ ] `internal/storage/storage.go`: Change 0644 to 0600, 0755 to 0o755
-- [ ] `internal/memory/memory.go`: Handle errors
-- [ ] `internal/cli/doctor.go`: Fix temp file permission, cleanup handle
-- [ ] `internal/cli/collect.go`: Fix octal literals
-- [ ] Run tests
+- [x] `internal/storage/storage.go`: Handle f.Close(), f.Sync(), io.WriteString errors
+- [x] `internal/storage/storage.go`: Change 0644 to 0600, 0755 to 0o755
+- [x] `internal/memory/memory.go`: Handle errors (no unhandled errors reported in this package)
+- [x] `internal/cli/doctor.go`: Fix temp file permission, cleanup handle
+- [x] `internal/cli/collect.go`: Fix octal literals
+- [x] Run tests
 
 ### Task 3: Fix wsl, godot, gocritic, perfsprint, prealloc
 
