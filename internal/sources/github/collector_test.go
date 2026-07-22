@@ -65,7 +65,7 @@ func TestCollector_WithTransport(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	ft := &fakeTransport{responses: make(map[string]fakeResponse)}
+	ft := newFakeTransport()
 	c.WithTransport(ft)
 
 	if c.transport != ft {
@@ -279,19 +279,3 @@ func TestInterfaceCompliance(t *testing.T) {
 	var _ domain.SourceCollector = (*Collector)(nil)
 }
 
-// fakeTransport is a minimal stub for test compilation in this file.
-// Full tests with response injection are in client_test.go (Task 2).
-type fakeTransport struct {
-	responses map[string]fakeResponse
-}
-
-type fakeResponse struct {
-	statusCode int
-	headers    map[string]string
-	body       string
-}
-
-func (f *fakeTransport) Do(req *http.Request) (*http.Response, error) {
-	// Minimal stub — real implementation in Task 2.
-	return nil, nil
-}

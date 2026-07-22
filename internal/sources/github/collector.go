@@ -29,6 +29,7 @@ type Collector struct {
 	config    configValues
 	limits    requestLimits
 	transport transport
+	client    *githubClient
 	now       func() time.Time
 }
 
@@ -42,6 +43,12 @@ type requestLimits struct {
 func New(cfg domainCollectorConfig) (*Collector, error) {
 	if !cfg.Enabled {
 		return nil, ErrNotEnabled
+	}
+
+	transport := &httpTransport{
+		client: &http.Client{
+			Timeout: defaultTimeout,
+		},
 	}
 
 	c := &Collector{
@@ -58,14 +65,11 @@ func New(cfg domainCollectorConfig) (*Collector, error) {
 		limits: requestLimits{
 			maxRequests: cfg.MaxRequests,
 		},
-		transport: &httpTransport{
-			client: &http.Client{
-				Timeout: 30 * time.Second,
-			},
-		},
-		now: time.Now,
+		transport: transport,
+		now:       time.Now,
 	}
 
+	c.client = newClient(transport, cfg.MaxRequests)
 	return c, nil
 }
 
@@ -89,8 +93,10 @@ func (c *Collector) Name() string {
 }
 
 // WithTransport replaces the HTTP transport (for testing).
+// It also recreates the internal client with the new transport.
 func (c *Collector) WithTransport(t transport) *Collector {
 	c.transport = t
+	c.client = newClient(t, c.limits.maxRequests)
 	return c
 }
 

@@ -131,19 +131,19 @@ The collector accepts a `transport` in its constructor. Tests inject `fakeTransp
 - Create: internal/sources/github/discussions.go
 - Add tests: internal/sources/github/client_test.go
 
-- [ ] implement an HTTP-backed client with explicit timeout, context-aware requests, GitHub auth header injection, and safe user-agent/header defaults
-- [ ] implement the `realTransport` wrapper and `fakeTransport` for tests
-- [ ] add REST issue search/listing support with pagination (`&page=N` + `Link` header parsing)
-- [ ] add REST issue collection per-repo (`GET /repos/{owner}/{repo}/issues`) with `sort=updated&direction=asc` and `&since=` support
-- [ ] add REST issue search (`GET /search/issues`) with query construction for repositories, labels, languages, and time range
-- [ ] add GraphQL discussion search/listing support with end-cursor pagination and the query from design decisions
-- [ ] implement retry with exponential backoff for transient failures (5xx, timeouts, connection errors)
-- [ ] implement rate-limit handling: parse `x-ratelimit-remaining` headers, backoff on limit reached, handle `Retry-After` for both primary and secondary rate limits
-- [ ] implement separate rate-limit counters for REST and GraphQL
-- [ ] implement ETag/If-None-Match conditional request support: store ETag per endpoint, send on subsequent requests, handle 304 responses
-- [ ] enforce request counting so the client can respect Limits.MaxGitHubRequests
-- [ ] write fake transport tests for REST pagination, GraphQL pagination, transient retry success, hard failure after retries, primary rate-limit, secondary rate-limit, 304 conditional response, and request-limit cutoff
-- [ ] run go test ./internal/sources/github/... and fix failures before task 3
+- [x] implement an HTTP-backed client with explicit timeout, context-aware requests, GitHub auth header injection, and safe user-agent/header defaults
+- [x] implement the `realTransport` wrapper and `fakeTransport` for tests
+- [x] add REST issue search/listing support with pagination (`&page=N` + `Link` header parsing)
+- [x] add REST issue collection per-repo (`GET /repos/{owner}/{repo}/issues`) with `sort=updated&direction=asc` and `&since=` support
+- [x] add REST issue search (`GET /search/issues`) with query construction for repositories, labels, languages, and time range
+- [x] add GraphQL discussion search/listing support with end-cursor pagination and the query from design decisions
+- [x] implement retry with exponential backoff for transient failures (5xx, timeouts, connection errors)
+- [x] implement rate-limit handling: parse `x-ratelimit-remaining` headers, backoff on limit reached, handle `Retry-After` for both primary and secondary rate limits
+- [x] implement separate rate-limit counters for REST and GraphQL
+- [x] implement ETag/If-None-Match conditional request support: store ETag per endpoint, send on subsequent requests, handle 304 responses
+- [x] enforce request counting so the client can respect Limits.MaxGitHubRequests
+- [x] write fake transport tests for REST pagination, GraphQL pagination, transient retry success, hard failure after retries, primary rate-limit, secondary rate-limit, 304 conditional response, and request-limit cutoff
+- [x] run go test ./internal/sources/github/... and fix failures before task 3
 
 ### Task 3: Add on-disk GitHub response caching
 

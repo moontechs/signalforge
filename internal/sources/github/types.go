@@ -16,23 +16,27 @@ const (
 // collectionScope is the concrete collection strategy derived from
 // configuration and request inputs.
 type collectionScope struct {
-	strategy    collectionStrategy
-	repos       []string // populated per-repo targets (if strategyPerRepo)
-	labels      []string
-	languages   []string
-	maxItems    int
-	maxComments int
-	since       string // ISO date string for incremental collection
+	strategy         collectionStrategy
+	repos            []string // populated per-repo targets (if strategyPerRepo)
+	labels           []string
+	languages        []string
+	maxItems         int
+	maxComments      int
+	since            string // ISO date string for incremental collection
+	searchIssues     bool
+	searchDiscussions bool
 }
 
 // deriveScope maps GitHubConfig + CollectRequest into a collectionScope.
 func deriveScope(cfg configValues, repos []string, labels []string, languages []string, maxItems int, maxComments int, since string) collectionScope {
 	scope := collectionScope{
-		labels:      labels,
-		languages:   languages,
-		maxItems:    maxItems,
-		maxComments: maxComments,
-		since:       since,
+		labels:           labels,
+		languages:        languages,
+		maxItems:         maxItems,
+		maxComments:      maxComments,
+		since:            since,
+		searchIssues:     cfg.SearchIssues,
+		searchDiscussions: cfg.SearchDiscussions,
 	}
 
 	if len(repos) > 0 {
