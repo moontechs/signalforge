@@ -110,21 +110,21 @@ expose the collector through a new collect CLI command.
 - Modify: internal/domain/types.go (only if stats/cursor fields already
   defined need small corrections)
 
-[ ] implement the GitHub collector to satisfy SourceCollector, coordinating
+[x] implement the GitHub collector to satisfy SourceCollector, coordinating
   issue/discussion search, per-item comment fetches, parser conversion, dedup
   checks, and request accounting
-[ ] use persistent memory to skip already-seen source IDs and duplicate
+[x] use persistent memory to skip already-seen source IDs and duplicate
   content hashes before writing new raw signals
-[ ] store raw signals in the existing file-based layout and use the existing
+[x] store raw signals in the existing file-based layout and use the existing
   cache directory conventions for GitHub response caching if cache helpers are
   added during implementation
-[ ] keep collector flow resumable-friendly by accepting cursor/since inputs
+[x] keep collector flow resumable-friendly by accepting cursor/since inputs
   now, even if the first MVP execution uses a simple since-window rather than
   full resume persistence
-[ ] add tests for collector behavior with fake clients covering mixed
+[x] add tests for collector behavior with fake clients covering mixed
   issue/discussion runs, dedup skips, max-item enforcement, comment limits,
   and partial failures
-[ ] run package tests for collector and dependent packages before moving to
+[x] run package tests for collector and dependent packages before moving to
   task 5
 
 ### Task 5: Add the collect command and wire GitHub into the CLI workflow
