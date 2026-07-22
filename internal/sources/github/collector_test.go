@@ -2,383 +2,277 @@ package github
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"path/filepath"
-	"strings"
+	"net/http"
 	"testing"
 	"time"
 
-	"github.com/moontechs/signalforge/internal/config"
 	"github.com/moontechs/signalforge/internal/domain"
-	"github.com/moontechs/signalforge/internal/memory"
-	"github.com/moontechs/signalforge/internal/storage"
 )
 
-func TestCollectorMixedRunPersistsSignalsAndDeduplicates(t *testing.T) {
-	t.Parallel()
-
-	now := time.Date(2026, 7, 22, 12, 0, 0, 0, time.UTC)
-	store := storage.New(t.TempDir())
-	mem := memory.New(store)
-
-	mem.GetMemory().RawSignalIDs["github:issue:I_seen"] = "issue:I_seen"
-	duplicateDiscussion := Discussion{
-		ID:        "D_dup",
-		Number:    14,
-		Title:     "Duplicate discussion",
-		Body:      "Need better retries",
-		URL:       "https://github.com/acme/api/discussions/14",
-		CreatedAt: now.Add(-24 * time.Hour),
-		UpdatedAt: now.Add(-23 * time.Hour),
-		Repository: Repository{
-			NameWithOwner: "acme/api",
-		},
-		Category: DiscussionCategory{Name: "Ideas"},
-		Comments: DiscussionCommentConnection{
-			Nodes: []DiscussionComment{{ID: "DC_dup", Body: "same observation", CreatedAt: now.Add(-22 * time.Hour)}},
-		},
-		Author: Actor{Login: "dev1"},
-	}
-	mem.GetMemory().ContentHashes[ParseDiscussion(duplicateDiscussion, duplicateDiscussion.Comments.Nodes, ParseOptions{
-		CollectedAt: now,
-		MaxComments: 2,
-	}).ContentHash] = "existing"
-
-	api := &fakeGitHubAPI{
-		searchIssuesFn: func(_ context.Context, params SearchIssuesParams) (SearchIssuesPage, error) {
-			if !strings.Contains(params.Query, "repo:acme/api") {
-				t.Fatalf("issue query missing repo filter: %q", params.Query)
-			}
-			if !strings.Contains(params.Query, "language:go") {
-				t.Fatalf("issue query missing language filter: %q", params.Query)
-			}
-			if !strings.Contains(params.Query, "label:bug") {
-				t.Fatalf("issue query missing label filter: %q", params.Query)
-			}
-			if !strings.Contains(params.Query, "updated:>=2026-07-20") {
-				t.Fatalf("issue query missing since filter: %q", params.Query)
-			}
-			if params.PerPage != 2 {
-				t.Fatalf("issue per_page = %d, want 2", params.PerPage)
-			}
-
-			return SearchIssuesPage{
-				Response: SearchIssuesResponse{
-					Items: []IssueItem{
-						{
-							ID:            1,
-							Number:        7,
-							NodeID:        "I_seen",
-							Title:         "Seen already",
-							Body:          "skip me",
-							HTMLURL:       "https://github.com/acme/api/issues/7",
-							RepositoryURL: "https://api.github.com/repos/acme/api",
-							CreatedAt:     now.Add(-48 * time.Hour),
-							UpdatedAt:     now.Add(-47 * time.Hour),
-						},
-						{
-							ID:            2,
-							Number:        8,
-							NodeID:        "I_new",
-							Title:         "Collector request",
-							Body:          "Need better retries",
-							HTMLURL:       "https://github.com/acme/api/issues/8",
-							RepositoryURL: "https://api.github.com/repos/acme/api",
-							Comments:      3,
-							CreatedAt:     now.Add(-36 * time.Hour),
-							UpdatedAt:     now.Add(-35 * time.Hour),
-						},
-					},
-				},
-			}, nil
-		},
-		listIssueCommentsFn: func(_ context.Context, params IssueCommentsParams) (IssueCommentsPage, error) {
-			if params.Owner != "acme" || params.Repo != "api" || params.IssueNum != 8 {
-				t.Fatalf("unexpected issue comment params: %+v", params)
-			}
-			if params.PerPage != 2 {
-				t.Fatalf("issue comment per_page = %d, want 2", params.PerPage)
-			}
-			return IssueCommentsPage{
-				Comments: []IssueComment{
-					{ID: 11, NodeID: "IC_1", Body: "first useful comment", CreatedAt: now.Add(-34 * time.Hour)},
-					{ID: 12, NodeID: "IC_2", Body: "second useful comment", CreatedAt: now.Add(-33 * time.Hour)},
-				},
-			}, nil
-		},
-		searchDiscussionsFn: func(_ context.Context, params DiscussionSearchParams) (DiscussionSearchPage, error) {
-			if !strings.Contains(params.Query, "repo:acme/api") {
-				t.Fatalf("discussion query missing repo filter: %q", params.Query)
-			}
-			return DiscussionSearchPage{
-				Response: GraphQLResponse[DiscussionsQueryData]{
-					Data: DiscussionsQueryData{
-						Search: SearchResultConnection{
-							Nodes: []Discussion{
-								duplicateDiscussion,
-								{
-									ID:        "D_new",
-									Number:    15,
-									Title:     "Need discussion support",
-									Body:      "The collector misses pagination.",
-									URL:       "https://github.com/acme/api/discussions/15",
-									CreatedAt: now.Add(-32 * time.Hour),
-									UpdatedAt: now.Add(-31 * time.Hour),
-									Repository: Repository{
-										NameWithOwner: "acme/api",
-									},
-									Category: DiscussionCategory{Name: "Ideas"},
-									Comments: DiscussionCommentConnection{
-										PageInfo: PageInfo{HasNextPage: true, EndCursor: "cursor-1"},
-										Nodes: []DiscussionComment{
-											{ID: "DC_1", Body: "same problem here", CreatedAt: now.Add(-30 * time.Hour)},
-										},
-									},
-									Author: Actor{Login: "dev2"},
-								},
-							},
-						},
-					},
-				},
-			}, nil
-		},
-		listDiscussionCommentsFn: func(_ context.Context, params DiscussionCommentsParams) (DiscussionCommentsPage, error) {
-			if params.DiscussionID != "D_new" || params.After != "cursor-1" {
-				t.Fatalf("unexpected discussion comment params: %+v", params)
-			}
-			return DiscussionCommentsPage{
-				Response: GraphQLResponse[DiscussionCommentsQueryData]{
-					Data: DiscussionCommentsQueryData{
-						Node: DiscussionCommentsNode{
-							Comments: DiscussionCommentConnection{
-								PageInfo: PageInfo{},
-								Nodes: []DiscussionComment{
-									{ID: "DC_2", Body: "adding another detail", CreatedAt: now.Add(-29 * time.Hour)},
-								},
-							},
-						},
-					},
-				},
-			}, nil
-		},
-		stats: ClientStats{Requests: 4, RESTRequests: 2, GraphQLRequests: 2},
-	}
-
-	collector := newCollectorForTest(t, CollectorConfig{
-		Config: config.GitHubConfig{
-			Enabled:            true,
-			SearchIssues:       true,
-			SearchDiscussions:  true,
-			MaxItemsPerRun:     2,
-			MaxCommentsPerItem: 2,
-			Repositories:       []string{"acme/api"},
-			Languages:          []string{"go"},
-			Labels:             []string{"bug"},
-		},
-		API:     api,
-		Storage: store,
-		Memory:  mem,
-		Now:     func() time.Time { return now },
-	})
-
-	signals, err := collector.Collect(context.Background(), domain.CollectRequest{
-		SinceWindow: 48 * time.Hour,
-	})
-	if err != nil {
-		t.Fatalf("Collect() error = %v", err)
-	}
-	if len(signals) != 2 {
-		t.Fatalf("len(signals) = %d, want 2", len(signals))
-	}
-	if signals[0].SourceType != sourceTypeIssue || len(signals[0].Comments) != 2 {
-		t.Fatalf("first signal = %+v", signals[0])
-	}
-	if signals[1].SourceType != sourceTypeDiscussion || len(signals[1].Comments) != 2 {
-		t.Fatalf("second signal = %+v", signals[1])
-	}
-
-	lines, err := store.ReadJSONL(filepath.Join(store.BaseDir(), "raw-signals", "github-2026-07-22.jsonl"))
-	if err != nil {
-		t.Fatalf("ReadJSONL() error = %v", err)
-	}
-	if len(lines) != 2 {
-		t.Fatalf("persisted lines = %d, want 2", len(lines))
-	}
-
-	var savedMem domain.Memory
-	if err := store.LoadJSON(filepath.Join(store.BaseDir(), "memory.json"), &savedMem); err != nil {
-		t.Fatalf("LoadJSON(memory) error = %v", err)
-	}
-	if savedMem.Stats.RawSignalsCollected != 2 {
-		t.Fatalf("raw_signals_collected = %d, want 2", savedMem.Stats.RawSignalsCollected)
-	}
-	if savedMem.Stats.RawSignalsSkipped != 2 {
-		t.Fatalf("raw_signals_skipped = %d, want 2", savedMem.Stats.RawSignalsSkipped)
-	}
-	if savedMem.Stats.GitHubRequests != 4 {
-		t.Fatalf("github_requests = %d, want 4", savedMem.Stats.GitHubRequests)
+// TestCollector_New_NotEnabled verifies that New returns ErrNotEnabled when disabled.
+func TestCollector_New_NotEnabled(t *testing.T) {
+	_, err := New(CollectorConfig{Enabled: false})
+	if err != ErrNotEnabled {
+		t.Fatalf("expected ErrNotEnabled, got %v", err)
 	}
 }
 
-func TestCollectorHandlesPartialFailuresAndCursorInputs(t *testing.T) {
-	t.Parallel()
-
-	now := time.Date(2026, 7, 22, 15, 0, 0, 0, time.UTC)
-	store := storage.New(t.TempDir())
-	mem := memory.New(store)
-
-	api := &fakeGitHubAPI{
-		searchIssuesFn: func(_ context.Context, params SearchIssuesParams) (SearchIssuesPage, error) {
-			if params.Page != 3 {
-				t.Fatalf("issue page = %d, want 3", params.Page)
-			}
-			return SearchIssuesPage{
-				Response: SearchIssuesResponse{
-					Items: []IssueItem{
-						{
-							ID:            10,
-							Number:        21,
-							NodeID:        "I_partial",
-							Title:         "Need exports",
-							Body:          "CSV export support is missing",
-							HTMLURL:       "https://github.com/acme/api/issues/21",
-							RepositoryURL: "https://api.github.com/repos/acme/api",
-							Comments:      1,
-							CreatedAt:     now.Add(-5 * time.Hour),
-							UpdatedAt:     now.Add(-4 * time.Hour),
-						},
-					},
-				},
-			}, nil
-		},
-		listIssueCommentsFn: func(_ context.Context, params IssueCommentsParams) (IssueCommentsPage, error) {
-			if params.IssueNum != 21 {
-				t.Fatalf("unexpected issue comment params: %+v", params)
-			}
-			return IssueCommentsPage{}, fmt.Errorf("comment fetch failed")
-		},
-		searchDiscussionsFn: func(_ context.Context, params DiscussionSearchParams) (DiscussionSearchPage, error) {
-			if params.After != "cursor-x" {
-				t.Fatalf("discussion cursor = %q, want cursor-x", params.After)
-			}
-			return DiscussionSearchPage{}, fmt.Errorf("discussion search failed")
-		},
-		stats: ClientStats{Requests: 3, RESTRequests: 2, GraphQLRequests: 1},
+// TestCollector_New_Defaults verifies that New returns a usable collector with defaults.
+func TestCollector_New_Defaults(t *testing.T) {
+	cfg := CollectorConfig{
+		Enabled:            true,
+		SearchIssues:       true,
+		SearchDiscussions:  true,
+		MaxItemsPerRun:     500,
+		MaxCommentsPerItem: 20,
+		MaxRequests:        500,
 	}
 
-	collector := newCollectorForTest(t, CollectorConfig{
-		Config: config.GitHubConfig{
-			Enabled:            true,
-			SearchIssues:       true,
-			SearchDiscussions:  true,
-			MaxItemsPerRun:     3,
-			MaxCommentsPerItem: 1,
-		},
-		API:     api,
-		Storage: store,
-		Memory:  mem,
-		Now:     func() time.Time { return now },
-	})
+	c, err := New(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
-	signals, err := collector.Collect(context.Background(), domain.CollectRequest{
-		MaxItems: 2,
-		Cursor: map[string]string{
-			"github_issues_page":       "3",
-			"github_discussions_after": "cursor-x",
-		},
+	if c.Name() != "github" {
+		t.Fatalf("expected name 'github', got %q", c.Name())
+	}
+
+	if c.config.MaxItemsPerRun != 500 {
+		t.Fatalf("expected MaxItemsPerRun=500, got %d", c.config.MaxItemsPerRun)
+	}
+
+	if c.config.MaxCommentsPerItem != 20 {
+		t.Fatalf("expected MaxCommentsPerItem=20, got %d", c.config.MaxCommentsPerItem)
+	}
+
+	if !c.config.SearchIssues {
+		t.Fatal("expected SearchIssues=true")
+	}
+
+	if !c.config.SearchDiscussions {
+		t.Fatal("expected SearchDiscussions=true")
+	}
+
+	if c.limits.maxRequests != 500 {
+		t.Fatalf("expected maxRequests=500, got %d", c.limits.maxRequests)
+	}
+}
+
+// TestCollector_WithTransport verifies that WithTransport replaces the transport.
+func TestCollector_WithTransport(t *testing.T) {
+	c, err := New(CollectorConfig{Enabled: true, MaxRequests: 100})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	ft := newFakeTransport()
+	c.WithTransport(ft)
+
+	if c.transport != ft {
+		t.Fatal("WithTransport did not replace transport")
+	}
+}
+
+// TestCollector_WithNow verifies that WithNow overrides the time function.
+func TestCollector_WithNow(t *testing.T) {
+	c, err := New(CollectorConfig{Enabled: true, MaxRequests: 100})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	fixed := time.Date(2025, 1, 15, 0, 0, 0, 0, time.UTC)
+	c.WithNow(func() time.Time { return fixed })
+
+	if got := c.now(); !got.Equal(fixed) {
+		t.Fatalf("expected %v, got %v", fixed, got)
+	}
+}
+
+// TestCollector_Collect_Empty verifies that Collect returns empty results
+// when both sources are disabled.
+func TestCollector_Collect_Empty(t *testing.T) {
+	c, err := New(CollectorConfig{
+		Enabled:           true,
+		SearchIssues:      false,
+		SearchDiscussions: false,
+		MaxItemsPerRun:    500,
+		MaxRequests:       500,
 	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	signals, err := c.Collect(context.Background(), domain.CollectRequest{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(signals) != 0 {
+		t.Fatalf("expected empty results, got %d signals", len(signals))
+	}
+}
+
+// TestCollector_Collect_NilContext verifies that nil context returns an error.
+func TestCollector_Collect_NilContext(t *testing.T) {
+	c, err := New(CollectorConfig{Enabled: true, MaxRequests: 100})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	_, err = c.Collect(nil, domain.CollectRequest{})
 	if err == nil {
-		t.Fatal("Collect() error = nil, want partial failure")
-	}
-	if len(signals) != 1 {
-		t.Fatalf("len(signals) = %d, want 1", len(signals))
-	}
-	if len(signals[0].Comments) != 0 {
-		t.Fatalf("len(signals[0].Comments) = %d, want 0", len(signals[0].Comments))
-	}
-	if !strings.Contains(err.Error(), "comment fetch failed") {
-		t.Fatalf("error %q missing comment failure", err)
-	}
-	if !strings.Contains(err.Error(), "discussion search failed") {
-		t.Fatalf("error %q missing discussion failure", err)
-	}
-
-	lines, err := store.ReadJSONL(filepath.Join(store.BaseDir(), "raw-signals", "github-2026-07-22.jsonl"))
-	if err != nil {
-		t.Fatalf("ReadJSONL() error = %v", err)
-	}
-	if len(lines) != 1 {
-		t.Fatalf("persisted lines = %d, want 1", len(lines))
-	}
-
-	var savedSignal domain.RawSignal
-	if err := json.Unmarshal(lines[0], &savedSignal); err != nil {
-		t.Fatalf("unmarshal saved signal: %v", err)
-	}
-	if savedSignal.SourceID != "issue:I_partial" {
-		t.Fatalf("saved SourceID = %q", savedSignal.SourceID)
-	}
-
-	var savedMem domain.Memory
-	if err := store.LoadJSON(filepath.Join(store.BaseDir(), "memory.json"), &savedMem); err != nil {
-		t.Fatalf("LoadJSON(memory) error = %v", err)
-	}
-	if savedMem.Stats.RawSignalsCollected != 1 {
-		t.Fatalf("raw_signals_collected = %d, want 1", savedMem.Stats.RawSignalsCollected)
-	}
-	if savedMem.Stats.GitHubRequests != 3 {
-		t.Fatalf("github_requests = %d, want 3", savedMem.Stats.GitHubRequests)
+		t.Fatal("expected error for nil context")
 	}
 }
 
-type fakeGitHubAPI struct {
-	searchIssuesFn           func(context.Context, SearchIssuesParams) (SearchIssuesPage, error)
-	listIssueCommentsFn      func(context.Context, IssueCommentsParams) (IssueCommentsPage, error)
-	searchDiscussionsFn      func(context.Context, DiscussionSearchParams) (DiscussionSearchPage, error)
-	listDiscussionCommentsFn func(context.Context, DiscussionCommentsParams) (DiscussionCommentsPage, error)
-	stats                    ClientStats
-}
+// TestDeriveScope_SearchStrategy verifies that empty repositories produce search strategy.
+func TestDeriveScope_SearchStrategy(t *testing.T) {
+	scope := deriveScope(
+		configValues{MaxItemsPerRun: 100, MaxCommentsPerItem: 10},
+		nil, // empty repos
+		[]string{"bug"},
+		[]string{"go"},
+		100,
+		10,
+		"2025-01-01T00:00:00Z",
+	)
 
-func (f *fakeGitHubAPI) SearchIssues(ctx context.Context, params SearchIssuesParams) (SearchIssuesPage, error) {
-	if f.searchIssuesFn == nil {
-		return SearchIssuesPage{}, errors.New("unexpected SearchIssues call")
+	if scope.strategy != strategySearch {
+		t.Fatalf("expected strategySearch, got %d", scope.strategy)
 	}
-	return f.searchIssuesFn(ctx, params)
-}
 
-func (f *fakeGitHubAPI) ListIssueComments(ctx context.Context, params IssueCommentsParams) (IssueCommentsPage, error) {
-	if f.listIssueCommentsFn == nil {
-		return IssueCommentsPage{}, errors.New("unexpected ListIssueComments call")
+	if len(scope.repos) != 0 {
+		t.Fatalf("expected empty repos, got %v", scope.repos)
 	}
-	return f.listIssueCommentsFn(ctx, params)
-}
 
-func (f *fakeGitHubAPI) SearchDiscussions(ctx context.Context, params DiscussionSearchParams) (DiscussionSearchPage, error) {
-	if f.searchDiscussionsFn == nil {
-		return DiscussionSearchPage{}, errors.New("unexpected SearchDiscussions call")
+	if scope.maxItems != 100 {
+		t.Fatalf("expected maxItems=100, got %d", scope.maxItems)
 	}
-	return f.searchDiscussionsFn(ctx, params)
-}
 
-func (f *fakeGitHubAPI) ListDiscussionComments(ctx context.Context, params DiscussionCommentsParams) (DiscussionCommentsPage, error) {
-	if f.listDiscussionCommentsFn == nil {
-		return DiscussionCommentsPage{}, errors.New("unexpected ListDiscussionComments call")
+	if scope.maxComments != 10 {
+		t.Fatalf("expected maxComments=10, got %d", scope.maxComments)
 	}
-	return f.listDiscussionCommentsFn(ctx, params)
-}
 
-func (f *fakeGitHubAPI) Stats() ClientStats {
-	return f.stats
-}
-
-func newCollectorForTest(t *testing.T, cfg CollectorConfig) *Collector {
-	t.Helper()
-
-	collector, err := NewCollector(cfg)
-	if err != nil {
-		t.Fatalf("NewCollector() error = %v", err)
+	if len(scope.labels) != 1 || scope.labels[0] != "bug" {
+		t.Fatalf("expected labels=[bug], got %v", scope.labels)
 	}
-	return collector
+
+	if scope.since != "2025-01-01T00:00:00Z" {
+		t.Fatalf("expected since=2025-01-01T00:00:00Z, got %q", scope.since)
+	}
 }
+
+// TestDeriveScope_PerRepoStrategy verifies that populated repos produce per-repo strategy.
+func TestDeriveScope_PerRepoStrategy(t *testing.T) {
+	repos := []string{"owner/repo1", "owner/repo2"}
+	scope := deriveScope(
+		configValues{},
+		repos,
+		nil,
+		nil,
+		50,
+		5,
+		"",
+	)
+
+	if scope.strategy != strategyPerRepo {
+		t.Fatalf("expected strategyPerRepo, got %d", scope.strategy)
+	}
+
+	if len(scope.repos) != 2 {
+		t.Fatalf("expected 2 repos, got %d", len(scope.repos))
+	}
+
+	if scope.repos[0] != "owner/repo1" || scope.repos[1] != "owner/repo2" {
+		t.Fatalf("unexpected repos: %v", scope.repos)
+	}
+
+	if scope.maxItems != 50 {
+		t.Fatalf("expected maxItems=50, got %d", scope.maxItems)
+	}
+
+	if scope.maxComments != 5 {
+		t.Fatalf("expected maxComments=5, got %d", scope.maxComments)
+	}
+
+	if scope.since != "" {
+		t.Fatalf("expected empty since, got %q", scope.since)
+	}
+}
+
+// TestDeriveScope_EmptyValues verifies scope derivation with minimal inputs.
+func TestDeriveScope_EmptyValues(t *testing.T) {
+	scope := deriveScope(
+		configValues{},
+		nil,
+		nil,
+		nil,
+		0,
+		0,
+		"",
+	)
+
+	if scope.strategy != strategySearch {
+		t.Fatalf("expected strategySearch, got %d", scope.strategy)
+	}
+
+	if scope.maxItems != 0 {
+		t.Fatalf("expected maxItems=0, got %d", scope.maxItems)
+	}
+}
+
+// TestErrorTypes verifies the custom error types work as expected.
+func TestErrorTypes(t *testing.T) {
+	// RateLimitError
+	rle := &RateLimitError{
+		IsPrimary:   true,
+		Remaining:   0,
+		Limit:       5000,
+		Reset:       time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+	}
+	if !IsRateLimit(rle) {
+		t.Fatal("expected IsRateLimit to return true")
+	}
+	if !IsPrimaryRateLimit(rle) {
+		t.Fatal("expected IsPrimaryRateLimit to return true")
+	}
+	if IsSecondaryRateLimit(rle) {
+		t.Fatal("expected IsSecondaryRateLimit to return false")
+	}
+
+	// Secondary rate limit
+	sl := &RateLimitError{IsSecondary: true, RetryAfter: 10 * time.Second}
+	if !IsRateLimit(sl) {
+		t.Fatal("expected IsRateLimit to return true")
+	}
+	if !IsSecondaryRateLimit(sl) {
+		t.Fatal("expected IsSecondaryRateLimit to return true")
+	}
+	if IsPrimaryRateLimit(sl) {
+		t.Fatal("expected IsPrimaryRateLimit to return false")
+	}
+
+	// RetryExhaustionError
+	re := &RetryExhaustionError{Wrapped: http.ErrAbortHandler, Attempts: 3}
+	if re.Error() == "" {
+		t.Fatal("expected non-empty error string")
+	}
+
+	// MalformedResponseError
+	mr := &MalformedResponseError{Wrapped: http.ErrBodyNotAllowed, Body: "<bad>"}
+	if mr.Error() == "" {
+		t.Fatal("expected non-empty error string")
+	}
+
+	// RequestLimitError
+	rl := &RequestLimitError{Limit: 100}
+	if rl.Error() == "" {
+		t.Fatal("expected non-empty error string")
+	}
+}
+
+// TestInterfaceCompliance verifies Collector implements domain.SourceCollector.
+func TestInterfaceCompliance(t *testing.T) {
+	var _ domain.SourceCollector = (*Collector)(nil)
+}
+

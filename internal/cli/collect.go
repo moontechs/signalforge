@@ -17,18 +17,6 @@ import (
 	"github.com/moontechs/signalforge/internal/storage"
 )
 
-type githubClientFactory func(cfg github.ClientConfig) (*github.Client, error)
-type githubCollectorFactory func(cfg github.CollectorConfig) (domain.SourceCollector, error)
-
-var (
-	getSignalForgeDir                         = config.GetSignalForgeDir
-	loadConfig                                = config.LoadConfig
-	newGitHubClient    githubClientFactory    = github.NewClient
-	newGitHubCollector githubCollectorFactory = func(cfg github.CollectorConfig) (domain.SourceCollector, error) {
-		return github.NewCollector(cfg)
-	}
-)
-
 // CollectCmd represents the signalforge collect command.
 var CollectCmd = newCollectCmd()
 
@@ -60,7 +48,7 @@ func runCollect(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	dir, err := getSignalForgeDir()
+	dir, err := config.GetSignalForgeDir()
 	if err != nil {
 		return fmt.Errorf("determine signalforge dir: %w", err)
 	}
@@ -69,7 +57,7 @@ func runCollect(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("initialize storage layout: %w", err)
 	}
 
-	cfg, err := loadConfig(dir)
+	cfg, err := config.LoadConfig(dir)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
@@ -100,24 +88,27 @@ func runCollect(cmd *cobra.Command, _ []string) error {
 				return fmt.Errorf("GITHUB_TOKEN is required for github collection")
 			}
 
-			client, err := newGitHubClient(github.ClientConfig{
-				MaxRetries:  3,
-				MaxRequests: cfg.Limits.MaxGitHubRequests,
-			})
-			if err != nil {
-				return fmt.Errorf("create github client: %w", err)
+			ghCfg := github.CollectorConfig{
+				Enabled:           cfg.Sources.GitHub.Enabled,
+				SearchIssues:      cfg.Sources.GitHub.SearchIssues,
+				SearchDiscussions: cfg.Sources.GitHub.SearchDiscussions,
+				MaxItemsPerRun:    cfg.Sources.GitHub.MaxItemsPerRun,
+				MaxCommentsPerItem: cfg.Sources.GitHub.MaxCommentsPerItem,
+				Repositories:      cfg.Sources.GitHub.Repositories,
+				Languages:         cfg.Sources.GitHub.Languages,
+				Labels:            cfg.Sources.GitHub.Labels,
+				MaxRequests:       cfg.Limits.MaxGitHubRequests,
 			}
 
-			collector, err := newGitHubCollector(github.CollectorConfig{
-				Config:  cfg.Sources.GitHub,
-				API:     client,
-				Storage: store,
-				Memory:  mem,
-			})
+			collector, err := github.New(ghCfg)
 			if err != nil {
 				return fmt.Errorf("create github collector: %w", err)
 			}
+
+			// Attach disk cache
+			collector.WithCache(store)
 			collectors = append(collectors, collector)
+
 		default:
 			return fmt.Errorf("source %q is not supported by the collect command yet", source)
 		}
@@ -125,9 +116,10 @@ func runCollect(cmd *cobra.Command, _ []string) error {
 
 	var totalSignals int
 	for _, collector := range collectors {
+		since := time.Now().Add(-sinceWindow)
 		signals, err := collector.Collect(cmd.Context(), domain.CollectRequest{
-			SinceWindow: sinceWindow,
-			Sources:     selectedSources,
+			Since:   since,
+			Sources: selectedSources,
 		})
 		totalSignals += len(signals)
 		if err != nil {
@@ -135,6 +127,15 @@ func runCollect(cmd *cobra.Command, _ []string) error {
 			reportCollectSummary(cmd, collector.Name(), len(signals), statsDelta(before, after))
 			return fmt.Errorf("%s collection completed with errors: %w", collector.Name(), err)
 		}
+
+		// Save memory after collection
+		for _, s := range signals {
+			mem.AddRawSignal(s.Source, s.SourceID)
+		}
+	}
+
+	if err := mem.Save(); err != nil {
+		return fmt.Errorf("save memory: %w", err)
 	}
 
 	after := mem.GetStats()

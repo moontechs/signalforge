@@ -4,494 +4,250 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
-	"strconv"
-	"strings"
+	"net/http"
 	"time"
 
-	"github.com/moontechs/signalforge/internal/config"
 	"github.com/moontechs/signalforge/internal/domain"
-	"github.com/moontechs/signalforge/internal/memory"
 	"github.com/moontechs/signalforge/internal/storage"
 )
 
-const (
-	defaultSearchPageSize     = 50
-	defaultDiscussionPageSize = 25
-)
-
-type githubAPI interface {
-	SearchIssues(ctx context.Context, params SearchIssuesParams) (SearchIssuesPage, error)
-	ListIssueComments(ctx context.Context, params IssueCommentsParams) (IssueCommentsPage, error)
-	SearchDiscussions(ctx context.Context, params DiscussionSearchParams) (DiscussionSearchPage, error)
-	ListDiscussionComments(ctx context.Context, params DiscussionCommentsParams) (DiscussionCommentsPage, error)
-	Stats() ClientStats
+// transport is the pluggable HTTP round-tripper for testability.
+// Production uses httpTransport; tests use fakeTransport.
+type transport interface {
+	Do(req *http.Request) (*http.Response, error)
 }
 
-// Collector coordinates GitHub searches, parsing, deduplication, and persistence.
+// httpTransport wraps http.Client to satisfy the transport interface.
+type httpTransport struct {
+	client *http.Client
+}
+
+func (t *httpTransport) Do(req *http.Request) (*http.Response, error) {
+	return t.client.Do(req)
+}
+
+// Collector collects GitHub Issues and Discussions as RawSignals.
 type Collector struct {
-	cfg    config.GitHubConfig
-	api    githubAPI
-	store  *storage.Storage
-	memory *memory.DefaultMemory
-	now    func() time.Time
+	config    configValues
+	limits    requestLimits
+	transport transport
+	client    *githubClient
+	now       func() time.Time
 }
 
-// CollectorConfig wires dependencies for a GitHub collector.
+// requestLimits holds the per-run request cap.
+type requestLimits struct {
+	maxRequests int
+}
+
+// New creates a new GitHub Collector with the given configuration.
+// It returns an error if the collector would have no usable configuration.
+func New(cfg CollectorConfig) (*Collector, error) {
+	if !cfg.Enabled {
+		return nil, ErrNotEnabled
+	}
+
+	transport := &httpTransport{
+		client: &http.Client{
+			Timeout: defaultTimeout,
+		},
+	}
+
+	c := &Collector{
+		config: configValues{
+			Enabled:           cfg.Enabled,
+			SearchIssues:      cfg.SearchIssues,
+			SearchDiscussions: cfg.SearchDiscussions,
+			MaxItemsPerRun:    cfg.MaxItemsPerRun,
+			MaxCommentsPerItem: cfg.MaxCommentsPerItem,
+			Repositories:      cfg.Repositories,
+			Languages:         cfg.Languages,
+			Labels:            cfg.Labels,
+		},
+		limits: requestLimits{
+			maxRequests: cfg.MaxRequests,
+		},
+		transport: transport,
+		now:       time.Now,
+	}
+
+	c.client = newClient(transport, cfg.MaxRequests)
+	return c, nil
+}
+
+// domainCollectorConfig is the public configuration type accepted by New.
+// It mirrors config.GitHubConfig + config.LimitsConfig.MaxGitHubRequests.
 type CollectorConfig struct {
-	Config  config.GitHubConfig
-	API     githubAPI
-	Storage *storage.Storage
-	Memory  *memory.DefaultMemory
-	Now     func() time.Time
+	Enabled           bool
+	SearchIssues      bool
+	SearchDiscussions bool
+	MaxItemsPerRun    int
+	MaxCommentsPerItem int
+	Repositories      []string
+	Languages         []string
+	Labels            []string
+	MaxRequests       int
 }
 
-// NewCollector constructs a GitHub collector.
-func NewCollector(cfg CollectorConfig) (*Collector, error) {
-	if err := cfg.Config.Validate(); err != nil {
-		return nil, err
-	}
-	if cfg.API == nil {
-		return nil, fmt.Errorf("github api client is required")
-	}
-	if cfg.Storage == nil {
-		return nil, fmt.Errorf("storage is required")
-	}
-	if cfg.Memory == nil {
-		return nil, fmt.Errorf("memory is required")
-	}
-	now := cfg.Now
-	if now == nil {
-		now = time.Now
-	}
-
-	return &Collector{
-		cfg:    cfg.Config,
-		api:    cfg.API,
-		store:  cfg.Storage,
-		memory: cfg.Memory,
-		now:    now,
-	}, nil
-}
-
-// Name returns the collector source name.
+// Name returns the collector name.
 func (c *Collector) Name() string {
-	return sourceName
+	return "github"
 }
 
-// Collect runs the GitHub collection flow for the provided request.
+// WithTransport replaces the HTTP transport (for testing).
+// It also recreates the internal client with the new transport.
+func (c *Collector) WithTransport(t transport) *Collector {
+	c.transport = t
+	c.client = newClient(t, c.limits.maxRequests)
+	return c
+}
+
+// WithNow overrides the time function (for testing).
+func (c *Collector) WithNow(now func() time.Time) *Collector {
+	c.now = now
+	return c
+}
+
+// WithCache attaches an on-disk response cache to the collector's internal client.
+func (c *Collector) WithCache(store *storage.Storage) *Collector {
+	c.client = c.client.WithCache(store)
+	return c
+}
+
+// Collect retrieves issues and discussions from GitHub and returns RawSignals.
+// It orchestrates the full collection pipeline:
+//  1. Derive collection scope from config + request
+//  2. Fetch issues (REST) if SearchIssues is enabled
+//  3. Fetch discussions (GraphQL) if SearchDiscussions is enabled
+//  4. Parse both into domain.RawSignal
+//  5. Dedup by signal ID within the run
+//  6. Enforce max-item limit
+//  7. Return combined results with partial errors wrapped
 func (c *Collector) Collect(ctx context.Context, req domain.CollectRequest) ([]domain.RawSignal, error) {
-	options := c.resolveCollectOptions(req)
-	if options.maxItems <= 0 {
-		return nil, nil
+	if ctx == nil {
+		return nil, fmt.Errorf("context must not be nil")
 	}
 
-	collectedAt := c.now().UTC()
-	var (
-		signals []domain.RawSignal
-		errs    []error
+	// Format since as RFC3339 string for the scope
+	var sinceStr string
+	if !req.Since.IsZero() {
+		sinceStr = req.Since.Format(time.RFC3339)
+	}
+
+	scope := deriveScope(
+		c.config,
+		c.config.Repositories,
+		c.config.Labels,
+		c.config.Languages,
+		c.config.MaxItemsPerRun,
+		c.config.MaxCommentsPerItem,
+		sinceStr,
 	)
 
-	if c.cfg.SearchIssues && options.remaining() > 0 {
-		issueSignals, err := c.collectIssues(ctx, options, collectedAt, req.Force)
-		signals = append(signals, issueSignals...)
-		if err != nil {
-			errs = append(errs, err)
-		}
-	}
+	var signals []domain.RawSignal
+	var errs []error
+	collectedAt := c.now()
 
-	if c.cfg.SearchDiscussions && options.remaining() > 0 {
-		discussionSignals, err := c.collectDiscussions(ctx, options, collectedAt, req.Force)
-		signals = append(signals, discussionSignals...)
+	// 1. Fetch issues (REST)
+	if scope.searchIssues {
+		issues, err := fetchIssues(ctx, c.client, scope)
 		if err != nil {
-			errs = append(errs, err)
-		}
-	}
-
-	persisted := req.DryRun
-	if len(signals) > 0 && !req.DryRun {
-		if err := c.persistSignals(signals); err != nil {
-			errs = append(errs, err)
+			errs = append(errs, fmt.Errorf("github issues: %w", err))
 		} else {
-			persisted = true
-		}
-	} else if len(signals) == 0 {
-		persisted = true
-	}
-
-	stats := c.api.Stats()
-	c.memory.AddGitHubRequests(stats.Requests)
-
-	if persisted && !req.DryRun {
-		if err := c.memory.Save(); err != nil {
-			errs = append(errs, err)
+			parsed := parseIssues(ctx, c.client, issues, scope, collectedAt)
+			signals = append(signals, parsed...)
 		}
 	}
 
-	return signals, errors.Join(errs...)
-}
-
-type collectOptions struct {
-	since         time.Time
-	maxItems      int
-	maxComments   int
-	repositories  []string
-	languages     []string
-	labels        []string
-	issuePage     int
-	discussionCur string
-	collected     int
-}
-
-func (o *collectOptions) remaining() int {
-	return max(0, o.maxItems-o.collected)
-}
-
-func (o *collectOptions) advance() {
-	o.collected++
-}
-
-func (c *Collector) resolveCollectOptions(req domain.CollectRequest) *collectOptions {
-	maxItems := c.cfg.MaxItemsPerRun
-	if req.MaxItems > 0 && (maxItems == 0 || req.MaxItems < maxItems) {
-		maxItems = req.MaxItems
-	}
-
-	maxComments := c.cfg.MaxCommentsPerItem
-	if req.MaxCommentsPerItem > 0 {
-		maxComments = req.MaxCommentsPerItem
-	}
-
-	repositories := cloneStrings(c.cfg.Repositories)
-	if len(req.Repositories) > 0 {
-		repositories = cloneStrings(req.Repositories)
-	}
-
-	languages := cloneStrings(c.cfg.Languages)
-	if len(req.Languages) > 0 {
-		languages = cloneStrings(req.Languages)
-	}
-
-	labels := cloneStrings(c.cfg.Labels)
-	if len(req.Labels) > 0 {
-		labels = cloneStrings(req.Labels)
-	}
-
-	since := req.Since.UTC()
-	if since.IsZero() && req.SinceWindow > 0 {
-		since = c.now().Add(-req.SinceWindow).UTC()
-	}
-
-	issuePage := 1
-	if rawPage := strings.TrimSpace(req.Cursor["github_issues_page"]); rawPage != "" {
-		if parsed, err := strconv.Atoi(rawPage); err == nil && parsed > 0 {
-			issuePage = parsed
-		}
-	}
-
-	return &collectOptions{
-		since:         since,
-		maxItems:      maxItems,
-		maxComments:   max(0, maxComments),
-		repositories:  repositories,
-		languages:     languages,
-		labels:        labels,
-		issuePage:     issuePage,
-		discussionCur: strings.TrimSpace(req.Cursor["github_discussions_after"]),
-	}
-}
-
-func (c *Collector) collectIssues(
-	ctx context.Context,
-	options *collectOptions,
-	collectedAt time.Time,
-	force bool,
-) ([]domain.RawSignal, error) {
-	if options.remaining() <= 0 {
-		return nil, nil
-	}
-
-	query := buildIssueQuery(options.repositories, options.languages, options.labels, options.since)
-	page := max(1, options.issuePage)
-	perPage := min(defaultSearchPageSize, options.remaining())
-	var (
-		signals []domain.RawSignal
-		errs    []error
-	)
-
-	for options.remaining() > 0 {
-		pageResult, err := c.api.SearchIssues(ctx, SearchIssuesParams{
-			Query:   query,
-			Sort:    "updated",
-			Order:   "desc",
-			Page:    page,
-			PerPage: max(1, perPage),
-		})
+	// 2. Fetch discussions (GraphQL)
+	if scope.searchDiscussions {
+		discussions, err := fetchDiscussions(ctx, c.client, nil, scope)
 		if err != nil {
-			return signals, fmt.Errorf("collect github issues: %w", err)
+			errs = append(errs, fmt.Errorf("github discussions: %w", err))
+		} else {
+			parsed := parseDiscussions(discussions, scope, collectedAt)
+			signals = append(signals, parsed...)
 		}
-
-		for _, item := range pageResult.Response.Items {
-			if options.remaining() <= 0 {
-				break
-			}
-
-			sourceID := buildIssueSourceID(item)
-			if !force && c.memory.HasRawSignal(sourceName, sourceID) {
-				c.memory.IncrementStat("raw_signals_skipped")
-				continue
-			}
-
-			comments, err := c.fetchIssueComments(ctx, item, options.maxComments)
-			if err != nil {
-				errs = append(errs, fmt.Errorf("issue %s comments: %w", sourceID, err))
-			}
-
-			signal := ParseIssue(item, comments, ParseOptions{
-				CollectedAt: collectedAt,
-				MaxComments: options.maxComments,
-			})
-			if !force && c.memory.HasContentHash(signal.ContentHash) {
-				c.memory.IncrementStat("raw_signals_skipped")
-				continue
-			}
-
-			c.memory.AddRawSignal(signal.Source, signal.SourceID)
-			c.memory.AddContentHash(signal.ContentHash, signal.ID)
-			signals = append(signals, signal)
-			options.advance()
-		}
-
-		if !pageResult.HasNext || len(pageResult.Response.Items) == 0 {
-			break
-		}
-		page++
-		perPage = min(defaultSearchPageSize, options.remaining())
 	}
 
-	return signals, errors.Join(errs...)
+	// 3. Dedup within this run (by signal ID)
+	seen := make(map[string]bool, len(signals))
+	deduped := make([]domain.RawSignal, 0, len(signals))
+	for _, s := range signals {
+		if !seen[s.ID] {
+			seen[s.ID] = true
+			deduped = append(deduped, s)
+		}
+	}
+	signals = deduped
+
+	// 4. Enforce max-item limit
+	if scope.maxItems > 0 && len(signals) > scope.maxItems {
+		signals = signals[:scope.maxItems]
+	}
+
+	// 5. Return combined results with partial errors
+	if len(errs) > 0 {
+		return signals, fmt.Errorf("github collector: %w", errors.Join(errs...))
+	}
+
+	return signals, nil
 }
 
-func (c *Collector) fetchIssueComments(ctx context.Context, item IssueItem, maxComments int) ([]IssueComment, error) {
-	if maxComments == 0 || item.Comments == 0 {
-		return nil, nil
-	}
+// parseIssues parses a slice of ghIssue into domain.RawSignal, fetching comments
+// for each issue. Issues where owner/repo cannot be determined are skipped.
+func parseIssues(ctx context.Context, c *githubClient, issues []ghIssue, scope collectionScope, collectedAt time.Time) []domain.RawSignal {
+	signals := make([]domain.RawSignal, 0, len(issues))
 
-	owner, repo, ok := splitRepository(item.RepositoryName, item.RepositoryURL)
-	if !ok {
-		return nil, fmt.Errorf("missing repository for issue %d", item.Number)
-	}
+	for i := range issues {
+		issue := &issues[i]
 
-	page := 1
-	remaining := maxComments
-	collected := make([]IssueComment, 0, min(item.Comments, maxComments))
-	for remaining > 0 {
-		pageResult, err := c.api.ListIssueComments(ctx, IssueCommentsParams{
-			Owner:     owner,
-			Repo:      repo,
-			IssueNum:  item.Number,
-			Page:      page,
-			PerPage:   min(defaultSearchPageSize, remaining),
-			Sort:      "created",
-			Direction: "asc",
-		})
-		if err != nil {
-			return collected, err
+		// Extract owner/repo from repository_url or fall back to HTML URL
+		owner, repo := extractOwnerRepo(issue.RepoURL)
+		if owner == "" || repo == "" {
+			owner, repo = extractOwnerRepoFromHTML(issue.HTMLURL)
 		}
-
-		collected = append(collected, pageResult.Comments...)
-		remaining = maxComments - len(collected)
-		if !pageResult.HasNext || len(pageResult.Comments) == 0 {
-			break
-		}
-		page++
-	}
-
-	if len(collected) > maxComments {
-		collected = collected[:maxComments]
-	}
-	return collected, nil
-}
-
-func (c *Collector) collectDiscussions(
-	ctx context.Context,
-	options *collectOptions,
-	collectedAt time.Time,
-	force bool,
-) ([]domain.RawSignal, error) {
-	if options.remaining() <= 0 {
-		return nil, nil
-	}
-
-	query := buildDiscussionQuery(options.repositories, options.languages, options.labels, options.since)
-	after := options.discussionCur
-	first := min(defaultDiscussionPageSize, options.remaining())
-	var (
-		signals []domain.RawSignal
-		errs    []error
-	)
-
-	for options.remaining() > 0 {
-		pageResult, err := c.api.SearchDiscussions(ctx, DiscussionSearchParams{
-			Query: query,
-			First: max(1, first),
-			After: after,
-		})
-		if err != nil {
-			return signals, fmt.Errorf("collect github discussions: %w", err)
-		}
-
-		nodes := pageResult.Response.Data.Search.Nodes
-		for _, item := range nodes {
-			if options.remaining() <= 0 {
-				break
-			}
-
-			sourceID := buildDiscussionSourceID(item)
-			if !force && c.memory.HasRawSignal(sourceName, sourceID) {
-				c.memory.IncrementStat("raw_signals_skipped")
-				continue
-			}
-
-			comments, err := c.fetchDiscussionComments(ctx, item, options.maxComments)
-			if err != nil {
-				errs = append(errs, fmt.Errorf("discussion %s comments: %w", sourceID, err))
-			}
-
-			signal := ParseDiscussion(item, comments, ParseOptions{
-				CollectedAt: collectedAt,
-				MaxComments: options.maxComments,
-			})
-			if !force && c.memory.HasContentHash(signal.ContentHash) {
-				c.memory.IncrementStat("raw_signals_skipped")
-				continue
-			}
-
-			c.memory.AddRawSignal(signal.Source, signal.SourceID)
-			c.memory.AddContentHash(signal.ContentHash, signal.ID)
-			signals = append(signals, signal)
-			options.advance()
-		}
-
-		pageInfo := pageResult.Response.Data.Search.PageInfo
-		if !pageInfo.HasNextPage || len(nodes) == 0 {
-			break
-		}
-		after = pageInfo.EndCursor
-		first = min(defaultDiscussionPageSize, options.remaining())
-	}
-
-	return signals, errors.Join(errs...)
-}
-
-func (c *Collector) fetchDiscussionComments(
-	ctx context.Context,
-	item Discussion,
-	maxComments int,
-) ([]DiscussionComment, error) {
-	if maxComments == 0 {
-		return nil, nil
-	}
-
-	collected := append([]DiscussionComment{}, item.Comments.Nodes...)
-	if len(collected) >= maxComments || !item.Comments.PageInfo.HasNextPage {
-		if len(collected) > maxComments {
-			collected = collected[:maxComments]
-		}
-		return collected, nil
-	}
-
-	after := item.Comments.PageInfo.EndCursor
-	hasNext := item.Comments.PageInfo.HasNextPage
-	for len(collected) < maxComments && hasNext {
-		pageResult, err := c.api.ListDiscussionComments(ctx, DiscussionCommentsParams{
-			DiscussionID: item.ID,
-			First:        min(defaultDiscussionPageSize, maxComments-len(collected)),
-			After:        after,
-		})
-		if err != nil {
-			return collected, err
-		}
-
-		page := pageResult.Response.Data.Node.Comments
-		collected = append(collected, page.Nodes...)
-		hasNext = page.PageInfo.HasNextPage
-		if !hasNext || len(page.Nodes) == 0 {
-			break
-		}
-		after = page.PageInfo.EndCursor
-	}
-
-	if len(collected) > maxComments {
-		collected = collected[:maxComments]
-	}
-	return collected, nil
-}
-
-func (c *Collector) persistSignals(signals []domain.RawSignal) error {
-	path := filepath.Join(c.store.BaseDir(), "raw-signals", fmt.Sprintf("github-%s.jsonl", c.now().UTC().Format("2006-01-02")))
-	for _, signal := range signals {
-		if err := c.store.SaveJSONL(path, signal); err != nil {
-			return fmt.Errorf("persist raw signals: %w", err)
-		}
-	}
-	return nil
-}
-
-func buildIssueQuery(repositories, languages, labels []string, since time.Time) string {
-	parts := []string{"is:issue", "archived:false"}
-	parts = append(parts, queryTerms("repo", repositories)...)
-	parts = append(parts, queryTerms("language", languages)...)
-	parts = append(parts, queryTerms("label", labels)...)
-	if !since.IsZero() {
-		parts = append(parts, "updated:>="+since.UTC().Format("2006-01-02"))
-	}
-	return strings.Join(parts, " ")
-}
-
-func buildDiscussionQuery(repositories, languages, labels []string, since time.Time) string {
-	parts := []string{"is:discussion", "archived:false"}
-	parts = append(parts, queryTerms("repo", repositories)...)
-	parts = append(parts, queryTerms("language", languages)...)
-	parts = append(parts, queryTerms("label", labels)...)
-	if !since.IsZero() {
-		parts = append(parts, "updated:>="+since.UTC().Format("2006-01-02"))
-	}
-	return strings.Join(parts, " ")
-}
-
-func queryTerms(prefix string, values []string) []string {
-	terms := make([]string, 0, len(values))
-	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value == "" {
+		if owner == "" || repo == "" {
 			continue
 		}
-		terms = append(terms, prefix+":"+value)
+
+		// Fetch comments if maxComments is set
+		var fetchErr error
+		var comments []ghIssueComment
+		if scope.maxComments > 0 {
+			comments, fetchErr = fetchIssueComments(ctx, c, owner, repo, issue.Number, scope.maxComments)
+			if fetchErr != nil {
+				comments = nil
+			}
+		}
+
+		signal := parseIssueToSignal(issue, owner, repo, comments, scope.maxComments, collectedAt)
+		signals = append(signals, signal)
 	}
-	return terms
+
+	return signals
 }
 
-func splitRepository(repositoryName, repositoryURL string) (string, string, bool) {
-	repositoryName = normalizeRepositoryName(repositoryName, repositoryURL)
-	parts := strings.Split(repositoryName, "/")
-	if len(parts) != 2 {
-		return "", "", false
-	}
-	return parts[0], parts[1], true
-}
+// parseDiscussions parses a slice of graphQLDiscussionNode into domain.RawSignal.
+// Discussions where owner/repo cannot be determined from the URL are skipped.
+func parseDiscussions(discussions []graphQLDiscussionNode, scope collectionScope, collectedAt time.Time) []domain.RawSignal {
+	signals := make([]domain.RawSignal, 0, len(discussions))
 
-func cloneStrings(values []string) []string {
-	if len(values) == 0 {
-		return nil
-	}
-	cloned := make([]string, 0, len(values))
-	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value == "" {
+	for i := range discussions {
+		disc := &discussions[i]
+
+		// Extract owner/repo from HTML URL
+		owner, repo := extractOwnerRepoFromHTML(disc.URL)
+		if owner == "" || repo == "" {
 			continue
 		}
-		cloned = append(cloned, value)
+
+		signal := parseDiscussionToSignal(disc, owner, repo, scope.maxComments, collectedAt)
+		signals = append(signals, signal)
 	}
-	return cloned
+
+	return signals
 }
+
+// ensure interface compliance
+var _ domain.SourceCollector = (*Collector)(nil)

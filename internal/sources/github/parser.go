@@ -2,8 +2,7 @@ package github
 
 import (
 	"fmt"
-	"path"
-	"strconv"
+	"sort"
 	"strings"
 	"time"
 
@@ -12,323 +11,238 @@ import (
 )
 
 const (
-	sourceName            = "github"
-	sourceTypeIssue       = "issue"
-	sourceTypeDiscussion  = "discussion"
-	metadataState         = "github_state"
-	metadataLocked        = "github_locked"
-	metadataClosed        = "github_closed"
-	metadataClosedAt      = "github_closed_at"
-	metadataAuthor        = "github_author"
-	metadataAuthorType    = "github_author_type"
-	metadataCategory      = "github_category"
-	metadataNumber        = "github_number"
-	metadataNodeID        = "github_node_id"
-	metadataUpvoteCount   = "github_upvote_count"
-	metadataAnswerComment = "github_answer_comment_id"
+	// Source identifiers for normalization.
+	sourceIDIssue      = "github_issue"
+	sourceIDDiscussion = "github_discussion"
+	sourceName         = "github"
 )
 
-// ParseOptions controls GitHub item to RawSignal conversion.
-type ParseOptions struct {
-	CollectedAt    time.Time
-	MaxComments    int
-	IncludeAnswers bool
-}
+// ---- Mapping functions ----
 
-// ParseIssue converts a GitHub issue and its comments into a RawSignal.
-func ParseIssue(item IssueItem, comments []IssueComment, opts ParseOptions) domain.RawSignal {
-	repository := normalizeRepositoryName(item.RepositoryName, item.RepositoryURL)
-	sourceID := buildIssueSourceID(item)
-	normalizedComments := normalizeIssueComments(comments, opts.MaxComments)
-	body := normalizeBody(item.Body)
-	metadata := compactMetadata(map[string]string{
-		metadataState:      normalizeText(item.State),
-		metadataLocked:     strconv.FormatBool(item.Locked),
-		metadataAuthor:     normalizeText(item.User.Login),
-		metadataAuthorType: normalizeText(item.User.Type),
-		metadataNumber:     strconv.Itoa(item.Number),
-		metadataNodeID:     normalizeText(item.NodeID),
-		metadataClosedAt:   formatOptionalTime(item.ClosedAt),
-	})
-	if item.ClosedAt != nil {
-		metadata[metadataClosed] = "true"
-	} else {
-		metadata[metadataClosed] = "false"
-	}
+// parseIssueToSignal converts a GitHub issue into a domain.RawSignal.
+// It expects the issue's comments to be pre-fetched and passed separately.
+func parseIssueToSignal(issue *ghIssue, owner, repo string, comments []ghIssueComment, maxComments int, collectedAt time.Time) domain.RawSignal {
+	labelNames := extractLabelNames(issue.Labels)
+	repoFull := owner + "/" + repo
 
-	return domain.RawSignal{
-		ID:           buildSignalID(sourceTypeIssue, sourceID),
+	signal := domain.RawSignal{
+		ID:           issueSourceID(issue.ID),
 		Source:       sourceName,
-		SourceID:     sourceID,
-		SourceType:   sourceTypeIssue,
-		URL:          strings.TrimSpace(item.HTMLURL),
-		Title:        normalizeText(item.Title),
-		Body:         body,
-		Comments:     normalizedComments,
-		Community:    repository,
-		Repository:   repository,
-		Tags:         labelNames(item.Labels),
-		Labels:       labelNames(item.Labels),
-		CommentCount: item.Comments,
-		ReactionCnt:  item.Reactions.TotalCount,
-		CreatedAt:    item.CreatedAt.UTC(),
-		UpdatedAt:    item.UpdatedAt.UTC(),
-		CollectedAt:  normalizeCollectedAt(opts.CollectedAt),
-		ContentHash:  buildContentHash(sourceTypeIssue, repository, normalizeText(item.Title), body, normalizedComments),
-		Metadata:     metadata,
+		SourceID:     fmt.Sprintf("%d", issue.ID),
+		SourceType:   sourceIDIssue,
+		URL:          issue.HTMLURL,
+		Title:        issue.Title,
+		Body:         issue.Body,
+		Community:    "github",
+		Repository:   repoFull,
+		Labels:       labelNames,
+		Tags:         labelNames,
+		CommentCount: issue.Comments,
+		ReactionCnt:  issue.Reactions.Total(),
+		CreatedAt:    issue.CreatedAt,
+		UpdatedAt:    issue.UpdatedAt,
+		CollectedAt:  collectedAt,
+		Score:        int(issue.Reactions.Total()),
 	}
+
+	// Map and cap comments
+	signal.Comments = mapIssueComments(comments, maxComments)
+
+	// Generate content hash from title, body, and comment bodies
+	signal.ContentHash = generateContentHash(signal.Title, signal.Body, signal.Comments)
+
+	return signal
 }
 
-// ParseDiscussion converts a GitHub discussion and its comments into a RawSignal.
-func ParseDiscussion(item Discussion, comments []DiscussionComment, opts ParseOptions) domain.RawSignal {
-	repository := normalizeText(item.Repository.NameWithOwner)
-	sourceID := buildDiscussionSourceID(item)
-	normalizedComments, answerID := normalizeDiscussionComments(comments, opts.MaxComments)
-	body := normalizeBody(item.Body)
-	metadata := compactMetadata(map[string]string{
-		metadataLocked:      strconv.FormatBool(item.Locked),
-		metadataClosed:      strconv.FormatBool(item.Closed),
-		metadataAuthor:      normalizeText(item.Author.Login),
-		metadataCategory:    normalizeText(item.Category.Name),
-		metadataNumber:      strconv.Itoa(item.Number),
-		metadataNodeID:      normalizeText(item.ID),
-		metadataUpvoteCount: strconv.Itoa(item.UpvoteCount),
-	})
-	if answerID != "" {
-		metadata[metadataAnswerComment] = answerID
+// parseDiscussionToSignal converts a GitHub discussion node into a domain.RawSignal.
+func parseDiscussionToSignal(disc *graphQLDiscussionNode, owner, repo string, maxComments int, collectedAt time.Time) domain.RawSignal {
+	labelNames := getDiscussionLabelNames(disc)
+	catName := getDiscussionCategory(disc)
+	repoFull := owner + "/" + repo
+
+	commentCount := 0
+	hasComments := disc.Comments != nil
+	if hasComments {
+		commentCount = disc.Comments.TotalCount
 	}
 
-	return domain.RawSignal{
-		ID:           buildSignalID(sourceTypeDiscussion, sourceID),
+	signal := domain.RawSignal{
+		ID:           discussionSourceID(disc.ID),
 		Source:       sourceName,
-		SourceID:     sourceID,
-		SourceType:   sourceTypeDiscussion,
-		URL:          strings.TrimSpace(item.URL),
-		Title:        normalizeText(item.Title),
-		Body:         body,
-		Comments:     normalizedComments,
-		Community:    repository,
-		Repository:   repository,
-		Category:     normalizeText(item.Category.Name),
-		Tags:         labelNames(item.Labels.Nodes),
-		Labels:       labelNames(item.Labels.Nodes),
-		CommentCount: item.Comments.TotalCount,
-		ReactionCnt:  item.Reactions.TotalCount,
-		AnswerCount:  countDiscussionAnswers(comments),
-		CreatedAt:    item.CreatedAt.UTC(),
-		UpdatedAt:    item.UpdatedAt.UTC(),
-		CollectedAt:  normalizeCollectedAt(opts.CollectedAt),
-		ContentHash:  buildContentHash(sourceTypeDiscussion, repository, normalizeText(item.Title), body, normalizedComments),
-		Metadata:     metadata,
+		SourceID:     disc.ID,
+		SourceType:   sourceIDDiscussion,
+		URL:          disc.URL,
+		Title:        disc.Title,
+		Body:         disc.Body,
+		Community:    "github",
+		Repository:   repoFull,
+		Category:     catName,
+		Labels:       labelNames,
+		Tags:         appendTags(labelNames, catName),
+		CommentCount: commentCount,
+		ReactionCnt:  disc.UpvoteCount,
+		CreatedAt:    disc.CreatedAt,
+		UpdatedAt:    disc.UpdatedAt,
+		CollectedAt:  collectedAt,
+		Score:        disc.UpvoteCount,
 	}
+
+	// Map and cap comments
+	if hasComments {
+		signal.Comments = mapDiscussionComments(disc.Comments.Nodes, maxComments)
+	}
+
+	// Generate content hash
+	signal.ContentHash = generateContentHash(signal.Title, signal.Body, signal.Comments)
+
+	return signal
 }
 
-func normalizeIssueComments(comments []IssueComment, maxComments int) []domain.Comment {
-	normalized := make([]domain.Comment, 0, len(comments))
-	for _, comment := range comments {
-		body := normalizeBody(comment.Body)
-		if body == "" {
-			continue
-		}
-		normalized = append(normalized, domain.Comment{
-			ID:        buildIssueCommentID(comment),
-			Body:      body,
-			Score:     comment.Reactions.TotalCount,
-			CreatedAt: comment.CreatedAt.UTC(),
-		})
-		if maxComments > 0 && len(normalized) >= maxComments {
-			break
-		}
-	}
-	return normalized
+// ---- Source ID normalization ----
+
+// issueSourceID generates a normalized unique ID for a GitHub issue signal.
+func issueSourceID(issueID int64) string {
+	return fmt.Sprintf("github_issue:%d", issueID)
 }
 
-func normalizeDiscussionComments(comments []DiscussionComment, maxComments int) ([]domain.Comment, string) {
-	normalized := make([]domain.Comment, 0, len(comments))
-	answerID := ""
-	for _, comment := range comments {
-		body := normalizeBody(comment.Body)
-		if body == "" {
-			continue
-		}
-		commentID := buildDiscussionCommentID(comment)
-		if comment.IsAnswer && answerID == "" {
-			answerID = commentID
-		}
-		normalized = append(normalized, domain.Comment{
-			ID:        commentID,
-			Body:      body,
-			Score:     comment.Reactions.TotalCount,
-			CreatedAt: comment.CreatedAt.UTC(),
-		})
-		if maxComments > 0 && len(normalized) >= maxComments {
-			break
-		}
-	}
-	return normalized, answerID
+// discussionSourceID generates a normalized unique ID for a GitHub discussion signal.
+func discussionSourceID(discID string) string {
+	return fmt.Sprintf("github_discussion:%s", discID)
 }
 
-func buildContentHash(sourceType, repository, title, body string, comments []domain.Comment) string {
-	parts := []string{sourceName, sourceType, repository, title, body}
-	for _, comment := range comments {
-		parts = append(parts, comment.Body)
+// ---- Content hash generation ----
+
+// generateContentHash creates a deterministic SHA-256 hash from the signal's
+// title, body, and comment bodies. This is used for deduplication.
+func generateContentHash(title, body string, comments []domain.Comment) string {
+	parts := []string{title, body}
+	for _, c := range comments {
+		parts = append(parts, c.Body)
 	}
 	return storage.ContentHash(parts...)
 }
 
-func buildSignalID(sourceType, sourceID string) string {
-	return fmt.Sprintf("%s_%s", sourceType, storage.ContentHash(sourceName, sourceType, sourceID)[:16])
-}
+// ---- Label helpers ----
 
-func buildIssueSourceID(item IssueItem) string {
-	if nodeID := normalizeText(item.NodeID); nodeID != "" {
-		return sourceTypeIssue + ":" + nodeID
-	}
-	if item.ID != 0 {
-		return sourceTypeIssue + ":" + strconv.FormatInt(item.ID, 10)
-	}
-	return sourceTypeIssue + ":" + strconv.Itoa(item.Number)
-}
-
-func buildDiscussionSourceID(item Discussion) string {
-	if id := normalizeText(item.ID); id != "" {
-		return sourceTypeDiscussion + ":" + id
-	}
-	return sourceTypeDiscussion + ":" + strconv.Itoa(item.Number)
-}
-
-func buildIssueCommentID(comment IssueComment) string {
-	if nodeID := normalizeText(comment.NodeID); nodeID != "" {
-		return nodeID
-	}
-	if comment.ID != 0 {
-		return strconv.FormatInt(comment.ID, 10)
-	}
-	return normalizeText(comment.HTMLURL)
-}
-
-func buildDiscussionCommentID(comment DiscussionComment) string {
-	if id := normalizeText(comment.ID); id != "" {
-		return id
-	}
-	return normalizeText(comment.URL)
-}
-
-func normalizeRepositoryName(repoName, repoURL string) string {
-	if repo := normalizeText(repoName); repo != "" {
-		return repo
-	}
-	urlPath := strings.Trim(strings.TrimSpace(repoURL), "/")
-	if urlPath == "" {
-		return ""
-	}
-	base := path.Base(urlPath)
-	dir := path.Base(path.Dir(urlPath))
-	if dir == "" || dir == "." || base == "" || base == "." {
-		return ""
-	}
-	return dir + "/" + base
-}
-
-func labelNames(labels []Label) []string {
+// extractLabelNames extracts label name strings from a slice of ghLabel.
+func extractLabelNames(labels []ghLabel) []string {
 	if len(labels) == 0 {
 		return nil
 	}
-	names := make([]string, 0, len(labels))
-	seen := make(map[string]struct{}, len(labels))
-	for _, label := range labels {
-		name := normalizeText(label.Name)
-		if name == "" {
-			continue
-		}
-		if _, exists := seen[name]; exists {
-			continue
-		}
-		seen[name] = struct{}{}
-		names = append(names, name)
-	}
-	if len(names) == 0 {
-		return nil
+	names := make([]string, len(labels))
+	for i, l := range labels {
+		names[i] = l.Name
 	}
 	return names
 }
 
-func normalizeBody(body string) string {
-	return normalizeText(body)
-}
+// ---- Comment mapping ----
 
-func normalizeText(value string) string {
-	value = strings.ReplaceAll(value, "\r\n", "\n")
-	value = strings.ReplaceAll(value, "\r", "\n")
-	lines := strings.Split(value, "\n")
-	for i, line := range lines {
-		lines[i] = strings.TrimSpace(line)
-	}
-	value = strings.Join(lines, "\n")
-	value = strings.TrimSpace(value)
-
-	var b strings.Builder
-	lastSpace := false
-	for _, r := range value {
-		if r == '\n' {
-			if b.Len() > 0 && b.String()[b.Len()-1] == '\n' {
-				continue
-			}
-			b.WriteRune(r)
-			lastSpace = false
-			continue
-		}
-		if r == ' ' || r == '\t' {
-			if lastSpace {
-				continue
-			}
-			b.WriteByte(' ')
-			lastSpace = true
-			continue
-		}
-		b.WriteRune(r)
-		lastSpace = false
-	}
-	return strings.TrimSpace(b.String())
-}
-
-func compactMetadata(metadata map[string]string) map[string]string {
-	if len(metadata) == 0 {
+// mapIssueComments converts ghIssueComment slice to domain.Comment slice,
+// capped at maxComments and sorted by CreatedAt ascending.
+func mapIssueComments(comments []ghIssueComment, maxComments int) []domain.Comment {
+	if len(comments) == 0 {
 		return nil
 	}
-	compacted := make(map[string]string, len(metadata))
-	for key, value := range metadata {
-		if strings.TrimSpace(value) == "" {
-			continue
-		}
-		compacted[key] = value
+
+	// Sort by CreatedAt ascending for deterministic ordering
+	sorted := make([]ghIssueComment, len(comments))
+	copy(sorted, comments)
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].CreatedAt.Before(sorted[j].CreatedAt)
+	})
+
+	if maxComments > 0 && len(sorted) > maxComments {
+		sorted = sorted[:maxComments]
 	}
-	if len(compacted) == 0 {
+
+	result := make([]domain.Comment, len(sorted))
+	for i, c := range sorted {
+		result[i] = domain.Comment{
+			ID:        fmt.Sprintf("%d", c.ID),
+			Body:      c.Body,
+			CreatedAt: c.CreatedAt,
+		}
+	}
+
+	return result
+}
+
+// mapDiscussionComments converts graphQLDiscussionComment slice to domain.Comment slice,
+// capped at maxComments and sorted by CreatedAt ascending.
+func mapDiscussionComments(comments []graphQLDiscussionComment, maxComments int) []domain.Comment {
+	if len(comments) == 0 {
 		return nil
 	}
-	return compacted
-}
 
-func formatOptionalTime(ts *time.Time) string {
-	if ts == nil || ts.IsZero() {
-		return ""
+	// Sort by CreatedAt ascending for deterministic ordering
+	sorted := make([]graphQLDiscussionComment, len(comments))
+	copy(sorted, comments)
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].CreatedAt.Before(sorted[j].CreatedAt)
+	})
+
+	if maxComments > 0 && len(sorted) > maxComments {
+		sorted = sorted[:maxComments]
 	}
-	return ts.UTC().Format(time.RFC3339)
-}
 
-func normalizeCollectedAt(ts time.Time) time.Time {
-	if ts.IsZero() {
-		return time.Now().UTC()
-	}
-	return ts.UTC()
-}
-
-func countDiscussionAnswers(comments []DiscussionComment) int {
-	count := 0
-	for _, comment := range comments {
-		if comment.IsAnswer {
-			count++
+	result := make([]domain.Comment, len(sorted))
+	for i, c := range sorted {
+		result[i] = domain.Comment{
+			ID:        c.ID,
+			Body:      c.Body,
+			CreatedAt: c.CreatedAt,
 		}
 	}
-	return count
+
+	return result
 }
+
+// ---- Helpers ----
+
+// extractOwnerRepo extracts owner and repo name from a GitHub repository API URL.
+// URL format: https://api.github.com/repos/owner/repo
+func extractOwnerRepo(repoURL string) (string, string) {
+	if repoURL == "" {
+		return "", ""
+	}
+	// Trim the base URL prefix
+	trimmed := strings.TrimPrefix(repoURL, "https://api.github.com/repos/")
+	trimmed = strings.TrimPrefix(trimmed, "/repos/")
+	parts := strings.SplitN(trimmed, "/", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", ""
+	}
+	return parts[0], parts[1]
+}
+
+// extractOwnerRepoFromHTML extracts owner and repo name from a GitHub HTML URL.
+// Handles formats like:
+//   - https://github.com/owner/repo/issues/1
+//   - https://github.com/owner/repo/discussions/1
+func extractOwnerRepoFromHTML(url string) (string, string) {
+	if url == "" {
+		return "", ""
+	}
+	// Trim the https://github.com/ prefix
+	trimmed := strings.TrimPrefix(url, "https://github.com/")
+	trimmed = strings.TrimPrefix(trimmed, "http://github.com/")
+	// Split by / to get [owner, repo, ...]
+	parts := strings.SplitN(trimmed, "/", 3)
+	if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
+		return "", ""
+	}
+	return parts[0], parts[1]
+}
+
+// tagSliceIfPrefix adds prefix to each element in the slice, filtering empties.
+// Used to create tag lists from labels and categories.
+// appendTags appends category to labels only if category is non-empty.
+func appendTags(labels []string, category string) []string {
+	if category != "" {
+		return append(labels, category)
+	}
+	return labels
+}
+
+

@@ -6,59 +6,88 @@ import (
 	"time"
 )
 
-var ErrRequestLimitExceeded = errors.New("github request limit exceeded")
+// Sentinel errors for common failure modes.
+var (
+	ErrAuthentication = errors.New("authentication failed: invalid or missing token")
+	ErrNotEnabled     = errors.New("github source is not enabled")
+	ErrNoResults      = errors.New("no results returned from GitHub API")
+)
 
-// AuthenticationError indicates the GitHub token was rejected.
-type AuthenticationError struct {
-	StatusCode int
-	Message    string
-}
-
-func (e *AuthenticationError) Error() string {
-	return fmt.Sprintf("github authentication failed (status %d): %s", e.StatusCode, e.Message)
-}
-
-// RateLimitError indicates GitHub rejected a request due to rate limiting.
+// RateLimitError indicates a GitHub API rate limit was reached.
 type RateLimitError struct {
-	StatusCode int
-	Message    string
-	ResetAt    time.Time
+	IsPrimary   bool          // REST API (5000 req/h) or GraphQL point limit
+	IsSecondary bool          // Abuse detection / secondary rate limit
+	RetryAfter  time.Duration // Suggested wait time from Retry-After header
+	Limit       int
+	Remaining   int
+	Reset       time.Time // When the rate limit window resets
 }
 
 func (e *RateLimitError) Error() string {
-	if e.ResetAt.IsZero() {
-		return fmt.Sprintf("github rate limit exceeded (status %d): %s", e.StatusCode, e.Message)
+	if e.IsSecondary {
+		return fmt.Sprintf("secondary rate limit reached: retry after %s", e.RetryAfter)
 	}
-	return fmt.Sprintf(
-		"github rate limit exceeded (status %d, resets at %s): %s",
-		e.StatusCode,
-		e.ResetAt.UTC().Format(time.RFC3339),
-		e.Message,
-	)
+	return fmt.Sprintf("primary rate limit reached: %d/%d remaining, resets at %s",
+		e.Remaining, e.Limit, e.Reset.Format(time.RFC3339))
 }
 
-// MalformedResponseError indicates GitHub returned an unreadable response body.
+// IsRateLimit checks if an error is a RateLimitError.
+func IsRateLimit(err error) bool {
+	var rle *RateLimitError
+	return errors.As(err, &rle)
+}
+
+// IsPrimaryRateLimit checks if an error is a primary rate limit error.
+func IsPrimaryRateLimit(err error) bool {
+	var rle *RateLimitError
+	if errors.As(err, &rle) {
+		return rle.IsPrimary
+	}
+	return false
+}
+
+// IsSecondaryRateLimit checks if an error is a secondary rate limit error.
+func IsSecondaryRateLimit(err error) bool {
+	var rle *RateLimitError
+	if errors.As(err, &rle) {
+		return rle.IsSecondary
+	}
+	return false
+}
+
+// RetryExhaustionError indicates that all retry attempts were exhausted.
+type RetryExhaustionError struct {
+	Wrapped  error
+	Attempts int
+}
+
+func (e *RetryExhaustionError) Error() string {
+	return fmt.Sprintf("retry exhausted after %d attempts: %v", e.Attempts, e.Wrapped)
+}
+
+func (e *RetryExhaustionError) Unwrap() error {
+	return e.Wrapped
+}
+
+// MalformedResponseError indicates an unexpected or unparseable upstream response.
 type MalformedResponseError struct {
-	Operation string
-	Err       error
+	Wrapped error
+	Body    string // truncated response body for debugging
 }
 
 func (e *MalformedResponseError) Error() string {
-	return fmt.Sprintf("github %s returned malformed response: %v", e.Operation, e.Err)
+	return fmt.Sprintf("malformed upstream response: %v", e.Wrapped)
 }
 
 func (e *MalformedResponseError) Unwrap() error {
-	return e.Err
+	return e.Wrapped
 }
 
-// APIError indicates a non-auth, non-rate-limit API failure.
-type APIError struct {
-	Operation  string
-	StatusCode int
-	Message    string
-	Retryable  bool
+// RequestLimitError indicates the configured request cap was reached.
+type RequestLimitError struct {
+	Limit int
 }
 
-func (e *APIError) Error() string {
-	return fmt.Sprintf("github %s failed with status %d: %s", e.Operation, e.StatusCode, e.Message)
+func (e *RequestLimitError) Error() string {
+	return fmt.Sprintf("request limit reached: %d max requests per run", e.Limit)
 }
