@@ -158,12 +158,12 @@ expose the collector through a new collect CLI command.
 - Create: internal/sources/github/e2e_test.go or
   internal/cli/collect_e2e_test.go
 
-[ ] add an end-to-end test around the collect flow using fake GitHub
+[x] add an end-to-end test around the collect flow using fake GitHub
   responses and a temporary SIGNALFORGE_HOME to verify raw-signal persistence,
   memory updates, and repeat-run dedup behavior
-[ ] run the full test suite with go test ./...
-[ ] run the linter/vet command with go vet ./...
-[ ] verify the new GitHub collector tests keep overall coverage at or above
+[x] run the full test suite with go test ./...
+[x] run the linter/vet command with go vet ./...
+[x] verify the new GitHub collector tests keep overall coverage at or above
   the requested threshold for touched packages
-[ ] update project docs to describe the GitHub collector behavior, required
+[x] update project docs to describe the GitHub collector behavior, required
   token, and any MVP limitations such as search scope or cursor handling
