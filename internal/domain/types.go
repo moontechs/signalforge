@@ -1,7 +1,10 @@
 // Package domain contains all domain models for SignalForge.
 package domain
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 // ProductType represents the type of product a solution could be.
 type ProductType string
@@ -449,7 +452,7 @@ type RejectedPattern struct {
 // SourceCollector interface for collecting signals from a source.
 type SourceCollector interface {
 	Name() string
-	Collect(ctx any, req CollectRequest) ([]RawSignal, error)
+	Collect(ctx context.Context, req CollectRequest) ([]RawSignal, error)
 }
 
 // CollectRequest represents a collection request for a source.

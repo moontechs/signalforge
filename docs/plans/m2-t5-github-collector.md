@@ -115,13 +115,13 @@ The collector accepts a `transport` in its constructor. Tests inject `fakeTransp
 - Modify: internal/domain/types.go — change `Collect(ctx any, ...)` to `Collect(ctx context.Context, ...)`
 - Add tests: internal/sources/github/collector_test.go
 
-- [ ] change `SourceCollector.Collect` first arg from `ctx any` to `ctx context.Context` in internal/domain/types.go
-- [ ] define the package-level collector type, constructor inputs, and private collaborators for REST, GraphQL, cache, and time
-- [ ] map configuration and request inputs into a concrete GitHub collection scope: repositories, labels, language filters, item limits, comment limits, and since-window behavior
-- [ ] define typed package errors for rate limits (primary + secondary), authentication failures, retry exhaustion, and malformed upstream responses
-- [ ] define the `transport` interface for testability (see Fake client pattern above)
-- [ ] write tests covering collector construction defaults and collection-scope derivation from config/request inputs
-- [ ] run go test ./internal/sources/github/... and fix failures before task 2
+- [x] change `SourceCollector.Collect` first arg from `ctx any` to `ctx context.Context` in internal/domain/types.go
+- [x] define the package-level collector type, constructor inputs, and private collaborators for REST, GraphQL, cache, and time
+- [x] map configuration and request inputs into a concrete GitHub collection scope: repositories, labels, language filters, item limits, comment limits, and since-window behavior
+- [x] define typed package errors for rate limits (primary + secondary), authentication failures, retry exhaustion, and malformed upstream responses
+- [x] define the `transport` interface for testability (see Fake client pattern above)
+- [x] write tests covering collector construction defaults and collection-scope derivation from config/request inputs
+- [x] run go test ./internal/sources/github/... and fix failures before task 2
 
 ### Task 2: Implement REST and GraphQL client layers with retries, pagination, rate-limit handling, and conditional requests
 
