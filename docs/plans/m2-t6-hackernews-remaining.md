@@ -80,7 +80,7 @@ Before any collector/CLI work, the `configValues` struct must be exported so the
 - Create: `internal/sources/hackernews/client_test.go`
 - Create: `internal/sources/hackernews/fake_transport.go` (shared test helper, or embed in client_test.go)
 
-- [ ] Implement `fakeTransport` following `internal/sources/github/client_test.go` pattern:
+- [x] Implement `fakeTransport` following `internal/sources/github/client_test.go` pattern:
   ```go
   type fakeResponse struct {
       statusCode int
@@ -99,7 +99,7 @@ Before any collector/CLI work, the `configValues` struct must be exported so the
   - `addSequentialResponses(url string, resp ...fakeResponse)` — register ordered responses consumed in FIFO order
   - `Do(req *http.Request) (*http.Response, error)` — find matching response; unmatched → 404
   - `callCountFor(url string) int` — how many times a URL was called
-- [ ] Write comprehensive client tests:
+- [x] Write comprehensive client tests:
   - Feed fetching: success, cache hit, cache expiration (manipulate stored `CollectedAt`)
   - Item fetching: success, cache hit, cache expiration
   - Retry: transient 5xx recovers, all 5xx fail → `ErrRetriesExhausted`
@@ -110,9 +110,9 @@ Before any collector/CLI work, the `configValues` struct must be exported so the
   - Request count tracking
   - Response size limit (integrated into `get()` — no explicit limit in current client, so test that large responses are still handled; add size limit if missing)
   - Concurrent access safety (use `-race`)
-- [ ] Ensure all tests use `t.Parallel()`
-- [ ] Run `go test -v -count=1 -race ./internal/sources/hackernews/...` and fix failures before Task 3
-- [ ] Commit and push after Task 2
+- [x] Ensure all tests use `t.Parallel()`
+- [x] Run `go test -v -count=1 -race ./internal/sources/hackernews/...` and fix failures before Task 3
+- [x] Commit and push after Task 2
 
 ### Task 3: Implement collector.go with bounded worker pool and orchestration
 

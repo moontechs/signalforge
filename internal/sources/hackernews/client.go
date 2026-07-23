@@ -32,31 +32,34 @@ func (t *httpTransport) Do(req *http.Request) (*http.Response, error) {
 }
 
 // client communicates with the HN Firebase API.
-// It handles retries, request caps, and optional on-disk caching.
+// It handles retries, request caps, response size limits, and optional on-disk caching.
 type client struct {
-	transport             transport
-	baseURL               string
-	timeout               time.Duration
-	retryMax, maxRequests int
-	mu                    sync.Mutex
-	requests, cacheHits   int
-	store                 *storage.Storage
+	transport               transport
+	baseURL                 string
+	timeout                 time.Duration
+	retryMax, maxRequests   int
+	maxBodySize             int64
+	retryBackoff            func(attempt int) time.Duration
+	mu                      sync.Mutex
+	requests, cacheHits     int
+	store                   *storage.Storage
 }
 
 // newClient creates a Firebase API client with the given transport and config.
 func newClient(t transport, cfg configValues) *client {
-	baseURL := "https://hacker-news.firebaseio.com/v0"
-	timeout := 30 * time.Second
-	retryMax := 3
-	if cfg.MaxRequests > 0 {
-		// Use maxRequests as a rough concurrency hint.
+	defaultBackoff := func(attempt int) time.Duration {
+		return time.Duration(math.Pow(2, float64(attempt)))*time.Second +
+			time.Duration(rand.Intn(1000))*time.Millisecond
 	}
+	baseURL := "https://hacker-news.firebaseio.com/v0"
 	return &client{
-		transport:   t,
-		baseURL:     baseURL,
-		timeout:     timeout,
-		retryMax:    retryMax,
-		maxRequests: cfg.MaxRequests,
+		transport:    t,
+		baseURL:      baseURL,
+		timeout:      30 * time.Second,
+		retryMax:     3,
+		maxRequests:  cfg.MaxRequests,
+		maxBodySize:  10 * 1024 * 1024, // 10 MB default
+		retryBackoff: defaultBackoff,
 	}
 }
 
@@ -141,12 +144,10 @@ func (c *client) get(ctx context.Context, path string, ttl time.Duration, out an
 	var lastErr error
 	for attempt := 0; attempt <= c.retryMax; attempt++ {
 		if attempt > 0 {
-			backoff := time.Duration(math.Pow(2, float64(attempt))) * time.Second
-			backoff += time.Duration(rand.Intn(1000)) * time.Millisecond
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(backoff):
+			case <-time.After(c.retryBackoff(attempt)):
 			}
 		}
 
@@ -162,7 +163,7 @@ func (c *client) get(ctx context.Context, path string, ttl time.Duration, out an
 			continue
 		}
 
-		body, err := io.ReadAll(resp.Body)
+		body, err := c.readBody(resp)
 		resp.Body.Close()
 		if err != nil {
 			lastErr = fmt.Errorf("read response: %w", err)
@@ -189,6 +190,19 @@ func (c *client) get(ctx context.Context, path string, ttl time.Duration, out an
 	}
 
 	return fmt.Errorf("%w: %v", ErrRetriesExhausted, lastErr)
+}
+
+// readBody reads the response body, enforcing the max body size limit.
+func (c *client) readBody(resp *http.Response) ([]byte, error) {
+	limited := io.LimitReader(resp.Body, c.maxBodySize+1)
+	body, err := io.ReadAll(limited)
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(body)) > c.maxBodySize {
+		return nil, fmt.Errorf("response body exceeds %d bytes", c.maxBodySize)
+	}
+	return body, nil
 }
 
 // feed fetches a feed's item ID list.
