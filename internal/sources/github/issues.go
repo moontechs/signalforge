@@ -234,7 +234,7 @@ func listRepoIssues(ctx context.Context, c *githubClient, owner, repo, since str
 }
 
 // fetchIssueComments fetches comments for a specific issue, respecting the max comments cap.
-func fetchIssueComments(ctx context.Context, c *githubClient, owner, repo string, issueNumber int, maxComments int) ([]ghIssueComment, error) {
+func fetchIssueComments(ctx context.Context, c *githubClient, owner, repo string, issueNumber, maxComments int) ([]ghIssueComment, error) {
 	var allComments []ghIssueComment
 	page := 1
 

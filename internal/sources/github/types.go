@@ -28,7 +28,7 @@ type collectionScope struct {
 }
 
 // deriveScope maps GitHubConfig + CollectRequest into a collectionScope.
-func deriveScope(cfg configValues, repos []string, labels []string, languages []string, maxItems int, maxComments int, since string) collectionScope {
+func deriveScope(cfg configValues, repos, labels, languages []string, maxItems, maxComments int, since string) collectionScope {
 	scope := collectionScope{
 		labels:            labels,
 		languages:         languages,

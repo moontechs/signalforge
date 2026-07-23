@@ -138,21 +138,22 @@ unused-parameter, confusing-results, deep-exit
 `internal/sources/github/cache_test.go`,
 `internal/sources/github/collector_test.go`,
 `cmd/signalforge/main.go`
-  - [ ] `cmd/signalforge/main.go:24` — rename unused
+  - [x] `cmd/signalforge/main.go:24` — rename unused
 `args` param to `_` in PersistentPreRunE closure
-  - [ ] `client.go:526` — add named returns: `func
+  - [x] `client.go:526` — add named returns: `func
 parseRepo(full string) (owner, repo string, err error)`
-  - [ ] `parser.go:206` — add named returns: `func
+  - [x] `parser.go:206` — add named returns: `func
 extractOwnerRepo(repoURL string) (owner, repo string)`
-  - [ ] `parser.go:224` — add named returns: `func
+  - [x] `parser.go:224` — add named returns: `func
 extractOwnerRepoFromHTML(url string) (owner, repo string)`
-  - [ ] `cache_test.go:343` — rename unused `n` param to
+  - [x] `cache_test.go:343` — rename unused `n` param to
 `_` in goroutine closure
-  - [ ] `collector_test.go:274` — rename unused `t`
-param to `_` in TestInterfaceCompliance
-  - [ ] Verify deep-exit and unhandled-error are covered
+  - [x] `collector_test.go:274` — rename unused `t`
+param to `_` in TestInterfaceCompliance (already resolved
+by Task 2 adding t.Parallel())
+  - [x] Verify deep-exit and unhandled-error are covered
 by exclude-rules from Task 1
-  - [ ] Run tests — must pass
+  - [x] Run tests — must pass
 ### Task 5: Fix tagliatelle (11 issues) — JSON tag
 casing
 **Files:**

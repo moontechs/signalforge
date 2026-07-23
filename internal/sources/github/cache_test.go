@@ -352,7 +352,7 @@ func TestCache_ConcurrentAccess(t *testing.T) {
 	done := make(chan bool, 10)
 
 	for i := range 10 {
-		go func(n int) {
+		go func(_ int) {
 			key := "key"
 			rc.set(key, []byte("value"), "etag", "")
 			_, _ = rc.get(key)

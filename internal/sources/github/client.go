@@ -523,7 +523,7 @@ func cacheKeyForGraphQL(query string, variables map[string]any) string {
 }
 
 // parseRepo splits "owner/repo" into (owner, repo).
-func parseRepo(full string) (string, string, error) {
+func parseRepo(full string) (owner, repo string, err error) {
 	parts := strings.SplitN(strings.TrimPrefix(full, "/"), "/", 2)
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 		return "", "", fmt.Errorf("invalid repo format %q, expected owner/repo", full)

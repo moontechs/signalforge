@@ -203,7 +203,7 @@ func mapDiscussionComments(comments []graphQLDiscussionComment, maxComments int)
 
 // extractOwnerRepo extracts owner and repo name from a GitHub repository API URL.
 // URL format: https://api.github.com/repos/owner/repo
-func extractOwnerRepo(repoURL string) (string, string) {
+func extractOwnerRepo(repoURL string) (owner, repo string) {
 	if repoURL == "" {
 		return "", ""
 	}
@@ -221,7 +221,7 @@ func extractOwnerRepo(repoURL string) (string, string) {
 // Handles formats like:
 //   - https://github.com/owner/repo/issues/1
 //   - https://github.com/owner/repo/discussions/1
-func extractOwnerRepoFromHTML(url string) (string, string) {
+func extractOwnerRepoFromHTML(url string) (owner, repo string) {
 	if url == "" {
 		return "", ""
 	}

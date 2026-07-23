@@ -21,7 +21,7 @@ var rootCmd = &cobra.Command{
 	Long: `SignalForge collects public signals from GitHub, Hacker News, and Stack Exchange,
 classifies them, clusters recurring problems, and generates evidence-backed product hypotheses.`,
 	Version: version,
-	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+	PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 		// Set up signal handling for graceful shutdown.
 		ctx, cancel := context.WithCancel(context.Background())
 		c := make(chan os.Signal, 1)
