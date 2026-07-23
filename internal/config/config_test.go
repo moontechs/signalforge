@@ -311,7 +311,7 @@ func TestIsValidHNFeed(t *testing.T) {
 		{feed: "newstories", want: true},
 		{feed: "topstories", want: true},
 		{feed: "beststories", want: true},
-		{feed: "AskStories", want: true},    // case-insensitive
+		{feed: "AskStories", want: true}, // case-insensitive
 		{feed: "jobstories", want: false},
 		{feed: "", want: false},
 		{feed: "unknown", want: false},

@@ -50,6 +50,18 @@ go build ./cmd/signalforge/
 - Deduplication is persisted in `memory.json`, so repeat runs skip already-seen source IDs and duplicate content hashes
 - Initial MVP runs use a since-window and per-run limits; cursor inputs are accepted internally but not persisted as resumable state yet
 
+## Hacker News collector (M2-T6) — complete
+
+- HN collector is now fully wired end-to-end in the CLI: `signalforge collect --sources hackernews --since 30d`
+- No API keys required — HN uses the free Firebase API (no auth, no rate limits, no ETags)
+- Supported feeds: `askstories`, `showstories`, `newstories`, `topstories`, `beststories` (default: `askstories`, `showstories`, `newstories`)
+- Filtering: minimum score threshold, since-window for story age, max items cap per run, max comments per item
+- Comment flattening via BFS (max depth 50, configurable max comments cap)
+- Bounded concurrency: 5 workers via buffered channel semaphore for item fetching
+- Caching: TTL-based on-disk cache (5 min for feeds, 24h for items), no conditional requests
+- Dedup by item ID across feeds within a single run; content hash from title + body + sorted comment bodies
+- Stats tracking: request/cache-hit counters per run, persisted in `memory.json`
+
 ## Running tests
 
 ```bash

@@ -65,7 +65,7 @@ type commentRef struct {
 // flattenComments traverses a story's kid comments in BFS order (max depth 50)
 // and returns a flat list of domain.Comment values. maxComments caps the total
 // number of flattened comments (0 = unlimited).
-func flattenComments(root *itemResponse, c *client, maxComments int, ctx context.Context) ([]domain.Comment, error) {
+func flattenComments(ctx context.Context, root *itemResponse, c *client, maxComments int) ([]domain.Comment, error) {
 	queue := make([]commentRef, 0, len(root.Kids))
 	for _, id := range root.Kids {
 		queue = append(queue, commentRef{id: id, depth: 1})

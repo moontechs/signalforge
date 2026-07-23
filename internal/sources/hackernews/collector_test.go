@@ -67,14 +67,19 @@ func TestCollector_happyPath(t *testing.T) {
 		fakeResponse{statusCode: 200, body: `[40000103]`})
 
 	// Item responses (all stories with score >= 5).
-	for id, info := range map[int]struct{ title, url, by string; time int64; score int }{
+	for id, info := range map[int]struct {
+		title, url, by string
+		time           int64
+		score          int
+	}{
 		40000101: {"Ask HN: Best Go libraries?", "https://example.com/ask", "user1", 1700000000, 50},
 		40000102: {"Ask HN: How to learn Rust?", "https://example.com/rust", "user2", 1700000100, 25},
 		40000103: {"Show HN: My new project", "https://example.com/project", "user3", 1700000200, 100},
 	} {
 		body := fmt.Sprintf(
-			`{"id":%d,"type":"story","by":"%s","time":%d,"title":"%s","url":"%s","score":%d,"descendants":0}`,
-			id, info.by, info.time, info.title, info.url, info.score)
+			`{"id":%d,"type":"story","by":%q,"time":%d,"title":%q,"url":%q,"score":%d,"descendants":0}`,
+			id, info.by, info.time, info.title, info.url, info.score,
+		)
 		fake.addResponse(fmt.Sprintf("https://hacker-news.firebaseio.com/v0/item/%d.json", id),
 			fakeResponse{statusCode: 200, body: body})
 	}
@@ -124,15 +129,20 @@ func TestCollector_dedupAcrossFeeds(t *testing.T) {
 		fakeResponse{statusCode: 200, body: `[200, 300, 400]`}) // 200, 300 overlap
 
 	// Item responses.
-	for id, info := range map[int]struct{ title, url, by string; time int64; score int }{
+	for id, info := range map[int]struct {
+		title, url, by string
+		time           int64
+		score          int
+	}{
 		100: {"Story A", "https://a.com", "u1", 1700000000, 10},
 		200: {"Story B", "https://b.com", "u2", 1700000100, 10},
 		300: {"Story C", "https://c.com", "u3", 1700000200, 10},
 		400: {"Story D", "https://d.com", "u4", 1700000300, 10},
 	} {
 		body := fmt.Sprintf(
-			`{"id":%d,"type":"story","by":"%s","time":%d,"title":"%s","url":"%s","score":%d,"descendants":0}`,
-			id, info.by, info.time, info.title, info.url, info.score)
+			`{"id":%d,"type":"story","by":%q,"time":%d,"title":%q,"url":%q,"score":%d,"descendants":0}`,
+			id, info.by, info.time, info.title, info.url, info.score,
+		)
 		fake.addResponse(fmt.Sprintf("https://hacker-news.firebaseio.com/v0/item/%d.json", id),
 			fakeResponse{statusCode: 200, body: body})
 	}
@@ -176,7 +186,8 @@ func TestCollector_scoreFiltering(t *testing.T) {
 	for id, score := range map[int]int{1: 50, 2: 3, 3: 100} {
 		body := fmt.Sprintf(
 			`{"id":%d,"type":"story","by":"u","time":1700000000,"title":"Story %d","url":"https://x.com/%d","score":%d,"descendants":0}`,
-			id, id, id, score)
+			id, id, id, score,
+		)
 		fake.addResponse(fmt.Sprintf("https://hacker-news.firebaseio.com/v0/item/%d.json", id),
 			fakeResponse{statusCode: 200, body: body})
 	}
@@ -217,14 +228,16 @@ func TestCollector_sinceFiltering(t *testing.T) {
 	// Item 1: before cutoff (should be excluded).
 	body1 := fmt.Sprintf(
 		`{"id":1,"type":"story","by":"u","time":%d,"title":"Old","url":"https://x.com/1","score":10,"descendants":0}`,
-		cutoff.Add(-24*time.Hour).Unix())
+		cutoff.Add(-24*time.Hour).Unix(),
+	)
 	fake.addResponse("https://hacker-news.firebaseio.com/v0/item/1.json",
 		fakeResponse{statusCode: 200, body: body1})
 
 	// Item 2: after cutoff (should be included).
 	body2 := fmt.Sprintf(
 		`{"id":2,"type":"story","by":"u","time":%d,"title":"New","url":"https://x.com/2","score":10,"descendants":0}`,
-		cutoff.Add(24*time.Hour).Unix())
+		cutoff.Add(24*time.Hour).Unix(),
+	)
 	fake.addResponse("https://hacker-news.firebaseio.com/v0/item/2.json",
 		fakeResponse{statusCode: 200, body: body2})
 
@@ -261,7 +274,8 @@ func TestCollector_maxItemsCap(t *testing.T) {
 	for id := 1; id <= 5; id++ {
 		body := fmt.Sprintf(
 			`{"id":%d,"type":"story","by":"u","time":%d,"title":"Story %d","url":"https://x.com/%d","score":10,"descendants":0}`,
-			id, 1700000000+id*100, id, id)
+			id, 1700000000+id*100, id, id,
+		)
 		fake.addResponse(fmt.Sprintf("https://hacker-news.firebaseio.com/v0/item/%d.json", id),
 			fakeResponse{statusCode: 200, body: body})
 	}
@@ -299,7 +313,7 @@ func TestCollector_maxCommentsCap(t *testing.T) {
 
 	// Three comments.
 	for id, text := range map[int]string{10: "Comment A", 11: "Comment B", 12: "Comment C"} {
-		body := fmt.Sprintf(`{"id":%d,"type":"comment","by":"u","time":1700000100,"text":"%s","parent":1}`,
+		body := fmt.Sprintf(`{"id":%d,"type":"comment","by":"u","time":1700000100,"text":%q,"parent":1}`,
 			id, text)
 		fake.addResponse(fmt.Sprintf("https://hacker-news.firebaseio.com/v0/item/%d.json", id),
 			fakeResponse{statusCode: 200, body: body})
@@ -646,7 +660,8 @@ func TestCollector_concurrentAccess(t *testing.T) {
 	for id := 1; id <= 2; id++ {
 		body := fmt.Sprintf(
 			`{"id":%d,"type":"story","by":"u","time":%d,"title":"S%d","url":"https://x.com/%d","score":10,"descendants":0}`,
-			id, 1700000000+id*100, id, id)
+			id, 1700000000+id*100, id, id,
+		)
 		fake.addResponse(fmt.Sprintf("https://hacker-news.firebaseio.com/v0/item/%d.json", id),
 			fakeResponse{statusCode: 200, body: body})
 	}

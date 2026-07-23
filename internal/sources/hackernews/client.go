@@ -34,15 +34,15 @@ func (t *httpTransport) Do(req *http.Request) (*http.Response, error) {
 // client communicates with the HN Firebase API.
 // It handles retries, request caps, response size limits, and optional on-disk caching.
 type client struct {
-	transport               transport
-	baseURL                 string
-	timeout                 time.Duration
-	retryMax, maxRequests   int
-	maxBodySize             int64
-	retryBackoff            func(attempt int) time.Duration
-	mu                      sync.Mutex
-	requests, cacheHits     int
-	store                   *storage.Storage
+	transport             transport
+	baseURL               string
+	timeout               time.Duration
+	retryMax, maxRequests int
+	maxBodySize           int64
+	retryBackoff          func(attempt int) time.Duration
+	mu                    sync.Mutex
+	requests, cacheHits   int
+	store                 *storage.Storage
 }
 
 // newClient creates a Firebase API client with the given transport and config.
@@ -58,7 +58,7 @@ func newClient(t transport, cfg ConfigValues) *client {
 		timeout:      30 * time.Second,
 		retryMax:     3,
 		maxRequests:  cfg.MaxRequests,
-		maxBodySize:  10 * 1024 * 1024, // 10 MB default
+		maxBodySize:  10 * 1024 * 1024, // 10 MB default.
 		retryBackoff: defaultBackoff,
 	}
 }
@@ -83,7 +83,7 @@ func (c *client) cachePath(key string) string {
 	if c.store != nil {
 		base = c.store.BaseDir()
 	}
-	return filepath.Join(base, "cache/hackernews", hex.EncodeToString(sum[:])+".json")
+	return filepath.Join(base, "cache", "hackernews", hex.EncodeToString(sum[:])+".json")
 }
 
 // cached retrieves a cached response. Returns (body, true) on fresh hit.
@@ -131,7 +131,7 @@ func (c *client) get(ctx context.Context, path string, ttl time.Duration, out an
 	// Check cache first.
 	if body, ok := c.cached(path, ttl); ok {
 		if err := json.Unmarshal(body, out); err != nil {
-			return fmt.Errorf("%w: %v", ErrMalformedResponse, err)
+			return fmt.Errorf("%w: %w", ErrMalformedResponse, err)
 		}
 		return nil
 	}
@@ -174,7 +174,7 @@ func (c *client) get(ctx context.Context, path string, ttl time.Duration, out an
 			c.incrementRequests()
 			c.save(path, body)
 			if err := json.Unmarshal(body, out); err != nil {
-				return fmt.Errorf("%w: %v", ErrMalformedResponse, err)
+				return fmt.Errorf("%w: %w", ErrMalformedResponse, err)
 			}
 			return nil
 		}
@@ -189,7 +189,7 @@ func (c *client) get(ctx context.Context, path string, ttl time.Duration, out an
 		return lastErr
 	}
 
-	return fmt.Errorf("%w: %v", ErrRetriesExhausted, lastErr)
+	return fmt.Errorf("%w: %w", ErrRetriesExhausted, lastErr)
 }
 
 // readBody reads the response body, enforcing the max body size limit.

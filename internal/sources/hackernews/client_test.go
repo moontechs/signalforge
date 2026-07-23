@@ -138,7 +138,7 @@ func TestClient_cacheExpiration(t *testing.T) {
 	// Compute the cache path for this key.
 	key := "/newstories.json"
 	sum := sha256.Sum256([]byte(key))
-	cacheFile := filepath.Join(dir, "cache/hackernews", hex.EncodeToString(sum[:])+".json")
+	cacheFile := filepath.Join(dir, "cache", "hackernews", hex.EncodeToString(sum[:])+".json")
 
 	// Pre-write an expired cached entry (10 minutes old, TTL is 5 minutes).
 	oldResp := cachedResponse{
@@ -177,14 +177,15 @@ func TestClient_retryTransientRecovers(t *testing.T) {
 
 	url := "https://hacker-news.firebaseio.com/v0/newstories.json"
 	// First 500, then 200.
-	fake.addSequentialResponses(url,
+	fake.addSequentialResponses(
+		url,
 		fakeResponse{statusCode: 500, body: `{"error":"server error"}`},
 		fakeResponse{statusCode: 200, body: `[1,2,3]`},
 	)
 
 	c := testClient(fake)
-	c.retryMax = 2    // 1 initial + 2 retries = 3 total attempts
-	c.retryBackoff = func(attempt int) time.Duration {
+	c.retryMax = 2 // 1 initial + 2 retries = 3 total attempts
+	c.retryBackoff = func(_ int) time.Duration {
 		return time.Millisecond
 	}
 
@@ -205,8 +206,8 @@ func TestClient_retryExhaustion(t *testing.T) {
 	fake.addResponse(url, fakeResponse{statusCode: 500, body: `{"error":"fail"}`})
 
 	c := testClient(fake)
-	c.retryMax = 1    // 1 initial + 1 retry = 2 attempts
-	c.retryBackoff = func(attempt int) time.Duration {
+	c.retryMax = 1 // 1 initial + 1 retry = 2 attempts
+	c.retryBackoff = func(_ int) time.Duration {
 		return time.Millisecond
 	}
 
@@ -362,14 +363,15 @@ func TestClient_429retryThenRecover(t *testing.T) {
 	fake := newFakeTransport()
 
 	url := "https://hacker-news.firebaseio.com/v0/newstories.json"
-	fake.addSequentialResponses(url,
+	fake.addSequentialResponses(
+		url,
 		fakeResponse{statusCode: 429, body: `{}`},
 		fakeResponse{statusCode: 200, body: `[1]`},
 	)
 
 	c := testClient(fake)
 	c.retryMax = 2
-	c.retryBackoff = func(attempt int) time.Duration {
+	c.retryBackoff = func(_ int) time.Duration {
 		return time.Millisecond
 	}
 
@@ -457,7 +459,7 @@ func TestClient_responseSizeLimitExceeded(t *testing.T) {
 
 	c := testClient(fake)
 	c.maxBodySize = 100 * 1024 // 100KB limit
-	c.retryMax = 0              // No retries to speed up test
+	c.retryMax = 0             // No retries to speed up test
 
 	_, err := c.feed(t.Context(), "newstories")
 	if err == nil {
@@ -482,13 +484,17 @@ func TestClient_concurrentAccess(t *testing.T) {
 	t.Parallel()
 	fake := newFakeTransport()
 
-	feeds := []string{"newstories", "topstories", "beststories", "askstories", "showstories",
-		"newstories", "topstories", "beststories", "askstories", "showstories"}
+	feeds := []string{
+		"newstories", "topstories", "beststories", "askstories", "showstories",
+		"newstories", "topstories", "beststories", "askstories", "showstories",
+	}
 
 	for i, feed := range feeds {
 		feedURL := fmt.Sprintf("https://hacker-news.firebaseio.com/v0/%s.json", feed)
-		fake.addResponse(feedURL, fakeResponse{statusCode: 200, body: fmt.Sprintf(
-			`[%d, %d, %d]`, i+1, i+2, i+3)},
+		fake.addResponse(
+			feedURL, fakeResponse{statusCode: 200, body: fmt.Sprintf(
+				`[%d, %d, %d]`, i+1, i+2, i+3,
+			)},
 		)
 		itemURL := fmt.Sprintf("https://hacker-news.firebaseio.com/v0/item/%d.json", i+1)
 		fake.addResponse(itemURL, fakeResponse{statusCode: 200, body: fmt.Sprintf(

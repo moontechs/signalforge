@@ -2,8 +2,9 @@
 package memory
 
 import (
+	"errors"
 	"fmt"
-	"os"
+	"io/fs"
 	"path/filepath"
 	"sync"
 	"time"
@@ -51,7 +52,7 @@ func (m *DefaultMemory) Load() error {
 
 	var mem domain.Memory
 	if err := m.store.LoadJSON(m.path, &mem); err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return nil
 		}
 		return fmt.Errorf("load memory: %w", err)

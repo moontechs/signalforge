@@ -202,6 +202,7 @@ issues:
         - wrapcheck
         - funlen
         - gocyclo
+        - godot
     - path: cmd/
       linters:
         - gochecknoglobals
@@ -236,11 +237,15 @@ issues:
         - revive
       text: "unhandled-error"
       path: internal/sources/github/client\.go
-    # gosec/G404: weak RNG for jitter is intentional
+    # gosec/G404: weak RNG for jitter is intentional (GitHub + HN)
     - linters:
         - gosec
       text: "G404"
       path: internal/sources/github/client\.go
+    - linters:
+        - gosec
+      text: "G404"
+      path: internal/sources/hackernews/client\.go
     # bodyclose: test helper consumes response in client_test.go
     - linters:
         - bodyclose
@@ -249,6 +254,10 @@ issues:
     - linters:
         - goconst
       path: internal/sources/github/collector\.go
+    # goconst: source name string in CLI switch is intentional (self-ref)
+    - linters:
+        - goconst
+      path: internal/cli/collect\.go
     # unused: rateLimitCounters reserved for future rate-limit tracking
     - linters:
         - unused
@@ -271,6 +280,10 @@ issues:
         - gocritic
       text: "hugeParam: req is heavy"
       path: internal/sources/github/collector\.go
+    - linters:
+        - gocritic
+      text: "hugeParam: req is heavy"
+      path: internal/sources/hackernews/collector\.go
     # gocognit: doRequest complexity is inherent to retry/rate-limit logic (84 > 30)
     - linters:
         - gocognit
@@ -295,6 +308,11 @@ issues:
         - funlen
       text: "doRequest"
       path: internal/sources/github/client\.go
+    # funlen: Collect has many statements (56 > 50) inherent to pipeline logic
+    - linters:
+        - funlen
+      text: "Collect"
+      path: internal/sources/hackernews/collector\.go
     # gocritic/hugeParam: opts is heavy (80 bytes) in doRequest, but internal function
     - linters:
         - gocritic
@@ -312,11 +330,36 @@ issues:
     - linters:
         - errchkjson
       path: internal/cli/show\.go
-    # unparam: WithTransport/WithNow return *Collector for builder pattern chaining
+    # godot: divider comments are decorative, not prose
+    - linters:
+        - godot
+      source: "// -+"
+    # wrapcheck: standard library calls are safe to pass through
+    - linters:
+        - wrapcheck
+      text: "io.ReadAll"
+      path: internal/sources/hackernews/client\.go
+    - linters:
+        - wrapcheck
+      source: "errors.Join"
+    # unparam: LoadConfig is an exported function used from cmd/
     - linters:
         - unparam
-      text: "WithTransport|WithNow"
+      text: "LoadConfig"
+      path: internal/config/config\.go
+    # unparam: WithTransport/WithNow/WithCache return *Collector for builder pattern chaining
+    - linters:
+        - unparam
+      text: "WithTransport|WithNow|WithCache"
       path: internal/sources/github/collector\.go
+    - linters:
+        - unparam
+      text: "WithTransport|WithNow|WithCache"
+      path: internal/sources/hackernews/collector\.go
+    - linters:
+        - unparam
+      text: "WithCache"
+      path: internal/sources/hackernews/client\.go
   exclude:
     - "comment on exported"
     - "should have a package comment"

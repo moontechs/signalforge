@@ -260,8 +260,8 @@ func TestIntegration_withCache(t *testing.T) {
 
 	// No HTTP calls should be made.
 	for url, count := range map[string]int{
-		"https://hacker-news.firebaseio.com/v0/newstories.json": 0,
-		"https://hacker-news.firebaseio.com/v0/askstories.json": 0,
+		"https://hacker-news.firebaseio.com/v0/newstories.json":  0,
+		"https://hacker-news.firebaseio.com/v0/askstories.json":  0,
 		"https://hacker-news.firebaseio.com/v0/showstories.json": 0,
 	} {
 		if fixture.fake.callCountFor(url) != count {
@@ -300,19 +300,22 @@ func TestIntegration_sinceFiltering(t *testing.T) {
 	fake.addResponse("https://hacker-news.firebaseio.com/v0/item/1.json",
 		fakeResponse{statusCode: 200, body: fmt.Sprintf(
 			`{"id":1,"type":"story","by":"u","time":%d,"title":"Old story","url":"https://x.com/1","score":10,"descendants":0}`,
-			cutoff.Add(-48*time.Hour).Unix())})
+			cutoff.Add(-48*time.Hour).Unix(),
+		)})
 
 	// Item 2: right at cutoff (should be included - eligibleStory uses !before(since)).
 	fake.addResponse("https://hacker-news.firebaseio.com/v0/item/2.json",
 		fakeResponse{statusCode: 200, body: fmt.Sprintf(
 			`{"id":2,"type":"story","by":"u","time":%d,"title":"On cutoff","url":"https://x.com/2","score":10,"descendants":0}`,
-			cutoff.Unix())})
+			cutoff.Unix(),
+		)})
 
 	// Item 3: after cutoff (should be included).
 	fake.addResponse("https://hacker-news.firebaseio.com/v0/item/3.json",
 		fakeResponse{statusCode: 200, body: fmt.Sprintf(
 			`{"id":3,"type":"story","by":"u","time":%d,"title":"New story","url":"https://x.com/3","score":10,"descendants":0}`,
-			cutoff.Add(48*time.Hour).Unix())})
+			cutoff.Add(48*time.Hour).Unix(),
+		)})
 
 	c := testCollector(t, &ConfigValues{
 		Enabled:            true,

@@ -103,23 +103,23 @@ type ConfigValues struct {
 // collectionScope is a concrete collection plan derived from configuration
 // and a domain.CollectRequest.
 type collectionScope struct {
-	feeds              []string
-	maxItems           int
-	maxComments        int
-	minimumScore       int
-	since              time.Time
-	maxRequests        int
+	feeds        []string
+	maxItems     int
+	maxComments  int
+	minimumScore int
+	since        time.Time
+	maxRequests  int
 }
 
 // deriveScope maps ConfigValues + request parameters into a collectionScope.
 func deriveScope(cfg *ConfigValues, since time.Time) collectionScope {
 	return collectionScope{
-		feeds:              cfg.Feeds,
-		maxItems:           cfg.MaxItemsPerRun,
-		maxComments:        cfg.MaxCommentsPerItem,
-		minimumScore:       cfg.MinimumScore,
-		since:              since,
-		maxRequests:        cfg.MaxRequests,
+		feeds:        cfg.Feeds,
+		maxItems:     cfg.MaxItemsPerRun,
+		maxComments:  cfg.MaxCommentsPerItem,
+		minimumScore: cfg.MinimumScore,
+		since:        since,
+		maxRequests:  cfg.MaxRequests,
 	}
 }
 

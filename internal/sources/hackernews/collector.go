@@ -165,7 +165,7 @@ func (c *Collector) Collect(ctx context.Context, req domain.CollectRequest) ([]d
 
 			var comments []domain.Comment
 			if scope.maxComments > 0 {
-				comments, err = flattenComments(item, c.client, scope.maxComments, ctx)
+				comments, err = flattenComments(ctx, item, c.client, scope.maxComments)
 				if err != nil {
 					itemMu.Lock()
 					itemErrs = append(itemErrs, fmt.Errorf("flatten comments for item %d: %w", itemID, err))
