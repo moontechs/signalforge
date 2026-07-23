@@ -3,6 +3,7 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -39,6 +40,12 @@ Example:
 
 	cmd.Flags().String("sources", "github", "Comma-separated sources to collect from")
 	cmd.Flags().String("since", "30d", "Look back window such as 24h, 7d, or 30d")
+	cmd.Flags().String("until", "", "ISO date or duration window (e.g., 2024-01-15, 7d, 24h) — if omitted, uses now")
+	cmd.Flags().Int("max-items", 0, "Maximum items to collect per source (0 = use source default)")
+	cmd.Flags().String("language", "", "Optional language filter (e.g., 'go', 'python')")
+	cmd.Flags().Bool("force", false, "Skip deduplication and re-collect already-seen signals")
+	cmd.Flags().Bool("dry-run", false, "Print planned collection and exit without making API calls")
+	cmd.Flags().Bool("resume", false, "Resume collection from last stored cursor per source")
 
 	return cmd
 }
@@ -46,17 +53,34 @@ Example:
 type collectEnv struct {
 	store           *storage.Storage
 	mem             *memory.DefaultMemory
+	cfg             *config.Config
 	selectedSources []string
 	collectors      []domain.SourceCollector
 	before          *domain.ResearchStats
 	sinceWindow     time.Duration
+	untilWindow     time.Duration
+	maxItems        int
+	language        string
+	force           bool
+	dryRun          bool
+	resume          bool
 }
 
 func runCollect(cmd *cobra.Command, _ []string) error {
 	sourceFlag, _ := cmd.Flags().GetString("sources")
 	sinceFlag, _ := cmd.Flags().GetString("since")
+	untilFlag, _ := cmd.Flags().GetString("until")
+	maxItems, _ := cmd.Flags().GetInt("max-items")
+	language, _ := cmd.Flags().GetString("language")
+	force, _ := cmd.Flags().GetBool("force")
+	dryRun, _ := cmd.Flags().GetBool("dry-run")
+	resume, _ := cmd.Flags().GetBool("resume")
 
-	env, err := setupCollectEnv(sourceFlag, sinceFlag)
+	if maxItems < 0 {
+		return errors.New("--max-items must be a non-negative integer")
+	}
+
+	env, err := setupCollectEnv(sourceFlag, sinceFlag, untilFlag, maxItems, language, force, dryRun, resume)
 	if err != nil {
 		return err
 	}
@@ -64,10 +88,24 @@ func runCollect(cmd *cobra.Command, _ []string) error {
 	return executeCollect(cmd, env)
 }
 
-func setupCollectEnv(sourceFlag, sinceFlag string) (*collectEnv, error) {
+func setupCollectEnv(sourceFlag, sinceFlag, untilFlag string, maxItems int, language string, force, dryRun, resume bool) (*collectEnv, error) {
 	sinceWindow, err := parseSinceWindow(sinceFlag)
 	if err != nil {
 		return nil, err
+	}
+
+	untilWindow, err := parseUntilWindow(untilFlag)
+	if err != nil {
+		return nil, err
+	}
+
+	// Validate that until does not precede since (would produce empty range).
+	if untilWindow != 0 {
+		since := time.Now().Add(-sinceWindow)
+		until := time.Now().Add(untilWindow)
+		if since.After(until) {
+			return nil, fmt.Errorf("until %q must be later than since %q: would produce empty collection range", untilFlag, sinceFlag)
+		}
 	}
 
 	dir, err := config.GetSignalForgeDir()
@@ -88,6 +126,9 @@ func setupCollectEnv(sourceFlag, sinceFlag string) (*collectEnv, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Order sources deterministically regardless of input order.
+	selectedSources = orderSourcesDeterministically(selectedSources)
 
 	store := storage.New(dir)
 	mem := memory.New(store)
@@ -112,46 +153,311 @@ func setupCollectEnv(sourceFlag, sinceFlag string) (*collectEnv, error) {
 	return &collectEnv{
 		store:           store,
 		mem:             mem,
+		cfg:             cfg,
 		selectedSources: selectedSources,
 		collectors:      collectors,
 		before:          &beforeStats,
 		sinceWindow:     sinceWindow,
+		untilWindow:     untilWindow,
+		maxItems:        maxItems,
+		language:        language,
+		force:           force,
+		dryRun:          dryRun,
+		resume:          resume,
 	}, nil
 }
 
-func executeCollect(cmd *cobra.Command, env *collectEnv) error {
-	var totalSignals int
-	for _, collector := range env.collectors {
-		since := time.Now().Add(-env.sinceWindow)
-		signals, err := collector.Collect(cmd.Context(), domain.CollectRequest{
-			Since:   since,
-			Sources: env.selectedSources,
-		})
-		totalSignals += len(signals)
+// sourceOrder defines the deterministic execution order for collectors.
+var sourceOrder = []string{"github", "hackernews", "stackexchange"}
 
-		// Track HN request/cache-hit stats.
-		if hnCol, ok := collector.(*hackernews.Collector); ok {
-			stats := hnCol.Stats()
-			env.mem.AddHNRequests(stats.Requests)
-			env.mem.AddHNCacheHits(stats.CacheHits)
+// orderSourcesDeterministically reorders the given source names to the fixed
+// order: GitHub, Hacker News, Stack Exchange. Sources not in the known set
+// are appended at the end in their original relative order.
+func orderSourcesDeterministically(sources []string) []string {
+	requested := make(map[string]bool, len(sources))
+	for _, s := range sources {
+		requested[s] = true
+	}
+	result := make([]string, 0, len(sources))
+	for _, s := range sourceOrder {
+		if requested[s] {
+			result = append(result, s)
+			delete(requested, s)
 		}
-		if seCol, ok := collector.(*stackexchange.Collector); ok {
-			stats := seCol.Stats()
-			env.mem.AddStackExchangeRequests(stats.Requests)
-			env.mem.AddStackExchangeCacheHits(stats.CacheHits)
+	}
+	// Append any remaining sources not in the preferred order.
+	for _, s := range sources {
+		if requested[s] {
+			result = append(result, s)
 		}
+	}
+	return result
+}
+
+// cursorAware is an optional interface collectors can implement to report
+// their cursor state after a collection run.
+type cursorAware interface {
+	Cursor() map[string]string
+}
+
+// dryRunPlan describes the planned collection for a single source in dry-run mode.
+type dryRunPlan struct {
+	Source        string
+	Targets       []string
+	EstimatedReqs int
+	Since         string
+	Until         string
+	MaxItems      int
+	Language      string
+	HasCursor     bool
+	CursorValue   string
+}
+
+// buildDryRunPlans constructs dry-run plans for all selected sources without
+// making any HTTP requests. It uses the environment's configuration values
+// and known source request shapes to estimate request counts.
+func buildDryRunPlans(env *collectEnv, cfg *config.Config) []dryRunPlan {
+	plans := make([]dryRunPlan, 0, len(env.selectedSources))
+
+	for _, src := range env.selectedSources {
+		plan := dryRunPlan{
+			Source:   src,
+			MaxItems: env.maxItems,
+			Language: env.language,
+			Since:    time.Now().Add(-env.sinceWindow).Format("2006-01-02"),
+		}
+
+		if env.untilWindow != 0 {
+			plan.Until = time.Now().Add(env.untilWindow).Format("2006-01-02")
+		} else {
+			plan.Until = "now"
+		}
+
+		if env.resume {
+			if cursor, exists := env.mem.GetCursor(src); exists {
+				plan.HasCursor = true
+				plan.CursorValue = cursor
+			}
+		}
+
+		switch src {
+		case "github":
+			plan.Targets = buildGitHubTargets(cfg)
+			plan.EstimatedReqs = estimateGitHubRequests(cfg, env)
+		case "hackernews":
+			plan.Targets = buildHNFeeds(cfg)
+			plan.EstimatedReqs = estimateHNRequests(cfg, env)
+		case "stackexchange":
+			plan.Targets = buildSETargets(cfg)
+			plan.EstimatedReqs = estimateSERequests(cfg, env)
+		default:
+			plan.Targets = []string{src}
+			plan.EstimatedReqs = 1
+		}
+
+		plans = append(plans, plan)
+	}
+
+	return plans
+}
+
+func buildGitHubTargets(cfg *config.Config) []string {
+	var targets []string
+	if cfg.Sources.GitHub.SearchIssues {
+		targets = append(targets, "Search Issues API")
+	}
+	if cfg.Sources.GitHub.SearchDiscussions {
+		targets = append(targets, "GraphQL Discussions API")
+	}
+	if len(cfg.Sources.GitHub.Repositories) > 0 {
+		for _, repo := range cfg.Sources.GitHub.Repositories {
+			targets = append(targets, "repo: "+repo)
+		}
+	} else {
+		targets = append(targets, "language filter: "+fmt.Sprintf("%v", cfg.Sources.GitHub.Languages))
+	}
+	return targets
+}
+
+func buildHNFeeds(cfg *config.Config) []string {
+	feeds := make([]string, len(cfg.Sources.HackerNews.Feeds))
+	for i, f := range cfg.Sources.HackerNews.Feeds {
+		feeds[i] = "feed: " + f
+	}
+	return feeds
+}
+
+func buildSETargets(cfg *config.Config) []string {
+	sites := make([]string, len(cfg.Sources.StackExchange.Sites))
+	for i, s := range cfg.Sources.StackExchange.Sites {
+		sites[i] = "site: " + s
+	}
+	return sites
+}
+
+func estimateGitHubRequests(cfg *config.Config, env *collectEnv) int {
+	maxItems := cfg.Sources.GitHub.MaxItemsPerRun
+	if env.maxItems > 0 {
+		maxItems = env.maxItems
+	}
+	itemsPerPage := 100
+	// Search pages for issues + 1 comment request per result (if comments enabled).
+	searchPages := (maxItems + itemsPerPage - 1) / itemsPerPage
+	var total int
+	if cfg.Sources.GitHub.SearchIssues {
+		total += searchPages
+		if cfg.Sources.GitHub.MaxCommentsPerItem > 0 {
+			total += maxItems // one comment fetch per issue.
+		}
+	}
+	if cfg.Sources.GitHub.SearchDiscussions {
+		// GraphQL fetches 50 per page.
+		total += (maxItems + 49) / 50
+	}
+	if total < 1 {
+		total = 1
+	}
+	return total
+}
+
+func estimateHNRequests(cfg *config.Config, env *collectEnv) int {
+	feeds := len(cfg.Sources.HackerNews.Feeds)
+	maxItems := cfg.Sources.HackerNews.MaxItemsPerRun
+	if env.maxItems > 0 {
+		maxItems = env.maxItems
+	}
+	total := feeds + maxItems
+	if cfg.Sources.HackerNews.MaxCommentsPerItem > 0 {
+		total += maxItems
+	}
+	if total < 1 {
+		total = 1
+	}
+	return total
+}
+
+func estimateSERequests(cfg *config.Config, _ *collectEnv) int {
+	sites := len(cfg.Sources.StackExchange.Sites)
+	pagesPerSite := cfg.Sources.StackExchange.MaxPagesPerSite
+	total := sites * pagesPerSite
+	if total < 1 {
+		total = 1
+	}
+	return total
+}
+
+// printDryRunPlan prints the dry-run collection plan to the command output.
+func printDryRunPlan(cmd *cobra.Command, plans []dryRunPlan) error {
+	w := cmd.OutOrStdout()
+	if _, err := fmt.Fprintln(w, "=== Collection Plan (dry-run) ==="); err != nil {
+		return fmt.Errorf("write dry-run header: %w", err)
+	}
+
+	hasResume := hasAnyCursor(plans)
+
+	for i := range plans {
+		p := &plans[i]
+		printPlanHeader(w, p.Source)
+		printPlanTargets(w, p.Targets)
+		printPlanField(w, "estimated requests", strconv.Itoa(p.EstimatedReqs))
+		printPlanField(w, "since", p.Since)
+		printPlanField(w, "until", p.Until)
+		printPlanField(w, "max-items", strconv.Itoa(p.MaxItems))
+		printPlanLanguage(w, p.Language)
+		printPlanCursor(w, p, hasResume)
+	}
+
+	if _, err := fmt.Fprintln(w, "\n(dry-run) No API calls were made. No data was persisted."); err != nil {
+		return fmt.Errorf("write dry-run footer: %w", err)
+	}
+	return nil
+}
+
+func printPlanHeader(w io.Writer, source string) {
+	_, _ = fmt.Fprintf(w, "\n--- %s ---\n", source)
+}
+
+func printPlanTargets(w io.Writer, targets []string) {
+	for _, t := range targets {
+		_, _ = fmt.Fprintf(w, "  target: %s\n", t)
+	}
+}
+
+func printPlanField(w io.Writer, key, value string) {
+	_, _ = fmt.Fprintf(w, "  %s: %s\n", key, value)
+}
+
+func printPlanLanguage(w io.Writer, lang string) {
+	if lang != "" {
+		_, _ = fmt.Fprintf(w, "  language: %s\n", lang)
+	}
+}
+
+func printPlanCursor(w io.Writer, p *dryRunPlan, hasResume bool) {
+	if !hasResume {
+		return
+	}
+	cursorVal := "none"
+	if p.HasCursor {
+		cursorVal = p.CursorValue
+	}
+	_, _ = fmt.Fprintf(w, "  resume cursor: %s\n", cursorVal)
+}
+
+// hasAnyCursor returns true if at least one plan has a cursor set.
+func hasAnyCursor(plans []dryRunPlan) bool {
+	for i := range plans {
+		if plans[i].HasCursor {
+			return true
+		}
+	}
+	return false
+}
+
+func executeCollect(cmd *cobra.Command, env *collectEnv) error {
+	// Dry-run: print plan and return without making any API calls.
+	if env.dryRun {
+		plans := buildDryRunPlans(env, env.cfg)
+		return printDryRunPlan(cmd, plans)
+	}
+
+	sourceResults := make([]sourceCollectionResult, 0, len(env.collectors))
+	var totalSignals int
+
+	for _, collector := range env.collectors {
+		req := buildCollectRequest(env, collector)
+		signals, err := collector.Collect(cmd.Context(), req)
+
+		// Track pre-dedup attempt count for per-source stats.
+		sr := sourceCollectionResult{
+			name:      collector.Name(),
+			attempted: len(signals),
+		}
+
+		signals = deduplicateSignals(signals, env)
+		sr.collected = len(signals)
+		sr.skipped = sr.attempted - sr.collected
+		totalSignals += len(signals)
+		trackCollectorStats(env, collector)
 
 		if err != nil {
+			sr.failed = true
+			sr.err = err
+			sourceResults = append(sourceResults, sr)
 			afterStats := env.mem.GetStats()
-			if outputErr := reportCollectSummary(cmd, collector.Name(), len(signals), statsDelta(env.before, &afterStats)); outputErr != nil {
+			delta := statsDelta(env.before, &afterStats)
+			delta.force = env.force
+			delta.resume = env.resume
+			delta.sources = sourceResults
+			if outputErr := reportCollectSummary(cmd, totalSignals, &delta); outputErr != nil {
 				return fmt.Errorf("write collection summary: %w", outputErr)
 			}
 			return fmt.Errorf("%s collection completed with errors: %w", collector.Name(), err)
 		}
 
-		for i := range signals {
-			env.mem.AddRawSignal(signals[i].Source, signals[i].SourceID)
-		}
+		sourceResults = append(sourceResults, sr)
+		persistCursor(env, collector)
+		recordSignals(env, signals)
 	}
 
 	if err := env.mem.Save(); err != nil {
@@ -159,7 +465,87 @@ func executeCollect(cmd *cobra.Command, env *collectEnv) error {
 	}
 
 	afterStats := env.mem.GetStats()
-	return reportCollectSummary(cmd, strings.Join(env.selectedSources, ","), totalSignals, statsDelta(env.before, &afterStats))
+	delta := statsDelta(env.before, &afterStats)
+	delta.force = env.force
+	delta.resume = env.resume
+	delta.sources = sourceResults
+	return reportCollectSummary(cmd, totalSignals, &delta)
+}
+
+// buildCollectRequest constructs a CollectRequest for the given collector from the environment.
+func buildCollectRequest(env *collectEnv, collector domain.SourceCollector) domain.CollectRequest {
+	since := time.Now().Add(-env.sinceWindow)
+	var until time.Time
+	if env.untilWindow != 0 {
+		until = time.Now().Add(env.untilWindow)
+	}
+	var languages []string
+	if env.language != "" {
+		languages = []string{env.language}
+	}
+	var cursor map[string]string
+	if env.resume {
+		if c, exists := env.mem.GetCursor(collector.Name()); exists {
+			cursor = map[string]string{collector.Name(): c}
+		}
+	}
+	return domain.CollectRequest{
+		Since:     since,
+		Until:     until,
+		MaxItems:  env.maxItems,
+		Force:     env.force,
+		DryRun:    env.dryRun,
+		Sources:   env.selectedSources,
+		Languages: languages,
+		Cursor:    cursor,
+	}
+}
+
+// deduplicateSignals filters out signals that already exist in persistent memory.
+// When --force is set, all signals pass through without filtering.
+func deduplicateSignals(signals []domain.RawSignal, env *collectEnv) []domain.RawSignal {
+	if env.force || len(signals) == 0 {
+		return signals
+	}
+	filtered := make([]domain.RawSignal, 0, len(signals))
+	for i := range signals {
+		if env.mem.HasRawSignal(signals[i].Source, signals[i].SourceID) || env.mem.HasContentHash(signals[i].ContentHash) {
+			continue
+		}
+		filtered = append(filtered, signals[i])
+	}
+	return filtered
+}
+
+// trackCollectorStats records HN or Stack Exchange request/cache-hit stats into memory.
+func trackCollectorStats(env *collectEnv, collector domain.SourceCollector) {
+	if hnCol, ok := collector.(*hackernews.Collector); ok {
+		stats := hnCol.Stats()
+		env.mem.AddHNRequests(stats.Requests)
+		env.mem.AddHNCacheHits(stats.CacheHits)
+	}
+	if seCol, ok := collector.(*stackexchange.Collector); ok {
+		stats := seCol.Stats()
+		env.mem.AddStackExchangeRequests(stats.Requests)
+		env.mem.AddStackExchangeCacheHits(stats.CacheHits)
+	}
+}
+
+// persistCursor updates memory with any cursor returned by a cursor-aware collector.
+func persistCursor(env *collectEnv, collector domain.SourceCollector) {
+	if ca, ok := collector.(cursorAware); ok {
+		cursors := ca.Cursor()
+		for src, cur := range cursors {
+			env.mem.SetCursor(src, cur)
+		}
+	}
+}
+
+// recordSignals adds all signals to the persistent memory.
+func recordSignals(env *collectEnv, signals []domain.RawSignal) {
+	for i := range signals {
+		env.mem.AddRawSignal(signals[i].Source, signals[i].SourceID)
+	}
 }
 
 func resolveCollectSources(raw string) ([]string, error) {
@@ -215,6 +601,34 @@ func parseSinceWindow(raw string) (time.Duration, error) {
 		return 0, errors.New("since window must be greater than zero")
 	}
 	return window, nil
+}
+
+// parseUntilWindow parses an until flag value into a duration from now.
+// Accepts ISO-8601 dates (e.g., "2024-01-15") and duration/window formats
+// compatible with parseSinceWindow (e.g., "7d", "24h").
+// Returns 0 if raw is empty (no constraint).
+func parseUntilWindow(raw string) (time.Duration, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return 0, nil
+	}
+
+	// Try ISO-8601 date format first (e.g., "2024-01-15").
+	if t, err := time.Parse("2006-01-02", value); err == nil {
+		until := t.Truncate(24 * time.Hour)
+		// Compute the duration from now.
+		d := time.Until(until)
+		// If until is in the past, duration is negative.
+		return d, nil
+	}
+
+	// Try duration/window format (e.g., "7d", "24h").
+	window, err := parseSinceWindow(value)
+	if err != nil {
+		return 0, fmt.Errorf("invalid until value %q: must be ISO date (2006-01-02) or duration (7d, 24h)", raw)
+	}
+	// For until, a positive window means "n time units before now".
+	return -window, nil
 }
 
 func ensureStorageLayout(dir string) error {
@@ -307,6 +721,16 @@ func buildCollector(source string, cfg *config.Config, store *storage.Storage) (
 	}
 }
 
+// sourceCollectionResult captures per-source collection results for summary reporting.
+type sourceCollectionResult struct {
+	name      string
+	attempted int
+	collected int
+	skipped   int
+	failed    bool
+	err       error
+}
+
 type collectStatsDelta struct {
 	collected   int
 	skipped     int
@@ -315,6 +739,11 @@ type collectStatsDelta struct {
 	hnCacheHits int
 	seRequests  int
 	seCacheHits int
+
+	// New per-source and mode tracking.
+	force   bool
+	resume  bool
+	sources []sourceCollectionResult
 }
 
 func statsDelta(before, after *domain.ResearchStats) collectStatsDelta {
@@ -329,24 +758,61 @@ func statsDelta(before, after *domain.ResearchStats) collectStatsDelta {
 	}
 }
 
-func reportCollectSummary(cmd *cobra.Command, source string, totalSignals int, delta collectStatsDelta) error {
-	msg := fmt.Sprintf("Collected %d signals from %s. New: %d, skipped: %d",
-		totalSignals, source, delta.collected, delta.skipped)
+func reportCollectSummary(cmd *cobra.Command, totalSignals int, delta *collectStatsDelta) error {
+	w := cmd.OutOrStdout()
 
+	if _, err := fmt.Fprintln(w, "=== Collection Summary ==="); err != nil {
+		return fmt.Errorf("write summary header: %w", err)
+	}
+
+	// Mode flags.
+	if delta.force {
+		if _, err := fmt.Fprintln(w, "  Mode: force (deduplication disabled)"); err != nil {
+			return fmt.Errorf("write summary: %w", err)
+		}
+	}
+	if delta.resume {
+		if _, err := fmt.Fprintln(w, "  Mode: resume (cursor-based)"); err != nil {
+			return fmt.Errorf("write summary: %w", err)
+		}
+	}
+
+	// Per-source breakdown.
+	for _, sr := range delta.sources {
+		status := "ok"
+		if sr.failed {
+			status = "error: " + sr.err.Error()
+		}
+		line := fmt.Sprintf("  %s: attempted=%d, collected=%d, dedup-skipped=%d, status=%s",
+			sr.name, sr.attempted, sr.collected, sr.skipped, status)
+		if _, err := fmt.Fprintln(w, line); err != nil {
+			return fmt.Errorf("write summary: %w", err)
+		}
+	}
+
+	// Aggregate summary.
+	aggLine := fmt.Sprintf("  Total new signals: %d (from %d collected), total dedup-skipped: %d",
+		delta.collected, totalSignals, delta.skipped)
+	if _, err := fmt.Fprintln(w, aggLine); err != nil {
+		return fmt.Errorf("write summary: %w", err)
+	}
+
+	// Request stats.
 	if delta.requests > 0 {
-		msg += fmt.Sprintf(", GitHub requests: %d", delta.requests)
+		if _, err := fmt.Fprintf(w, "  GitHub requests: %d\n", delta.requests); err != nil {
+			return fmt.Errorf("write summary: %w", err)
+		}
 	}
 	if delta.hnRequests > 0 {
-		msg += fmt.Sprintf(", HN requests: %d (cache hits: %d)", delta.hnRequests, delta.hnCacheHits)
+		if _, err := fmt.Fprintf(w, "  HN requests: %d (cache hits: %d)\n", delta.hnRequests, delta.hnCacheHits); err != nil {
+			return fmt.Errorf("write summary: %w", err)
+		}
 	}
 	if delta.seRequests > 0 {
-		msg += fmt.Sprintf(", Stack Exchange requests: %d (cache hits: %d)", delta.seRequests, delta.seCacheHits)
+		if _, err := fmt.Fprintf(w, "  Stack Exchange requests: %d (cache hits: %d)\n", delta.seRequests, delta.seCacheHits); err != nil {
+			return fmt.Errorf("write summary: %w", err)
+		}
 	}
-	msg += "\n"
 
-	_, err := fmt.Fprint(cmd.OutOrStdout(), msg)
-	if err != nil {
-		return fmt.Errorf("write collection summary: %w", err)
-	}
 	return nil
 }

@@ -44,7 +44,10 @@ func (c *Collector) Stats() Stats { return c.stats }
 
 // processParsedSignals filters parsed signals through dedup and memory checks
 // and appends new ones to the result slice. Returns the updated result and count.
-func (c *Collector) processParsedSignals(parsed []domain.RawSignal, seen map[string]struct{}, mem *memory.DefaultMemory, maxItems int, signals []domain.RawSignal) (result []domain.RawSignal, count int) {
+// When force is true, the persistent memory dedup check (HasRawSignal/HasContentHash)
+// is bypassed so previously collected signals are re-collected. Within-run dedup
+// (seen map) and memory recording still apply.
+func (c *Collector) processParsedSignals(parsed []domain.RawSignal, seen map[string]struct{}, mem *memory.DefaultMemory, maxItems int, signals []domain.RawSignal, force bool) (result []domain.RawSignal, count int) {
 	items := 0
 	for i := range parsed {
 		sig := &parsed[i]
@@ -52,7 +55,7 @@ func (c *Collector) processParsedSignals(parsed []domain.RawSignal, seen map[str
 			continue
 		}
 		seen[sig.ID] = struct{}{}
-		if mem != nil && (mem.HasRawSignal(SourceName, sig.SourceID) || mem.HasContentHash(sig.ContentHash)) {
+		if !force && mem != nil && (mem.HasRawSignal(SourceName, sig.SourceID) || mem.HasContentHash(sig.ContentHash)) {
 			continue
 		}
 		if maxItems > 0 && items >= maxItems {
@@ -72,7 +75,7 @@ func (c *Collector) processParsedSignals(parsed []domain.RawSignal, seen map[str
 
 // collectSite collects questions from one site across pages,
 // filtering through dedup and memory.
-func (c *Collector) collectSite(ctx context.Context, site string, from, to int64, pageSize, maxPages int, mem *memory.DefaultMemory) ([]domain.RawSignal, error) {
+func (c *Collector) collectSite(ctx context.Context, site string, from, to int64, pageSize, maxPages int, mem *memory.DefaultMemory, force bool) ([]domain.RawSignal, error) {
 	var signals []domain.RawSignal
 	items := 0
 	seen := make(map[string]struct{})
@@ -85,7 +88,7 @@ func (c *Collector) collectSite(ctx context.Context, site string, from, to int64
 			return signals, fmt.Errorf("site %s: %w", site, err)
 		}
 		parsed, _ := parseQuestionsWithStats(site, resp.Items, c.config.MinimumScore, c.config.MinimumViews)
-		signals, items = c.processParsedSignals(parsed, seen, mem, c.config.MaxItemsPerSite, signals)
+		signals, items = c.processParsedSignals(parsed, seen, mem, c.config.MaxItemsPerSite, signals, force)
 		if err != nil {
 			// getQuestions may return a parsed page alongside quota exhaustion;
 			// preserve that page, but report the exhaustion to the caller.
@@ -134,7 +137,7 @@ func (c *Collector) Collect(ctx context.Context, req domain.CollectRequest) ([]d
 			c.updateStats()
 			return signals, err
 		}
-		siteSignals, err := c.collectSite(ctx, site, from, to, pageSize, maxPages, mem)
+		siteSignals, err := c.collectSite(ctx, site, from, to, pageSize, maxPages, mem, req.Force)
 		if err != nil {
 			errs = append(errs, err)
 			// collectSite returns partial results alongside errors (e.g. quota exhaustion).

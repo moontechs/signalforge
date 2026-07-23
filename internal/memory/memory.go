@@ -37,6 +37,7 @@ func New(store *storage.Storage) *DefaultMemory {
 			IdeaFingerprints:    make(map[string]string),
 			UsedQueries:         make(map[string]domain.QueryMemory),
 			RejectedPatterns:    []domain.RejectedPattern{},
+			SourceCursors:       make(map[string]string),
 			Stats:               domain.ResearchStats{}, //nolint:exhaustruct // all fields are zero-value ints
 		},
 		store:   store,
@@ -78,6 +79,9 @@ func (m *DefaultMemory) Load() error {
 	}
 	if mem.RejectedPatterns == nil {
 		mem.RejectedPatterns = []domain.RejectedPattern{}
+	}
+	if mem.SourceCursors == nil {
+		mem.SourceCursors = make(map[string]string)
 	}
 
 	m.version = mem.Version
@@ -314,4 +318,41 @@ func (m *DefaultMemory) ContentHashCount() int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return len(m.mem.ContentHashes)
+}
+
+// GetCursor returns the stored cursor for a source and whether it exists.
+func (m *DefaultMemory) GetCursor(source string) (string, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	cursor, exists := m.mem.SourceCursors[source]
+	return cursor, exists
+}
+
+// SetCursor stores a cursor for a source.
+func (m *DefaultMemory) SetCursor(source, cursor string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if cursor == "" {
+		delete(m.mem.SourceCursors, source)
+		return
+	}
+	m.mem.SourceCursors[source] = cursor
+}
+
+// ClearCursors removes all stored cursors.
+func (m *DefaultMemory) ClearCursors() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.mem.SourceCursors = make(map[string]string)
+}
+
+// SourceCursors returns a copy of the current cursor map.
+func (m *DefaultMemory) SourceCursors() map[string]string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	result := make(map[string]string, len(m.mem.SourceCursors))
+	for k, v := range m.mem.SourceCursors {
+		result[k] = v
+	}
+	return result
 }
