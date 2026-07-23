@@ -48,11 +48,11 @@ Before any collector/CLI work, the `configValues` struct must be exported so the
 **Files:**
 - Modify: `internal/sources/hackernews/types.go`
 
-- [ ] Rename `configValues` to `ConfigValues` in `types.go` — change struct definition and all internal references
-- [ ] Update `deriveScope` to accept `*ConfigValues` instead of `*configValues` (signature change is internal, no external callers yet)
-- [ ] Run `go test ./internal/sources/hackernews/...` to verify nothing broke
-- [ ] Commit: `git add -A && git commit -m "refactor: export configValues to ConfigValues for CLI wiring"` (use `--no-verify` if pre-push hook blocks)
-- [ ] Push: `git push origin 12-m2-t6-hacker-news-collector-firebase-api-1` (use `--no-verify`)
+- [x] Rename `configValues` to `ConfigValues` in `types.go` — change struct definition and all internal references
+- [x] Update `deriveScope` to accept `*ConfigValues` instead of `*configValues` (signature change is internal, no external callers yet)
+- [x] Run `go test ./internal/sources/hackernews/...` to verify nothing broke
+- [x] Commit: `git add -A && git commit -m "refactor: export configValues to ConfigValues for CLI wiring"` (use `--no-verify` if pre-push hook blocks)
+- [x] Push: `git push origin 12-m2-t6-hacker-news-collector-firebase-api-1` (use `--no-verify`)
 
 ### Task 1: Add test fixtures for parser and collector tests
 
@@ -121,13 +121,13 @@ Before any collector/CLI work, the `configValues` struct must be exported so the
 - Create: `internal/sources/hackernews/collector_test.go`
 - Create: `internal/sources/hackernews/integration_test.go`
 
-- [ ] Add `Collector` struct implementing `domain.SourceCollector`:
+- [x] Add `Collector` struct implementing `domain.SourceCollector`:
   - Fields: `config ConfigValues`, `client *client`, `now func() time.Time`, `requests int`, `cacheHits int`
   - Constructor `New(cfg *ConfigValues) (*Collector, error)` returning `ErrDisabled` if `!cfg.Enabled`
   - `Name()` returns `"hackernews"`
   - Test hooks: `WithTransport(t transport) *Collector`, `WithNow(n func() time.Time) *Collector`, `WithCache(store *storage.Storage) *Collector`
   - `Stats() Stats` accessor returning current request/cache-hit counts
-- [ ] Implement `Collect(ctx context.Context, req domain.CollectRequest) ([]domain.RawSignal, error)`:
+- [x] Implement `Collect(ctx context.Context, req domain.CollectRequest) ([]domain.RawSignal, error)`:
   1. Derive `collectionScope` from `c.config` and `req.Since`
   2. Create a dedup set (`map[int]bool`) for item IDs across feeds
   3. Iterate over `scope.feeds`:
@@ -150,7 +150,7 @@ Before any collector/CLI work, the `configValues` struct must be exported so the
      - Then call `parseStory(item, comments, "story", time.Now())` to get final `domain.RawSignal`
   9. Read `c.client.Stats()` after collection and store in `c.requests`, `c.cacheHits`
   10. Return `[]domain.RawSignal` with joined partial errors (use `errors.Join`)
-- [ ] Write collector unit tests:
+- [x] Write collector unit tests:
   - Not-enabled → `ErrDisabled`
   - All feeds produce signals (happy path with fake transport)
   - Feed ID de-duplication
@@ -163,13 +163,13 @@ Before any collector/CLI work, the `configValues` struct must be exported so the
   - Empty feeds → empty result
   - Context cancellation
   - Cached repeat collection (second call hits cache)
-- [ ] Write integration test (single fake transport session):
+- [x] Write integration test (single fake transport session):
   - 3 feeds with overlapping IDs, nested comments (3+ levels), deleted/dead/non-story items
   - Verify signal count, ContentHash determinism, BFS order, parent chain metadata
   - Test with cache: second call uses fewer HTTP calls, results identical
-- [ ] Ensure all tests use `t.Parallel()` where safe
-- [ ] Run `go test -v -count=1 -race ./internal/sources/hackernews/...` and fix failures before Task 4
-- [ ] Commit and push after Task 3
+- [x] Ensure all tests use `t.Parallel()` where safe
+- [x] Run `go test -v -count=1 -race ./internal/sources/hackernews/...` and fix failures before Task 4
+- [x] Commit and push after Task 3
 
 ### Task 4: Add HN request/cache-hit tracking to memory
 

@@ -141,5 +141,5 @@ func testClient(fake *fakeTransport) *client {
 	if fake == nil {
 		fake = newFakeTransport()
 	}
-	return newClient(fake, configValues{})
+	return newClient(fake, ConfigValues{})
 }

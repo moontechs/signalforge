@@ -46,7 +46,7 @@ type client struct {
 }
 
 // newClient creates a Firebase API client with the given transport and config.
-func newClient(t transport, cfg configValues) *client {
+func newClient(t transport, cfg ConfigValues) *client {
 	defaultBackoff := func(attempt int) time.Duration {
 		return time.Duration(math.Pow(2, float64(attempt)))*time.Second +
 			time.Duration(rand.Intn(1000))*time.Millisecond

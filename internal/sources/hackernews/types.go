@@ -89,9 +89,9 @@ type itemResponse struct {
 // Collector configuration and scope
 // ---------------------------------------------------------------------------
 
-// configValues holds the subset of configuration fields needed by the
+// ConfigValues holds the subset of configuration fields needed by the
 // collector, extracted from config.HackerNewsConfig + Limits.MaxHNRequests.
-type configValues struct {
+type ConfigValues struct {
 	Enabled            bool
 	Feeds              []string
 	MaxItemsPerRun     int
@@ -111,8 +111,8 @@ type collectionScope struct {
 	maxRequests        int
 }
 
-// deriveScope maps configValues + request parameters into a collectionScope.
-func deriveScope(cfg *configValues, since time.Time) collectionScope {
+// deriveScope maps ConfigValues + request parameters into a collectionScope.
+func deriveScope(cfg *ConfigValues, since time.Time) collectionScope {
 	return collectionScope{
 		feeds:              cfg.Feeds,
 		maxItems:           cfg.MaxItemsPerRun,

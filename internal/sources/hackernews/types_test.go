@@ -70,7 +70,7 @@ func TestMetadataKeyConstants(t *testing.T) {
 func TestDeriveScope(t *testing.T) {
 	t.Parallel()
 
-	cfg := &configValues{
+	cfg := &ConfigValues{
 		Enabled:            true,
 		Feeds:              []string{"askstories", "newstories"},
 		MaxItemsPerRun:     100,
@@ -108,7 +108,7 @@ func TestDeriveScope(t *testing.T) {
 func TestDeriveScopeDefault(t *testing.T) {
 	t.Parallel()
 
-	cfg := &configValues{
+	cfg := &ConfigValues{
 		Enabled:            true,
 		Feeds:              DefaultFeeds,
 		MaxItemsPerRun:     300,
