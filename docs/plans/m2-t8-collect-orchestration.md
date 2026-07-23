@@ -11,11 +11,11 @@
 
 ### Task 2: Parse and construct complete collection requests
 
-- [ ] Add parsing for `--until`, accepting ISO-8601 calendar dates and duration/window formats compatible with `ParseSinceWindow`.
-- [ ] Return actionable CLI errors for invalid `--until` values or invalid date ranges where `until` precedes `since`.
-- [ ] Update `executeCollect` to populate `domain.CollectRequest` with `Since`, `Until`, `MaxItems`, `Force`, `DryRun`, `Sources`, and `Cursor`.
-- [ ] Pass the language option through the existing request/configuration path used by source construction, without modifying collector implementations.
-- [ ] Ensure omitted values retain the existing collector defaults rather than overriding them with invalid zero values.
+- [x] Add parsing for `--until`, accepting ISO-8601 calendar dates and duration/window formats compatible with `ParseSinceWindow`.
+- [x] Return actionable CLI errors for invalid `--until` values or invalid date ranges where `until` precedes `since`.
+- [x] Update `executeCollect` to populate `domain.CollectRequest` with `Since`, `Until`, `MaxItems`, `Force`, `DryRun`, `Sources`, and `Cursor`.
+- [x] Pass the language option through the existing request/configuration path used by source construction, without modifying collector implementations.
+- [x] Ensure omitted values retain the existing collector defaults rather than overriding them with invalid zero values.
 
 ### Task 3: Add resumable per-source cursor state to memory
 

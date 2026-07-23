@@ -97,6 +97,15 @@ func setupCollectEnv(sourceFlag, sinceFlag, untilFlag string, maxItems int, lang
 		return nil, err
 	}
 
+	// Validate that until does not precede since (would produce empty range).
+	if untilWindow != 0 {
+		since := time.Now().Add(-sinceWindow)
+		until := time.Now().Add(untilWindow)
+		if since.After(until) {
+			return nil, fmt.Errorf("until %q must be later than since %q: would produce empty collection range", untilFlag, sinceFlag)
+		}
+	}
+
 	dir, err := config.GetSignalForgeDir()
 	if err != nil {
 		return nil, fmt.Errorf("determine signalforge dir: %w", err)
@@ -156,10 +165,24 @@ func executeCollect(cmd *cobra.Command, env *collectEnv) error {
 	var totalSignals int
 	for _, collector := range env.collectors {
 		since := time.Now().Add(-env.sinceWindow)
-		signals, err := collector.Collect(cmd.Context(), domain.CollectRequest{
-			Since:   since,
-			Sources: env.selectedSources,
-		})
+		var until time.Time
+		if env.untilWindow != 0 {
+			until = time.Now().Add(env.untilWindow)
+		}
+		var languages []string
+		if env.language != "" {
+			languages = []string{env.language}
+		}
+		req := domain.CollectRequest{
+			Since:     since,
+			Until:     until,
+			MaxItems:  env.maxItems,
+			Force:     env.force,
+			DryRun:    env.dryRun,
+			Sources:   env.selectedSources,
+			Languages: languages,
+		}
+		signals, err := collector.Collect(cmd.Context(), req)
 		totalSignals += len(signals)
 
 		// Track HN request/cache-hit stats.
