@@ -62,6 +62,31 @@ type HackerNewsConfig struct {
 	MinimumScore       int      `json:"minimum_score"`
 }
 
+// Validate checks the Hacker News collector configuration.
+func (c *HackerNewsConfig) Validate() error {
+	if !c.Enabled {
+		return nil
+	}
+	if c.MaxItemsPerRun <= 0 {
+		return errors.New("max_items_per_run must be greater than zero")
+	}
+	if c.MaxCommentsPerItem < 0 {
+		return errors.New("max_comments_per_item must be zero or greater")
+	}
+	if c.MinimumScore < 0 {
+		return errors.New("minimum_score must be zero or greater")
+	}
+	if len(c.Feeds) == 0 {
+		return errors.New("at least one feed must be specified")
+	}
+	for _, feed := range c.Feeds {
+		if !IsValidHNFeed(feed) {
+			return fmt.Errorf("unsupported feed %q: must be one of %v", feed, ValidHNFeeds())
+		}
+	}
+	return nil
+}
+
 // StackExchangeConfig holds Stack Exchange-specific configuration.
 type StackExchangeConfig struct {
 	Enabled         bool     `json:"enabled"`
@@ -220,6 +245,21 @@ func LoadConfig(dir string) (*Config, error) {
 	return cfg, nil
 }
 
+// ValidHNFeeds returns the set of supported Hacker News feed names.
+func ValidHNFeeds() []string {
+	return []string{"askstories", "showstories", "newstories", "topstories", "beststories"}
+}
+
+// IsValidHNFeed checks if a feed name is in the supported set.
+func IsValidHNFeed(feed string) bool {
+	for _, valid := range ValidHNFeeds() {
+		if strings.EqualFold(feed, valid) {
+			return true
+		}
+	}
+	return false
+}
+
 // Validate checks the loaded configuration for invalid values.
 func (c *Config) Validate() error {
 	if c == nil {
@@ -227,6 +267,9 @@ func (c *Config) Validate() error {
 	}
 	if err := c.Sources.GitHub.Validate(); err != nil {
 		return fmt.Errorf("validate github config: %w", err)
+	}
+	if err := c.Sources.HackerNews.Validate(); err != nil {
+		return fmt.Errorf("validate hackernews config: %w", err)
 	}
 	return nil
 }
