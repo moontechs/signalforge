@@ -42,14 +42,14 @@
 
 ### Task 3: Add ResearchStats fields + stats plumbing
 
-- [ ] Add to `domain.ResearchStats`:
+- [x] Add to `domain.ResearchStats`:
   - `StackExchangeRequests int \`json:"stackexchange_requests"\``
   - `StackExchangeCacheHits int \`json:"stackexchange_cache_hits"\``
-- [ ] In `cli/collect.go`, add to `collectStatsDelta`:
+- [x] In `cli/collect.go`, add to `collectStatsDelta`:
   - `seRequests int` and `seCacheHits int`
-- [ ] In `statsDelta()`, compute `seRequests` and `seCacheHits` from before/after stats
-- [ ] In `reportCollectSummary()`, add SE stats formatting (mirror HN pattern lines 308-309)
-- [ ] In `collector.Collect()` return value, track `Stats` with Request/CacheHit counters (match HN's Stats struct in types.go)
+- [x] In `statsDelta()`, compute `seRequests` and `seCacheHits` from before/after stats
+- [x] In `reportCollectSummary()`, add SE stats formatting (mirror HN pattern lines 308-309)
+- [x] In `collector.Collect()` return value, track `Stats` with Request/CacheHit counters (match HN's Stats struct in types.go; collector implementation is completed in Task 6)
 
 ### Task 4: Implement Stack Exchange API client
 

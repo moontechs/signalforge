@@ -286,6 +286,8 @@ type collectStatsDelta struct {
 	requests    int
 	hnRequests  int
 	hnCacheHits int
+	seRequests  int
+	seCacheHits int
 }
 
 func statsDelta(before, after *domain.ResearchStats) collectStatsDelta {
@@ -295,6 +297,8 @@ func statsDelta(before, after *domain.ResearchStats) collectStatsDelta {
 		requests:    after.GitHubRequests - before.GitHubRequests,
 		hnRequests:  after.HackerNewsRequests - before.HackerNewsRequests,
 		hnCacheHits: after.HackerNewsCacheHits - before.HackerNewsCacheHits,
+		seRequests:  after.StackExchangeRequests - before.StackExchangeRequests,
+		seCacheHits: after.StackExchangeCacheHits - before.StackExchangeCacheHits,
 	}
 }
 
@@ -307,6 +311,9 @@ func reportCollectSummary(cmd *cobra.Command, source string, totalSignals int, d
 	}
 	if delta.hnRequests > 0 {
 		msg += fmt.Sprintf(", HN requests: %d (cache hits: %d)", delta.hnRequests, delta.hnCacheHits)
+	}
+	if delta.seRequests > 0 {
+		msg += fmt.Sprintf(", Stack Exchange requests: %d (cache hits: %d)", delta.seRequests, delta.seCacheHits)
 	}
 	msg += "\n"
 

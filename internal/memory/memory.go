@@ -275,6 +275,26 @@ func (m *DefaultMemory) AddHNCacheHits(count int) {
 	m.mem.Stats.HackerNewsCacheHits += count
 }
 
+// AddStackExchangeRequests increments the Stack Exchange request count.
+func (m *DefaultMemory) AddStackExchangeRequests(count int) {
+	if count <= 0 {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.mem.Stats.StackExchangeRequests += count
+}
+
+// AddStackExchangeCacheHits increments the Stack Exchange cache-hit count.
+func (m *DefaultMemory) AddStackExchangeCacheHits(count int) {
+	if count <= 0 {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.mem.Stats.StackExchangeCacheHits += count
+}
+
 // GetMemory returns the full memory struct (for serialization).
 func (m *DefaultMemory) GetMemory() *domain.Memory {
 	m.mu.RLock()

@@ -126,6 +126,31 @@ func TestStatsDelta_HN(t *testing.T) {
 	}
 }
 
+func TestStatsDelta_StackExchange(t *testing.T) {
+	t.Parallel()
+
+	before := &domain.ResearchStats{StackExchangeRequests: 4, StackExchangeCacheHits: 1}
+	after := &domain.ResearchStats{StackExchangeRequests: 11, StackExchangeCacheHits: 6}
+	delta := statsDelta(before, after)
+	if delta.seRequests != 7 || delta.seCacheHits != 5 {
+		t.Fatalf("expected Stack Exchange delta 7/5, got %d/%d", delta.seRequests, delta.seCacheHits)
+	}
+}
+
+func TestReportCollectSummary_StackExchange(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+	buf := new(strings.Builder)
+	cmd.SetOut(buf)
+	if err := reportCollectSummary(cmd, "stackexchange", 3, collectStatsDelta{seRequests: 7, seCacheHits: 2}); err != nil {
+		t.Fatalf("reportCollectSummary failed: %v", err)
+	}
+	if output := buf.String(); !strings.Contains(output, "Stack Exchange requests: 7 (cache hits: 2)") {
+		t.Fatalf("expected Stack Exchange stats in output, got %q", output)
+	}
+}
+
 func TestStatsDelta_NoHN(t *testing.T) {
 	t.Parallel()
 
