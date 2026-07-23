@@ -76,7 +76,7 @@ linters:
 
     # Best practices
     - wrapcheck
-    - wsl
+    # - wsl  # disabled — 700+ whitespace noise, its strict cuddle policy produces pervasive non-functional changes
     - nolintlint
     - ireturn
     - inamedparam
