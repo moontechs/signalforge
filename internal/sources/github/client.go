@@ -47,13 +47,13 @@ type githubClient struct {
 	requestCount int
 	requestLimit int
 
-	restRemaining  int
-	restReset      time.Time
-	gqlRemaining   int
-	gqlReset       time.Time
+	restRemaining int
+	restReset     time.Time
+	gqlRemaining  int
+	gqlReset      time.Time
 
-	etags map[string]etagEntry
-	etagMutex sync.RWMutex
+	etags      map[string]etagEntry
+	etagMutex  sync.RWMutex
 	statsMutex sync.Mutex
 
 	cache *responseCache
@@ -64,7 +64,7 @@ type requestOptions struct {
 	Method    string
 	Path      string // path relative to api.github.com, e.g. /search/issues
 	Body      []byte
-	IsGraphQL bool // selects which rate-limit counter to use
+	IsGraphQL bool   // selects which rate-limit counter to use
 	CacheKey  string // key for ETag cache; empty to skip caching
 }
 

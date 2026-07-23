@@ -126,6 +126,41 @@ issues:
         - gocyclo
         - cyclop
 
+    # cobra.Command has too many fields for exhaustruct
+    - path: internal/cli/
+      linters:
+        - exhaustruct
+      text: "cobra.Command"
+
+    # domain.CollectRequest has many optional fields
+    - path: internal/cli/
+      linters:
+        - exhaustruct
+      text: "CollectRequest"
+
+    # http types are stdlib, not worth exhaustruct
+    - linters:
+        - exhaustruct
+      text: "http\\.(Response|Client|Request)"
+
+    # cmd/signalforge/ also uses Cobra conventions
+    - path: cmd/signalforge/
+      linters:
+        - gochecknoglobals
+        - gochecknoinits
+        - exhaustruct
+
+    # internal/config/ uses snake_case JSON for config file format
+    - path: internal/config/
+      linters:
+        - tagliatelle
+
+    # CLI output to stdout/stderr is deliberately unchecked
+    - linters:
+        - revive
+      text: "unhandled-error"
+      source: "fmt\\.(Fprint|Fprintf|Fprintln)"
+
 linters-settings:
   cyclop:
     max-complexity: 15

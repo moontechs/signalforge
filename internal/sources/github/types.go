@@ -16,26 +16,26 @@ const (
 // collectionScope is the concrete collection strategy derived from
 // configuration and request inputs.
 type collectionScope struct {
-	strategy         collectionStrategy
-	repos            []string // populated per-repo targets (if strategyPerRepo)
-	labels           []string
-	languages        []string
-	maxItems         int
-	maxComments      int
-	since            string // ISO date string for incremental collection
-	searchIssues     bool
+	strategy          collectionStrategy
+	repos             []string // populated per-repo targets (if strategyPerRepo)
+	labels            []string
+	languages         []string
+	maxItems          int
+	maxComments       int
+	since             string // ISO date string for incremental collection
+	searchIssues      bool
 	searchDiscussions bool
 }
 
 // deriveScope maps GitHubConfig + CollectRequest into a collectionScope.
 func deriveScope(cfg configValues, repos []string, labels []string, languages []string, maxItems int, maxComments int, since string) collectionScope {
 	scope := collectionScope{
-		labels:           labels,
-		languages:        languages,
-		maxItems:         maxItems,
-		maxComments:      maxComments,
-		since:            since,
-		searchIssues:     cfg.SearchIssues,
+		labels:            labels,
+		languages:         languages,
+		maxItems:          maxItems,
+		maxComments:       maxComments,
+		since:             since,
+		searchIssues:      cfg.SearchIssues,
 		searchDiscussions: cfg.SearchDiscussions,
 	}
 
@@ -51,14 +51,14 @@ func deriveScope(cfg configValues, repos []string, labels []string, languages []
 
 // configValues holds the subset of config fields needed by the collector.
 type configValues struct {
-	Enabled          bool
-	SearchIssues     bool
-	SearchDiscussions bool
-	MaxItemsPerRun   int
+	Enabled            bool
+	SearchIssues       bool
+	SearchDiscussions  bool
+	MaxItemsPerRun     int
 	MaxCommentsPerItem int
-	Repositories     []string
-	Languages        []string
-	Labels           []string
+	Repositories       []string
+	Languages          []string
+	Labels             []string
 }
 
 // cachedResponse holds response data for the on-disk cache.
@@ -71,8 +71,8 @@ type cachedResponse struct {
 
 // rateLimitCounters tracks remaining quota for REST and GraphQL APIs.
 type rateLimitCounters struct {
-	restRemaining   int
-	restReset       time.Time
+	restRemaining    int
+	restReset        time.Time
 	graphQLRemaining int
-	graphQLReset    time.Time
+	graphQLReset     time.Time
 }

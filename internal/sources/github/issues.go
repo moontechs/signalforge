@@ -12,20 +12,20 @@ import (
 // ---- Upstream API types (REST) ----
 
 type ghIssue struct {
-	ID        int64        `json:"id"`
-	Number    int          `json:"number"`
-	Title     string       `json:"title"`
-	Body      string       `json:"body"`
-	HTMLURL   string       `json:"html_url"`
-	State     string       `json:"state"`
-	CreatedAt time.Time    `json:"created_at"`
-	UpdatedAt time.Time    `json:"updated_at"`
-	Labels    []ghLabel    `json:"labels"`
-	User      ghUser       `json:"user"`
-	Comments  int          `json:"comments"`
-	Reactions ghReactions  `json:"reactions"`
-	Score     float64      `json:"score,omitempty"`
-	RepoURL   string       `json:"repository_url,omitempty"`
+	ID          int64           `json:"id"`
+	Number      int             `json:"number"`
+	Title       string          `json:"title"`
+	Body        string          `json:"body"`
+	HTMLURL     string          `json:"html_url"`
+	State       string          `json:"state"`
+	CreatedAt   time.Time       `json:"created_at"`
+	UpdatedAt   time.Time       `json:"updated_at"`
+	Labels      []ghLabel       `json:"labels"`
+	User        ghUser          `json:"user"`
+	Comments    int             `json:"comments"`
+	Reactions   ghReactions     `json:"reactions"`
+	Score       float64         `json:"score,omitempty"`
+	RepoURL     string          `json:"repository_url,omitempty"`
 	PullRequest json.RawMessage `json:"pull_request,omitempty"`
 }
 
@@ -142,7 +142,7 @@ func fetchIssuesSearchStrategy(ctx context.Context, c *githubClient, scope colle
 		path := fmt.Sprintf("/search/issues?q=%s&sort=updated&direction=asc&per_page=%d&page=%d",
 			url.QueryEscape(query), perPage, page)
 
-		cacheKey := fmt.Sprintf("REST:GET:%s", path)
+		cacheKey := "REST:GET:" + path
 
 		var searchResp ghSearchResponse
 		_, err := c.doJSONRequest(ctx, requestOptions{
@@ -193,7 +193,7 @@ func listRepoIssues(ctx context.Context, c *githubClient, owner, repo, since str
 			}
 		}
 
-		cacheKey := fmt.Sprintf("REST:GET:%s", u)
+		cacheKey := "REST:GET:" + u
 
 		var issues []ghIssue
 		// The per-repo endpoint returns an array, not a search wrapper
@@ -253,7 +253,7 @@ func fetchIssueComments(ctx context.Context, c *githubClient, owner, repo string
 		path := fmt.Sprintf("/repos/%s/%s/issues/%d/comments?per_page=%d&page=%d&sort=created&direction=asc",
 			owner, repo, issueNumber, perPage, page)
 
-		cacheKey := fmt.Sprintf("REST:GET:%s", path)
+		cacheKey := "REST:GET:" + path
 
 		var comments []ghIssueComment
 		resp, err := c.doJSONRequest(ctx, requestOptions{
@@ -334,4 +334,3 @@ func buildSearchQuery(scope collectionScope) string {
 }
 
 // ensure interface check for unused import
-

@@ -1,7 +1,6 @@
 package github
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -11,7 +10,7 @@ import (
 	"github.com/moontechs/signalforge/internal/domain"
 )
 
-// ---- Helpers for building fake responses ----
+// ---- Helpers for building fake responses ----.
 
 // searchRespToJSON serializes a ghSearchResponse to JSON.
 func searchRespToJSON(resp ghSearchResponse) []byte {
@@ -28,7 +27,7 @@ func issuesListToJSON(issues []ghIssue) []byte {
 	return b
 }
 
-// ---- Test helpers ----
+// ---- Test helpers ----.
 
 // setupCollector creates a Collector with a fakeTransport and convenient defaults.
 func setupCollector(t *testing.T, cfg CollectorConfig, fake *fakeTransport) *Collector {
@@ -47,7 +46,7 @@ func setupCollector(t *testing.T, cfg CollectorConfig, fake *fakeTransport) *Col
 	return c
 }
 
-// ---- Tests ----
+// ---- Tests ----.
 
 // TestCollect_MixedIssuesAndDiscussions verifies that Collect returns both
 // issues and discussions parsed into RawSignals.
@@ -96,8 +95,7 @@ func TestCollect_MixedIssuesAndDiscussions(t *testing.T) {
 		body:       string(issuesBody),
 	})
 
-	// Comment fetch for issue #10 - uses per_page=10 since maxComments=10
-	// Use wildcard to match the full URL with per_page parameter
+	// Use wildcard to match the full URL with per_page parameter.
 	commentsURLPrefix := "https://api.github.com/repos/owner/repo/issues/10/comments?"
 	comments10 := []ghIssueComment{
 		{ID: 5001, Body: "I can reproduce this", User: ghUser{Login: "user3"}, CreatedAt: t2},
@@ -109,7 +107,7 @@ func TestCollect_MixedIssuesAndDiscussions(t *testing.T) {
 		body:       string(comments10Body),
 	})
 
-	// GraphQL discussions
+	// GraphQL discussions.
 	discPage := graphQLResponse{
 		Data: json.RawMessage(`{
 			"repository": {
@@ -152,12 +150,12 @@ func TestCollect_MixedIssuesAndDiscussions(t *testing.T) {
 	}, fake)
 	c.WithNow(func() time.Time { return collectedAt })
 
-	signals, err := c.Collect(context.Background(), domain.CollectRequest{})
+	signals, err := c.Collect(t.Context(), domain.CollectRequest{})
 	if err != nil {
 		t.Fatalf("Collect failed: %v", err)
 	}
 
-	// Expect 3 signals: 2 issues + 1 discussion
+	// Expect 3 signals: 2 issues + 1 discussion.
 	if len(signals) != 3 {
 		t.Fatalf("expected 3 signals, got %d", len(signals))
 	}
@@ -210,8 +208,8 @@ func TestCollect_IssuesOnly(t *testing.T) {
 		TotalCount: 1,
 		Items: []ghIssue{
 			{
-				ID:        2001, Number: 1, Title: "Only issue test", Body: "Body",
-				HTMLURL:   "https://github.com/o/r/issues/1", State: "open",
+				ID: 2001, Number: 1, Title: "Only issue test", Body: "Body",
+				HTMLURL: "https://github.com/o/r/issues/1", State: "open",
 				CreatedAt: t1, UpdatedAt: t1,
 				Labels:    []ghLabel{{Name: "bug"}},
 				User:      ghUser{Login: "u1"},
@@ -238,7 +236,7 @@ func TestCollect_IssuesOnly(t *testing.T) {
 	}, fake)
 	c.WithNow(func() time.Time { return collectedAt })
 
-	signals, err := c.Collect(context.Background(), domain.CollectRequest{})
+	signals, err := c.Collect(t.Context(), domain.CollectRequest{})
 	if err != nil {
 		t.Fatalf("Collect failed: %v", err)
 	}
@@ -298,7 +296,7 @@ func TestCollect_DiscussionsOnly(t *testing.T) {
 	}, fake)
 	c.WithNow(func() time.Time { return collectedAt })
 
-	signals, err := c.Collect(context.Background(), domain.CollectRequest{})
+	signals, err := c.Collect(t.Context(), domain.CollectRequest{})
 	if err != nil {
 		t.Fatalf("Collect failed: %v", err)
 	}
@@ -321,7 +319,7 @@ func TestCollect_DiscussionsOnly(t *testing.T) {
 func TestCollect_Dedup(t *testing.T) {
 	fake := newFakeTransport()
 
-	// Return one issue (per-repo strategy, so discussions also work)
+	// Return one issue (per-repo strategy, so discussions also work).
 	issuesPrefix := "https://api.github.com/repos/o/r/issues?state=open&sort=updated&direction=asc&per_page="
 	issues := []ghIssue{
 		{
@@ -335,7 +333,7 @@ func TestCollect_Dedup(t *testing.T) {
 	issuesBody := issuesListToJSON(issues)
 	fake.addResponse(issuesPrefix+"*", fakeResponse{statusCode: 200, body: string(issuesBody)})
 
-	// One discussion
+	// One discussion.
 	discPage := graphQLResponse{
 		Data: json.RawMessage(`{
 			"repository": {
@@ -370,7 +368,7 @@ func TestCollect_Dedup(t *testing.T) {
 	}, fake)
 	c.WithNow(func() time.Time { return collectedAt })
 
-	signals, err := c.Collect(context.Background(), domain.CollectRequest{})
+	signals, err := c.Collect(t.Context(), domain.CollectRequest{})
 	if err != nil {
 		t.Fatalf("Collect failed: %v", err)
 	}
@@ -404,13 +402,13 @@ func TestCollect_RequestLimitCutoff(t *testing.T) {
 		SearchDiscussions:  false,
 		MaxItemsPerRun:     100,
 		MaxCommentsPerItem: 0,
-		MaxRequests:        1, // Only 1 request allowed
+				MaxRequests:        1, // Only 1 request allowed.
 	}, fake)
 
-	// Pre-fill request count to 1 so the next request hits the limit
+	// Pre-fill request count to 1 so the next request hits the limit.
 	c.client.requestCount = 1
 
-	signals, err := c.Collect(context.Background(), domain.CollectRequest{})
+	signals, err := c.Collect(t.Context(), domain.CollectRequest{})
 	if err == nil {
 		t.Fatal("expected error for request limit, got nil")
 	}
@@ -435,11 +433,11 @@ func TestCollect_RateLimitExhaustion(t *testing.T) {
 		MaxRequests:        500,
 	}, fake)
 
-	// Exhaust the REST rate limit before any request
+	// Exhaust the REST rate limit before any request.
 	c.client.restRemaining = 0
 	c.client.restReset = time.Now().Add(1 * time.Hour)
 
-	signals, err := c.Collect(context.Background(), domain.CollectRequest{})
+	signals, err := c.Collect(t.Context(), domain.CollectRequest{})
 	if err == nil {
 		t.Fatal("expected error for rate limit, got nil")
 	}
@@ -486,7 +484,7 @@ func TestCollect_EmptyResults(t *testing.T) {
 	}, newFakeTransport())
 	c.WithNow(func() time.Time { return collectedAt })
 
-	signals, err := c.Collect(context.Background(), domain.CollectRequest{})
+	signals, err := c.Collect(t.Context(), domain.CollectRequest{})
 	if err != nil {
 		t.Fatalf("Collect failed: %v", err)
 	}
@@ -499,7 +497,7 @@ func TestCollect_EmptyResults(t *testing.T) {
 func TestCollect_MaxItemsLimit(t *testing.T) {
 	fake := newFakeTransport()
 
-	// Per-repo issues: return 2 issues but maxItems=2 total
+	// Per-repo issues: return 2 issues but maxItems=2 total.
 	issuesPrefix := "https://api.github.com/repos/o/r/issues?state=open&sort=updated&direction=asc&per_page="
 	issues := []ghIssue{
 		{
@@ -520,7 +518,7 @@ func TestCollect_MaxItemsLimit(t *testing.T) {
 	issuesBody := issuesListToJSON(issues)
 	fake.addResponse(issuesPrefix+"*", fakeResponse{statusCode: 200, body: string(issuesBody)})
 
-	// GraphQL discussions: return 2 discussions
+	// GraphQL discussions: return 2 discussions.
 	discPage := graphQLResponse{
 		Data: json.RawMessage(`{
 			"repository": {
@@ -566,7 +564,7 @@ func TestCollect_MaxItemsLimit(t *testing.T) {
 	}, fake)
 	c.WithNow(func() time.Time { return collectedAt })
 
-	signals, err := c.Collect(context.Background(), domain.CollectRequest{})
+	signals, err := c.Collect(t.Context(), domain.CollectRequest{})
 	if err != nil {
 		t.Fatalf("Collect failed: %v", err)
 	}
@@ -605,7 +603,7 @@ func TestCollect_PerRepoStrategy(t *testing.T) {
 	}, fake)
 	c.WithNow(func() time.Time { return collectedAt })
 
-	signals, err := c.Collect(context.Background(), domain.CollectRequest{})
+	signals, err := c.Collect(t.Context(), domain.CollectRequest{})
 	if err != nil {
 		t.Fatalf("Collect failed: %v", err)
 	}
@@ -625,8 +623,7 @@ func TestCollect_PerRepoStrategy(t *testing.T) {
 func TestCollect_PartialFailure_IssueError(t *testing.T) {
 	fake := newFakeTransport()
 
-	// Issues per-repo endpoint is NOT registered — will fail with 404
-	// But discussions should succeed
+	// But discussions should succeed.
 	discPage := graphQLResponse{
 		Data: json.RawMessage(`{
 			"repository": {
@@ -660,7 +657,7 @@ func TestCollect_PartialFailure_IssueError(t *testing.T) {
 	}, fake)
 	c.WithNow(func() time.Time { return collectedAt })
 
-	signals, err := c.Collect(context.Background(), domain.CollectRequest{})
+	signals, err := c.Collect(t.Context(), domain.CollectRequest{})
 	if err == nil {
 		t.Fatal("expected error for partial failure, got nil")
 	}
@@ -680,7 +677,7 @@ func TestCollect_PartialFailure_IssueError(t *testing.T) {
 func TestCollect_PartialFailure_DiscussionError(t *testing.T) {
 	fake := newFakeTransport()
 
-	// Issues per-repo endpoint succeeds
+	// Issues per-repo endpoint succeeds.
 	issuesPrefix := "https://api.github.com/repos/o/r/issues?state=open&sort=updated&direction=asc&per_page="
 	issues := []ghIssue{
 		{
@@ -694,7 +691,7 @@ func TestCollect_PartialFailure_DiscussionError(t *testing.T) {
 	issuesBody := issuesListToJSON(issues)
 	fake.addResponse(issuesPrefix+"*", fakeResponse{statusCode: 200, body: string(issuesBody)})
 
-	// Discussions endpoint is NOT registered — will fail with 404
+	// Discussions endpoint is NOT registered — will fail with 404.
 	c := setupCollector(t, CollectorConfig{
 		Enabled:            true,
 		SearchIssues:       true,
@@ -706,7 +703,7 @@ func TestCollect_PartialFailure_DiscussionError(t *testing.T) {
 	}, fake)
 	c.WithNow(func() time.Time { return collectedAt })
 
-	signals, err := c.Collect(context.Background(), domain.CollectRequest{})
+	signals, err := c.Collect(t.Context(), domain.CollectRequest{})
 	if err == nil {
 		t.Fatal("expected error for partial failure, got nil")
 	}
@@ -755,8 +752,8 @@ func TestCollect_WithCache(t *testing.T) {
 	}, fake)
 	c.WithNow(func() time.Time { return collectedAt })
 
-	// First call
-	signals1, err := c.Collect(context.Background(), domain.CollectRequest{})
+	// First call.
+	signals1, err := c.Collect(t.Context(), domain.CollectRequest{})
 	if err != nil {
 		t.Fatalf("first Collect failed: %v", err)
 	}
@@ -769,7 +766,7 @@ func TestCollect_WithCache(t *testing.T) {
 		t.Fatalf("expected 1 call to search URL, got %d", callCount1)
 	}
 
-	// Second call: should use in-memory ETag cache and get 304
+	// Second call: should use in-memory ETag cache and get 304.
 	fake.resetCallCount()
 	fake.addResponse(searchURL, fakeResponse{
 		statusCode: 304,
@@ -777,7 +774,7 @@ func TestCollect_WithCache(t *testing.T) {
 		body:       "",
 	})
 
-	signals2, err := c.Collect(context.Background(), domain.CollectRequest{})
+	signals2, err := c.Collect(t.Context(), domain.CollectRequest{})
 	if err != nil {
 		t.Fatalf("second Collect failed: %v", err)
 	}
@@ -818,7 +815,7 @@ func TestCollect_IssueWithoutRepoURL(t *testing.T) {
 	}, fake)
 	c.WithNow(func() time.Time { return collectedAt })
 
-	signals, err := c.Collect(context.Background(), domain.CollectRequest{})
+	signals, err := c.Collect(t.Context(), domain.CollectRequest{})
 	if err != nil {
 		t.Fatalf("Collect failed: %v", err)
 	}
@@ -859,7 +856,7 @@ func TestCollect_InvalidIssueURL(t *testing.T) {
 	}, fake)
 	c.WithNow(func() time.Time { return collectedAt })
 
-	signals, err := c.Collect(context.Background(), domain.CollectRequest{})
+	signals, err := c.Collect(t.Context(), domain.CollectRequest{})
 	if err != nil {
 		t.Fatalf("Collect failed: %v", err)
 	}

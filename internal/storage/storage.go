@@ -22,7 +22,7 @@ type Storage struct {
 
 // New creates a new Storage instance.
 func New(baseDir string) *Storage {
-	return &Storage{baseDir: baseDir}
+	return &Storage{baseDir: baseDir, mu: sync.RWMutex{}}
 }
 
 // BaseDir returns the base directory.
@@ -129,7 +129,7 @@ func (s *Storage) SaveJSONL(path string, v any) error {
 		_ = f.Close()
 		return fmt.Errorf("write: %w", err)
 	}
-	if _, err := f.Write([]byte("\n")); err != nil {
+	if _, err := f.WriteString("\n"); err != nil {
 		_ = f.Close()
 		return fmt.Errorf("write newline: %w", err)
 	}
@@ -261,7 +261,7 @@ func (s *Storage) Path(rel string) string {
 // GenerateID generates a unique ID based on content and timestamp.
 func GenerateID(prefix string) string {
 	h := sha256.New()
-	_, _ = io.WriteString(h, fmt.Sprintf("%s-%d", prefix, time.Now().UnixNano()))
+	_, _ = fmt.Fprintf(h, "%s-%d", prefix, time.Now().UnixNano())
 	return fmt.Sprintf("%s_%x", prefix, h.Sum(nil)[:16])
 }
 

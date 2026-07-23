@@ -25,6 +25,7 @@ type DefaultMemory struct {
 func New(store *storage.Storage) *DefaultMemory {
 	path := filepath.Join(store.BaseDir(), "memory.json")
 	return &DefaultMemory{
+		mu: sync.RWMutex{},
 		mem: &domain.Memory{
 			Version:             1,
 			UpdatedAt:           time.Now(),
@@ -35,6 +36,7 @@ func New(store *storage.Storage) *DefaultMemory {
 			IdeaFingerprints:    make(map[string]string),
 			UsedQueries:         make(map[string]domain.QueryMemory),
 			RejectedPatterns:    []domain.RejectedPattern{},
+			Stats:               domain.ResearchStats{}, //nolint:exhaustruct // all fields are zero-value ints
 		},
 		store:   store,
 		path:    path,

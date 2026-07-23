@@ -1,7 +1,6 @@
 package github
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -63,7 +62,7 @@ func (f *fakeTransport) findResponse(urlStr string) (fakeResponse, bool) {
 	}
 
 	// Prefix match (for wildcard patterns)
-	for pattern, _ := range f.responses {
+	for pattern := range f.responses {
 		if strings.HasSuffix(pattern, "*") {
 			prefix := strings.TrimSuffix(pattern, "*")
 			if strings.HasPrefix(urlStr, prefix) {
@@ -163,7 +162,7 @@ func TestClient_RESTPagination(t *testing.T) {
 	// Build 100 items for page 1 — this fills the page completely,
 	// so the code fetches page 2 to check for more items.
 	page1Items := make([]ghIssue, 100)
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		page1Items[i] = ghIssue{ID: int64(i + 1), Number: i + 1, Title: fmt.Sprintf("Issue %d", i+1)}
 	}
 	page1 := ghSearchResponse{
@@ -208,7 +207,7 @@ func TestClient_RESTPagination(t *testing.T) {
 		searchIssues: true,
 	}
 
-	issues, err := fetchIssuesSearchStrategy(context.Background(), c, scope)
+	issues, err := fetchIssuesSearchStrategy(t.Context(), c, scope)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -287,12 +286,12 @@ func TestClient_GraphQLPagination(t *testing.T) {
 
 	c := testClient(fake)
 	scope := collectionScope{
-		maxItems:           10,
-		searchDiscussions:  true,
-		repos:              []string{"owner/repo"},
+		maxItems:          10,
+		searchDiscussions: true,
+		repos:             []string{"owner/repo"},
 	}
 
-	discussions, err := fetchDiscussions(context.Background(), c, nil, scope)
+	discussions, err := fetchDiscussions(t.Context(), c, nil, scope)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -337,7 +336,7 @@ func TestClient_TransientRetrySuccess(t *testing.T) {
 		searchIssues: true,
 	}
 
-	issues, err := fetchIssuesSearchStrategy(context.Background(), c, scope)
+	issues, err := fetchIssuesSearchStrategy(t.Context(), c, scope)
 	if err != nil {
 		t.Fatalf("unexpected error after retry: %v", err)
 	}
@@ -372,7 +371,7 @@ func TestClient_RetryExhaustion(t *testing.T) {
 		searchIssues: true,
 	}
 
-	_, err := fetchIssuesSearchStrategy(context.Background(), c, scope)
+	_, err := fetchIssuesSearchStrategy(t.Context(), c, scope)
 	if err == nil {
 		t.Fatal("expected error but got nil")
 	}
@@ -422,7 +421,7 @@ func TestClient_PrimaryRateLimit(t *testing.T) {
 		searchIssues: true,
 	}
 
-	issues, err := fetchIssuesSearchStrategy(context.Background(), c, scope)
+	issues, err := fetchIssuesSearchStrategy(t.Context(), c, scope)
 	if err != nil {
 		t.Fatalf("unexpected error after rate limit recovery: %v", err)
 	}
@@ -469,7 +468,7 @@ func TestClient_SecondaryRateLimit(t *testing.T) {
 		searchIssues: true,
 	}
 
-	issues, err := fetchIssuesSearchStrategy(context.Background(), c, scope)
+	issues, err := fetchIssuesSearchStrategy(t.Context(), c, scope)
 	if err != nil {
 		t.Fatalf("unexpected error after secondary rate limit recovery: %v", err)
 	}
@@ -513,7 +512,7 @@ func TestClient_304ConditionalResponse(t *testing.T) {
 		searchIssues: true,
 	}
 
-	issues1, err := fetchIssuesSearchStrategy(context.Background(), c, scope)
+	issues1, err := fetchIssuesSearchStrategy(t.Context(), c, scope)
 	if err != nil {
 		t.Fatalf("first request failed: %v", err)
 	}
@@ -535,15 +534,15 @@ func TestClient_304ConditionalResponse(t *testing.T) {
 	fake.addResponse(searchURL, fakeResponse{
 		statusCode: 304,
 		headers: map[string]string{
-			"ETag":                   `W/"abc123"`,
-			"X-RateLimit-Remaining":  "4998",
-			"X-RateLimit-Reset":      "0",
+			"ETag":                  `W/"abc123"`,
+			"X-RateLimit-Remaining": "4998",
+			"X-RateLimit-Reset":     "0",
 		},
 		body: "",
 	})
 
 	// Execute second request — should use ETag and get 304
-	issues2, err := fetchIssuesSearchStrategy(context.Background(), c, scope)
+	issues2, err := fetchIssuesSearchStrategy(t.Context(), c, scope)
 	if err != nil {
 		t.Fatalf("second request failed: %v", err)
 	}
@@ -574,7 +573,7 @@ func TestClient_RequestLimitCutoff(t *testing.T) {
 	// Pre-fill request count to reach limit
 	c.requestCount = 1
 
-	_, err := fetchIssuesSearchStrategy(context.Background(), c, scope)
+	_, err := fetchIssuesSearchStrategy(t.Context(), c, scope)
 	if err == nil {
 		t.Fatal("expected request limit error, got nil")
 	}
@@ -767,7 +766,7 @@ func TestClient_doJSONRequest_non200(t *testing.T) {
 	c := testClient(fake)
 
 	var target struct{}
-	_, err := c.doJSONRequest(context.Background(), requestOptions{
+	_, err := c.doJSONRequest(t.Context(), requestOptions{
 		Method: "GET",
 		Path:   "/some/path",
 	}, &target)
@@ -792,7 +791,7 @@ func TestClient_RateLimitUpdate(t *testing.T) {
 
 	// Simulate response with headers
 	resp := &http.Response{
-		StatusCode: 200,
+		StatusCode: http.StatusOK,
 		Header: http.Header{
 			"X-Ratelimit-Remaining": []string{"4242"},
 			"X-Ratelimit-Reset":     []string{"1735689600"},
@@ -810,5 +809,3 @@ func TestClient_RateLimitUpdate(t *testing.T) {
 		t.Fatalf("expected reset %v, got %v", expectedReset, c.restReset)
 	}
 }
-
-

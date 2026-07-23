@@ -6,8 +6,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/moontechs/signalforge/internal/config"
 	"github.com/spf13/cobra"
+
+	"github.com/moontechs/signalforge/internal/config"
 )
 
 // InitCmd represents the signalforge init command.
@@ -26,7 +27,7 @@ and writes a default config.json file.`,
 			return fmt.Errorf("determine signalforge dir: %w", err)
 		}
 
-		// Check if already initialized
+		// Check if already initialized.
 		configPath := filepath.Join(signalForgeDir, "config.json")
 		if _, err := os.Stat(configPath); err == nil && !force {
 			if _, err := fmt.Fprintf(cmd.OutOrStdout(), "SignalForge is already initialized at %s\n", signalForgeDir); err != nil {
@@ -38,7 +39,7 @@ and writes a default config.json file.`,
 			return nil
 		}
 
-		// Create directory structure
+		// Create directory structure.
 		dirs := config.DefaultDirStructure()
 		for dir := range dirs {
 			path := filepath.Join(signalForgeDir, dir)
@@ -47,7 +48,7 @@ and writes a default config.json file.`,
 			}
 		}
 
-		// Write default config
+		// Write default config.
 		cfg := config.DefaultConfig()
 		if err := config.SaveConfig(signalForgeDir, cfg); err != nil {
 			return fmt.Errorf("save default config: %w", err)

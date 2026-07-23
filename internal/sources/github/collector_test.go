@@ -1,7 +1,6 @@
 package github
 
 import (
-	"context"
 	"net/http"
 	"testing"
 	"time"
@@ -102,7 +101,7 @@ func TestCollector_Collect_Empty(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	signals, err := c.Collect(context.Background(), domain.CollectRequest{})
+	signals, err := c.Collect(t.Context(), domain.CollectRequest{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -225,10 +224,10 @@ func TestDeriveScope_EmptyValues(t *testing.T) {
 func TestErrorTypes(t *testing.T) {
 	// RateLimitError
 	rle := &RateLimitError{
-		IsPrimary:   true,
-		Remaining:   0,
-		Limit:       5000,
-		Reset:       time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+		IsPrimary: true,
+		Remaining: 0,
+		Limit:     5000,
+		Reset:     time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
 	}
 	if !IsRateLimit(rle) {
 		t.Fatal("expected IsRateLimit to return true")
@@ -275,4 +274,3 @@ func TestErrorTypes(t *testing.T) {
 func TestInterfaceCompliance(t *testing.T) {
 	var _ domain.SourceCollector = (*Collector)(nil)
 }
-

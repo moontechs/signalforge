@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -39,32 +40,50 @@ Example:
 	return cmd
 }
 
+type collectEnv struct {
+	store           *storage.Storage
+	mem             *memory.DefaultMemory
+	selectedSources []string
+	collectors      []domain.SourceCollector
+	before          *domain.ResearchStats
+	sinceWindow     time.Duration
+}
+
 func runCollect(cmd *cobra.Command, _ []string) error {
 	sourceFlag, _ := cmd.Flags().GetString("sources")
 	sinceFlag, _ := cmd.Flags().GetString("since")
 
-	sinceWindow, err := parseSinceWindow(sinceFlag)
+	env, err := setupCollectEnv(sourceFlag, sinceFlag)
 	if err != nil {
 		return err
+	}
+
+	return executeCollect(cmd, env)
+}
+
+func setupCollectEnv(sourceFlag, sinceFlag string) (*collectEnv, error) {
+	sinceWindow, err := parseSinceWindow(sinceFlag)
+	if err != nil {
+		return nil, err
 	}
 
 	dir, err := config.GetSignalForgeDir()
 	if err != nil {
-		return fmt.Errorf("determine signalforge dir: %w", err)
+		return nil, fmt.Errorf("determine signalforge dir: %w", err)
 	}
 
 	if err := ensureStorageLayout(dir); err != nil {
-		return fmt.Errorf("initialize storage layout: %w", err)
+		return nil, fmt.Errorf("initialize storage layout: %w", err)
 	}
 
 	cfg, err := config.LoadConfig(dir)
 	if err != nil {
-		return fmt.Errorf("load config: %w", err)
+		return nil, fmt.Errorf("load config: %w", err)
 	}
 
 	selectedSources, err := resolveCollectSources(sourceFlag)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	store := storage.New(dir)
@@ -72,89 +91,70 @@ func runCollect(cmd *cobra.Command, _ []string) error {
 	memoryPath := filepath.Join(dir, "memory.json")
 	if store.Exists(memoryPath) {
 		if err := mem.Load(); err != nil {
-			return fmt.Errorf("load memory: %w", err)
+			return nil, fmt.Errorf("load memory: %w", err)
 		}
 	}
-	before := mem.GetStats()
 
-	var collectors []domain.SourceCollector
+	beforeStats := mem.GetStats()
+
+	collectors := make([]domain.SourceCollector, 0, len(selectedSources))
 	for _, source := range selectedSources {
-		switch source {
-		case "github":
-			if !cfg.Sources.GitHub.Enabled {
-				return fmt.Errorf("github collection is disabled in config")
-			}
-			if strings.TrimSpace(os.Getenv("GITHUB_TOKEN")) == "" {
-				return fmt.Errorf("GITHUB_TOKEN is required for github collection")
-			}
-
-			ghCfg := github.CollectorConfig{
-				Enabled:            cfg.Sources.GitHub.Enabled,
-				SearchIssues:       cfg.Sources.GitHub.SearchIssues,
-				SearchDiscussions:  cfg.Sources.GitHub.SearchDiscussions,
-				MaxItemsPerRun:     cfg.Sources.GitHub.MaxItemsPerRun,
-				MaxCommentsPerItem: cfg.Sources.GitHub.MaxCommentsPerItem,
-				Repositories:       cfg.Sources.GitHub.Repositories,
-				Languages:          cfg.Sources.GitHub.Languages,
-				Labels:             cfg.Sources.GitHub.Labels,
-				MaxRequests:        cfg.Limits.MaxGitHubRequests,
-			}
-
-			collector, err := github.New(ghCfg)
-			if err != nil {
-				return fmt.Errorf("create github collector: %w", err)
-			}
-
-			// Attach disk cache.
-			collector.WithCache(store)
-			collectors = append(collectors, collector)
-
-		default:
-			return fmt.Errorf("source %q is not supported by the collect command yet", source)
+		collector, err := buildCollector(source, cfg, store)
+		if err != nil {
+			return nil, err
 		}
+		collectors = append(collectors, collector)
 	}
 
+	return &collectEnv{
+		store:           store,
+		mem:             mem,
+		selectedSources: selectedSources,
+		collectors:      collectors,
+		before:          &beforeStats,
+		sinceWindow:     sinceWindow,
+	}, nil
+}
+
+func executeCollect(cmd *cobra.Command, env *collectEnv) error {
 	var totalSignals int
-	for _, collector := range collectors {
-		since := time.Now().Add(-sinceWindow)
+	for _, collector := range env.collectors {
+		since := time.Now().Add(-env.sinceWindow)
 		signals, err := collector.Collect(cmd.Context(), domain.CollectRequest{
 			Since:   since,
-			Sources: selectedSources,
+			Sources: env.selectedSources,
 		})
 		totalSignals += len(signals)
 		if err != nil {
-			after := mem.GetStats()
-			if outputErr := reportCollectSummary(cmd, collector.Name(), len(signals), statsDelta(before, after)); outputErr != nil {
+			afterStats := env.mem.GetStats()
+			if outputErr := reportCollectSummary(cmd, collector.Name(), len(signals), statsDelta(env.before, &afterStats)); outputErr != nil {
 				return fmt.Errorf("write collection summary: %w", outputErr)
 			}
 			return fmt.Errorf("%s collection completed with errors: %w", collector.Name(), err)
 		}
 
-		// Save memory after collection.
-		for _, s := range signals {
-			mem.AddRawSignal(s.Source, s.SourceID)
+		for i := range signals {
+			env.mem.AddRawSignal(signals[i].Source, signals[i].SourceID)
 		}
 	}
 
-	if err := mem.Save(); err != nil {
+	if err := env.mem.Save(); err != nil {
 		return fmt.Errorf("save memory: %w", err)
 	}
 
-	after := mem.GetStats()
-	if err := reportCollectSummary(cmd, strings.Join(selectedSources, ","), totalSignals, statsDelta(before, after)); err != nil {
-		return fmt.Errorf("write collection summary: %w", err)
-	}
-	return nil
+	afterStats := env.mem.GetStats()
+	return reportCollectSummary(cmd, strings.Join(env.selectedSources, ","), totalSignals, statsDelta(env.before, &afterStats))
 }
 
 func resolveCollectSources(raw string) ([]string, error) {
 	if strings.TrimSpace(raw) == "" {
-		return nil, fmt.Errorf("at least one source must be specified")
+		return nil, errors.New("at least one source must be specified")
 	}
 
 	seen := make(map[string]struct{})
 	sources := make([]string, 0, 1)
-	for _, part := range strings.Split(raw, ",") {
+	parts := strings.Split(raw, ",")
+	for _, part := range parts {
 		source, ok := config.NormalizeSourceName(part)
 		if !ok {
 			return nil, fmt.Errorf("unsupported source %q", strings.TrimSpace(part))
@@ -167,7 +167,7 @@ func resolveCollectSources(raw string) ([]string, error) {
 	}
 
 	if len(sources) == 0 {
-		return nil, fmt.Errorf("at least one source must be specified")
+		return nil, errors.New("at least one source must be specified")
 	}
 
 	return sources, nil
@@ -176,7 +176,7 @@ func resolveCollectSources(raw string) ([]string, error) {
 func parseSinceWindow(raw string) (time.Duration, error) {
 	value := strings.TrimSpace(strings.ToLower(raw))
 	if value == "" {
-		return 0, fmt.Errorf("since window must not be empty")
+		return 0, errors.New("since window must not be empty")
 	}
 
 	if strings.HasSuffix(value, "d") {
@@ -186,7 +186,7 @@ func parseSinceWindow(raw string) (time.Duration, error) {
 			return 0, fmt.Errorf("invalid since window %q", raw)
 		}
 		if count <= 0 {
-			return 0, fmt.Errorf("since window must be greater than zero")
+			return 0, errors.New("since window must be greater than zero")
 		}
 		return time.Duration(count) * 24 * time.Hour, nil
 	}
@@ -196,7 +196,7 @@ func parseSinceWindow(raw string) (time.Duration, error) {
 		return 0, fmt.Errorf("invalid since window %q", raw)
 	}
 	if window <= 0 {
-		return 0, fmt.Errorf("since window must be greater than zero")
+		return 0, errors.New("since window must be greater than zero")
 	}
 	return window, nil
 }
@@ -213,13 +213,49 @@ func ensureStorageLayout(dir string) error {
 	return nil
 }
 
+func buildCollector(source string, cfg *config.Config, store *storage.Storage) (domain.SourceCollector, error) { //nolint:ireturn // factory function intentionally returns interface
+	switch source {
+	case "github":
+		if !cfg.Sources.GitHub.Enabled {
+			return nil, errors.New("github collection is disabled in config")
+		}
+		if strings.TrimSpace(os.Getenv("GITHUB_TOKEN")) == "" {
+			return nil, errors.New("GITHUB_TOKEN is required for github collection")
+		}
+
+		ghCfg := github.CollectorConfig{
+			Enabled:            cfg.Sources.GitHub.Enabled,
+			SearchIssues:       cfg.Sources.GitHub.SearchIssues,
+			SearchDiscussions:  cfg.Sources.GitHub.SearchDiscussions,
+			MaxItemsPerRun:     cfg.Sources.GitHub.MaxItemsPerRun,
+			MaxCommentsPerItem: cfg.Sources.GitHub.MaxCommentsPerItem,
+			Repositories:       cfg.Sources.GitHub.Repositories,
+			Languages:          cfg.Sources.GitHub.Languages,
+			Labels:             cfg.Sources.GitHub.Labels,
+			MaxRequests:        cfg.Limits.MaxGitHubRequests,
+		}
+
+		collector, err := github.New(ghCfg)
+		if err != nil {
+			return nil, fmt.Errorf("create github collector: %w", err)
+		}
+
+		// Attach disk cache.
+		collector.WithCache(store)
+		return collector, nil
+
+	default:
+		return nil, fmt.Errorf("source %q is not supported by the collect command yet", source)
+	}
+}
+
 type collectStatsDelta struct {
 	collected int
 	skipped   int
 	requests  int
 }
 
-func statsDelta(before, after domain.ResearchStats) collectStatsDelta {
+func statsDelta(before, after *domain.ResearchStats) collectStatsDelta {
 	return collectStatsDelta{
 		collected: after.RawSignalsCollected - before.RawSignalsCollected,
 		skipped:   after.RawSignalsSkipped - before.RawSignalsSkipped,

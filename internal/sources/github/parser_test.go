@@ -6,10 +6,11 @@ import (
 
 	"github.com/moontechs/signalforge/internal/domain"
 )
+
 var (
-	t1 = time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
-	t2 = time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC)
-	t3 = time.Date(2025, 1, 3, 0, 0, 0, 0, time.UTC)
+	t1          = time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	t2          = time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC)
+	t3          = time.Date(2025, 1, 3, 0, 0, 0, 0, time.UTC)
 	collectedAt = time.Date(2025, 2, 1, 12, 0, 0, 0, time.UTC)
 )
 
@@ -33,9 +34,9 @@ func TestParseIssueToSignal_Basic(t *testing.T) {
 		User:     ghUser{Login: "user1", ID: 100},
 		Comments: 3,
 		Reactions: ghReactions{
-			Plus1:  5,
-			Heart:  2,
-			Laugh:  1,
+			Plus1: 5,
+			Heart: 2,
+			Laugh: 1,
 		},
 	}
 
@@ -282,11 +283,11 @@ func TestParseIssueToSignal_NoComments(t *testing.T) {
 // TestParseDiscussionToSignal_Basic verifies a basic discussion is correctly mapped.
 func TestParseDiscussionToSignal_Basic(t *testing.T) {
 	disc := &graphQLDiscussionNode{
-		ID:      "D_kwDOABC123",
-		Number:  1,
-		Title:   "How about a dark mode?",
-		Body:    "I think the app would benefit from a dark mode option.",
-		URL:     "https://github.com/owner/repo/discussions/1",
+		ID:        "D_kwDOABC123",
+		Number:    1,
+		Title:     "How about a dark mode?",
+		Body:      "I think the app would benefit from a dark mode option.",
+		URL:       "https://github.com/owner/repo/discussions/1",
 		CreatedAt: t1,
 		UpdatedAt: t2,
 		Category: &struct {
@@ -298,13 +299,13 @@ func TestParseDiscussionToSignal_Basic(t *testing.T) {
 				Name string `json:"name"`
 			} `json:"nodes"`
 		}{Nodes: []struct {
-				Name string `json:"name"`
-			}{
-				{Name: "enhancement"},
-				{Name: "feature"},
-			}},
+			Name string `json:"name"`
+		}{
+			{Name: "enhancement"},
+			{Name: "feature"},
+		}},
 		Comments: &struct {
-			TotalCount int                       `json:"totalCount"`
+			TotalCount int                        `json:"totalCount"`
 			Nodes      []graphQLDiscussionComment `json:"nodes"`
 		}{
 			TotalCount: 2,
@@ -398,16 +399,16 @@ func TestParseDiscussionToSignal_Basic(t *testing.T) {
 // TestParseDiscussionToSignal_EmptyFields verifies parsing with minimal/empty discussion fields.
 func TestParseDiscussionToSignal_EmptyFields(t *testing.T) {
 	disc := &graphQLDiscussionNode{
-		ID:        "D_kwEMPTY",
-		Number:    0,
-		Title:     "",
-		Body:      "",
-		URL:       "",
-		CreatedAt: t1,
-		UpdatedAt: t1,
-		Category:  nil,
-		Labels:    nil,
-		Comments:  nil,
+		ID:          "D_kwEMPTY",
+		Number:      0,
+		Title:       "",
+		Body:        "",
+		URL:         "",
+		CreatedAt:   t1,
+		UpdatedAt:   t1,
+		Category:    nil,
+		Labels:      nil,
+		Comments:    nil,
 		UpvoteCount: 0,
 	}
 
@@ -464,7 +465,7 @@ func TestParseDiscussionToSignal_MissingLabels(t *testing.T) {
 		Category:  nil,
 		Labels:    nil,
 		Comments: &struct {
-			TotalCount int                       `json:"totalCount"`
+			TotalCount int                        `json:"totalCount"`
 			Nodes      []graphQLDiscussionComment `json:"nodes"`
 		}{
 			TotalCount: 0,
@@ -505,7 +506,7 @@ func TestParseDiscussionToSignal_CommentCap(t *testing.T) {
 			Slug string `json:"slug"`
 		}{Name: "Q&A", Slug: "qna"},
 		Comments: &struct {
-			TotalCount int                       `json:"totalCount"`
+			TotalCount int                        `json:"totalCount"`
 			Nodes      []graphQLDiscussionComment `json:"nodes"`
 		}{
 			TotalCount: 4,
@@ -736,11 +737,11 @@ func TestParseIssueToSignal_ContentHashStability(t *testing.T) {
 // for discussions.
 func TestParseDiscussionToSignal_ContentHashStability(t *testing.T) {
 	disc := &graphQLDiscussionNode{
-		ID:      "D_kwTEST",
-		Number:  1,
-		Title:   "Discussion hash test",
-		Body:    "Body",
-		URL:     "https://github.com/o/r/discussions/1",
+		ID:        "D_kwTEST",
+		Number:    1,
+		Title:     "Discussion hash test",
+		Body:      "Body",
+		URL:       "https://github.com/o/r/discussions/1",
 		CreatedAt: t1,
 		UpdatedAt: t2,
 		Category: &struct {
@@ -748,7 +749,7 @@ func TestParseDiscussionToSignal_ContentHashStability(t *testing.T) {
 			Slug string `json:"slug"`
 		}{Name: "Ideas", Slug: "ideas"},
 		Comments: &struct {
-			TotalCount int                       `json:"totalCount"`
+			TotalCount int                        `json:"totalCount"`
 			Nodes      []graphQLDiscussionComment `json:"nodes"`
 		}{
 			TotalCount: 2,

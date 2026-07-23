@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -48,14 +49,14 @@ type graphQLDiscussionResponse struct {
 }
 
 type graphQLDiscussionNode struct {
-	ID          string    `json:"id"`
-	Number      int       `json:"number"`
-	Title       string    `json:"title"`
-	Body        string    `json:"body"`
-	URL         string    `json:"url"`
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
-	Category    *struct {
+	ID        string    `json:"id"`
+	Number    int       `json:"number"`
+	Title     string    `json:"title"`
+	Body      string    `json:"body"`
+	URL       string    `json:"url"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+	Category  *struct {
 		Name string `json:"name"`
 		Slug string `json:"slug"`
 	} `json:"category"`
@@ -65,7 +66,7 @@ type graphQLDiscussionNode struct {
 		} `json:"nodes"`
 	} `json:"labels"`
 	Comments *struct {
-		TotalCount int                       `json:"totalCount"`
+		TotalCount int                        `json:"totalCount"`
 		Nodes      []graphQLDiscussionComment `json:"nodes"`
 	} `json:"comments"`
 	UpvoteCount int `json:"upvoteCount"`
@@ -200,11 +201,11 @@ func listRepoDiscussions(ctx context.Context, c *githubClient, owner, repo, sinc
 // parseGraphQLResponse unmarshals the data portion of a GraphQL response into the target.
 func parseGraphQLResponse(gqlResp *graphQLResponse, target any) error {
 	if gqlResp == nil {
-		return fmt.Errorf("nil graphql response")
+		return errors.New("nil graphql response")
 	}
 
 	if len(gqlResp.Data) == 0 {
-		return fmt.Errorf("empty graphql response data")
+		return errors.New("empty graphql response data")
 	}
 
 	if err := json.Unmarshal(gqlResp.Data, target); err != nil {
@@ -233,5 +234,3 @@ func getDiscussionCategory(node *graphQLDiscussionNode) string {
 	}
 	return node.Category.Name
 }
-
-
