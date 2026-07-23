@@ -15,12 +15,12 @@ var (
 
 // RateLimitError indicates a GitHub API rate limit was reached.
 type RateLimitError struct {
-	IsPrimary   bool          // REST API (5000 req/h) or GraphQL point limit
-	IsSecondary bool          // Abuse detection / secondary rate limit
-	RetryAfter  time.Duration // Suggested wait time from Retry-After header
+	IsPrimary   bool          // REST API (5000 req/h) or GraphQL point limit.
+	IsSecondary bool          // Abuse detection / secondary rate limit.
+	RetryAfter  time.Duration // Suggested wait time from Retry-After header.
 	Limit       int
 	Remaining   int
-	Reset       time.Time // When the rate limit window resets
+	Reset       time.Time // When the rate limit window resets.
 }
 
 func (e *RateLimitError) Error() string {
@@ -72,7 +72,7 @@ func (e *RetryExhaustionError) Unwrap() error {
 // MalformedResponseError indicates an unexpected or unparseable upstream response.
 type MalformedResponseError struct {
 	Wrapped error
-	Body    string // truncated response body for debugging
+	Body    string // truncated response body for debugging.
 }
 
 func (e *MalformedResponseError) Error() string {

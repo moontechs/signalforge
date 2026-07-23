@@ -14,7 +14,7 @@ var (
 	collectedAt = time.Date(2025, 2, 1, 12, 0, 0, 0, time.UTC)
 )
 
-// ---- Issue parsing tests ----
+// ---- Issue parsing tests ----.
 
 // TestParseIssueToSignal_Basic verifies a basic issue is correctly mapped.
 func TestParseIssueToSignal_Basic(t *testing.T) {
@@ -48,7 +48,7 @@ func TestParseIssueToSignal_Basic(t *testing.T) {
 
 	signal := parseIssueToSignal(issue, "owner", "repo", comments, 10, collectedAt)
 
-	// Check basic fields
+	// Check basic fields.
 	if signal.ID != "github_issue:42" {
 		t.Fatalf("expected ID github_issue:42, got %q", signal.ID)
 	}
@@ -95,7 +95,7 @@ func TestParseIssueToSignal_Basic(t *testing.T) {
 		t.Fatalf("unexpected CollectedAt: %v", signal.CollectedAt)
 	}
 
-	// Check labels
+	// Check labels.
 	if len(signal.Labels) != 2 {
 		t.Fatalf("expected 2 labels, got %d", len(signal.Labels))
 	}
@@ -103,22 +103,22 @@ func TestParseIssueToSignal_Basic(t *testing.T) {
 		t.Fatalf("unexpected labels: %v", signal.Labels)
 	}
 
-	// Check tags match labels
+	// Check tags match labels.
 	if len(signal.Tags) != 2 {
 		t.Fatalf("expected 2 tags, got %d", len(signal.Tags))
 	}
 
-	// Check comments
+	// Check comments.
 	if len(signal.Comments) != 2 {
 		t.Fatalf("expected 2 comments, got %d", len(signal.Comments))
 	}
-	// Comments should be sorted by CreatedAt ascending
+	// Comments should be sorted by CreatedAt ascending.
 	if signal.Comments[0].ID != "1001" || signal.Comments[1].ID != "1002" {
 		t.Fatalf("unexpected comment order: IDs are %q, %q",
 			signal.Comments[0].ID, signal.Comments[1].ID)
 	}
 
-	// Content hash should be non-empty
+	// Content hash should be non-empty.
 	if signal.ContentHash == "" {
 		t.Fatal("expected non-empty ContentHash")
 	}
@@ -167,17 +167,17 @@ func TestParseIssueToSignal_EmptyFields(t *testing.T) {
 	if len(signal.Comments) != 0 {
 		t.Fatalf("expected 0 comments, got %d", len(signal.Comments))
 	}
-	if signal.Repository != "/" { // owner and repo empty strings
+	if signal.Repository != "/" { // owner and repo empty strings.
 		t.Fatalf("expected Repository '/', got %q", signal.Repository)
 	}
 
-	// Content hash should still be non-empty even with empty fields
+	// Content hash should still be non-empty even with empty fields.
 	if signal.ContentHash == "" {
 		t.Fatal("expected non-empty ContentHash even with empty fields")
 	}
 }
 
-// TestParseIssueToSignal_MissingOptionalValues verifies parsing when optional
+// TestParseIssueToSignal_MissingOptionalValues verifies parsing when optional.
 // fields like reactions are absent.
 func TestParseIssueToSignal_MissingOptionalValues(t *testing.T) {
 	t.Parallel()
@@ -192,7 +192,7 @@ func TestParseIssueToSignal_MissingOptionalValues(t *testing.T) {
 		Labels:    []ghLabel{},
 		User:      ghUser{Login: "testuser"},
 		Comments:  0,
-		// Reactions is zero-value
+		// Reactions is zero-value.
 	}
 
 	signal := parseIssueToSignal(issue, "o", "r", nil, 5, collectedAt)
@@ -217,7 +217,7 @@ func TestParseIssueToSignal_MissingOptionalValues(t *testing.T) {
 	}
 }
 
-// TestParseIssueToSignal_CommentCap verifies that comments are truncated
+// TestParseIssueToSignal_CommentCap verifies that comments are truncated.
 // to the maxComments limit and sorted by CreatedAt ascending.
 func TestParseIssueToSignal_CommentCap(t *testing.T) {
 	t.Parallel()
@@ -233,7 +233,7 @@ func TestParseIssueToSignal_CommentCap(t *testing.T) {
 		Reactions: ghReactions{Plus1: 1},
 	}
 
-	// Create comments in reverse chronological order to test sorting
+	// Create comments in reverse chronological order to test sorting.
 	comments := []ghIssueComment{
 		{ID: 5, Body: "Fifth comment", CreatedAt: t3},
 		{ID: 4, Body: "Fourth comment", CreatedAt: t2.Add(3 * time.Hour)},
@@ -242,20 +242,20 @@ func TestParseIssueToSignal_CommentCap(t *testing.T) {
 		{ID: 1, Body: "First comment", CreatedAt: t2},
 	}
 
-	// Cap at 3 comments
+	// Cap at 3 comments.
 	signal := parseIssueToSignal(issue, "o", "r", comments, 3, collectedAt)
 
 	if len(signal.Comments) != 3 {
 		t.Fatalf("expected 3 comments (capped), got %d", len(signal.Comments))
 	}
 
-	// Should be sorted by CreatedAt ascending (IDs 1, 2, 3)
+	// Should be sorted by CreatedAt ascending (IDs 1, 2, 3).
 	if signal.Comments[0].ID != "1" || signal.Comments[1].ID != "2" || signal.Comments[2].ID != "3" {
 		t.Fatalf("unexpected comment order after cap: IDs %q, %q, %q (expected 1,2,3)",
 			signal.Comments[0].ID, signal.Comments[1].ID, signal.Comments[2].ID)
 	}
 
-	// Verify bodies match
+	// Verify bodies match.
 	if signal.Comments[0].Body != "First comment" {
 		t.Fatalf("unexpected body: %q", signal.Comments[0].Body)
 	}
@@ -283,7 +283,7 @@ func TestParseIssueToSignal_NoComments(t *testing.T) {
 	}
 }
 
-// ---- Discussion parsing tests ----
+// ---- Discussion parsing tests ----.
 
 // TestParseDiscussionToSignal_Basic verifies a basic discussion is correctly mapped.
 func TestParseDiscussionToSignal_Basic(t *testing.T) {
@@ -325,7 +325,7 @@ func TestParseDiscussionToSignal_Basic(t *testing.T) {
 
 	signal := parseDiscussionToSignal(disc, "owner", "repo", 10, collectedAt)
 
-	// Check basic fields
+	// Check basic fields.
 	if signal.ID != "github_discussion:D_kwDOABC123" {
 		t.Fatalf("expected ID github_discussion:D_kwDOABC123, got %q", signal.ID)
 	}
@@ -375,7 +375,7 @@ func TestParseDiscussionToSignal_Basic(t *testing.T) {
 		t.Fatalf("unexpected CollectedAt: %v", signal.CollectedAt)
 	}
 
-	// Check labels
+	// Check labels.
 	if len(signal.Labels) != 2 {
 		t.Fatalf("expected 2 labels, got %d", len(signal.Labels))
 	}
@@ -383,12 +383,12 @@ func TestParseDiscussionToSignal_Basic(t *testing.T) {
 		t.Fatalf("unexpected labels: %v", signal.Labels)
 	}
 
-	// Tags should include labels + category
+	// Tags should include labels + category.
 	if len(signal.Tags) != 3 {
 		t.Fatalf("expected 3 tags (labels+category), got %d: %v", len(signal.Tags), signal.Tags)
 	}
 
-	// Check comments
+	// Check comments.
 	if len(signal.Comments) != 2 {
 		t.Fatalf("expected 2 comments, got %d", len(signal.Comments))
 	}
@@ -396,7 +396,7 @@ func TestParseDiscussionToSignal_Basic(t *testing.T) {
 		t.Fatalf("unexpected comment order: IDs %q, %q", signal.Comments[0].ID, signal.Comments[1].ID)
 	}
 
-	// Content hash should be non-empty
+	// Content hash should be non-empty.
 	if signal.ContentHash == "" {
 		t.Fatal("expected non-empty ContentHash")
 	}
@@ -490,7 +490,7 @@ func TestParseDiscussionToSignal_MissingLabels(t *testing.T) {
 	if signal.Category != "" {
 		t.Fatalf("expected empty Category, got %q", signal.Category)
 	}
-	// Tags should be empty since no labels and no category
+	// Tags should be empty since no labels and no category.
 	if len(signal.Tags) != 0 {
 		t.Fatalf("expected 0 tags, got %d: %v", len(signal.Tags), signal.Tags)
 	}
@@ -529,21 +529,21 @@ func TestParseDiscussionToSignal_CommentCap(t *testing.T) {
 		UpvoteCount: 3,
 	}
 
-	// Cap at 2 comments
+	// Cap at 2 comments.
 	signal := parseDiscussionToSignal(disc, "o", "r", 2, collectedAt)
 
 	if len(signal.Comments) != 2 {
 		t.Fatalf("expected 2 comments (capped), got %d", len(signal.Comments))
 	}
 
-	// Should be sorted by CreatedAt ascending and capped
+	// Should be sorted by CreatedAt ascending and capped.
 	if signal.Comments[0].ID != "c1" || signal.Comments[1].ID != "c2" {
 		t.Fatalf("unexpected comment order after cap: IDs %q, %q (expected c1,c2)",
 			signal.Comments[0].ID, signal.Comments[1].ID)
 	}
 }
 
-// ---- Content hash tests ----
+// ---- Content hash tests ----.
 
 // TestContentHash_Stability verifies that identical inputs produce identical hashes.
 func TestContentHash_Stability(t *testing.T) {
@@ -606,11 +606,11 @@ func TestContentHash_EmptyParts(t *testing.T) {
 	}
 }
 
-// TestContentHash_CommentOrder verifies that different comment ordering
+// TestContentHash_CommentOrder verifies that different comment ordering.
 // produces different hashes (because we sort them).
 func TestContentHash_CommentOrder(t *testing.T) {
 	t.Parallel()
-	// Both have same comments, but hash should be stable because
+	// Both have same comments, but hash should be stable because.
 	// comments are sorted by CreatedAt in the mapping functions.
 	hashA := generateContentHash("Title", "Body", []domain.Comment{
 		{Body: "First", CreatedAt: t1},
@@ -626,7 +626,7 @@ func TestContentHash_CommentOrder(t *testing.T) {
 	}
 }
 
-// ---- Source ID tests ----
+// ---- Source ID tests ----.
 
 // TestIssueSourceID verifies the source ID format for issues.
 func TestIssueSourceID(t *testing.T) {
@@ -646,7 +646,7 @@ func TestDiscussionSourceID(t *testing.T) {
 	}
 }
 
-// ---- Extracted helper tests ----
+// ---- Extracted helper tests ----.
 
 // TestExtractOwnerRepoFromHTML verifies HTML URL parsing for owner/repo extraction.
 func TestExtractOwnerRepoFromHTML(t *testing.T) {
@@ -661,19 +661,19 @@ func TestExtractOwnerRepoFromHTML(t *testing.T) {
 		t.Fatalf("expected owner/repo, got %s/%s", owner, repo)
 	}
 
-	// Empty
+	// Empty.
 	owner, repo = extractOwnerRepoFromHTML("")
 	if owner != "" || repo != "" {
 		t.Fatalf("expected empty, got %s/%s", owner, repo)
 	}
 
-	// Invalid
+	// Invalid.
 	owner, repo = extractOwnerRepoFromHTML("not-a-github-url")
 	if owner != "" || repo != "" {
 		t.Fatalf("expected empty for invalid URL, got %s/%s", owner, repo)
 	}
 
-	// Short URL (no issue/discussion path component)
+	// Short URL (no issue/discussion path component).
 	owner, repo = extractOwnerRepoFromHTML("https://github.com/owner/repo")
 	if owner != "owner" || repo != "repo" {
 		t.Fatalf("expected owner/repo, got %s/%s", owner, repo)
@@ -688,13 +688,13 @@ func TestExtractOwnerRepo(t *testing.T) {
 		t.Fatalf("expected owner/repo, got %s/%s", owner, repo)
 	}
 
-	// Empty
+	// Empty.
 	owner, repo = extractOwnerRepo("")
 	if owner != "" || repo != "" {
 		t.Fatalf("expected empty, got %s/%s", owner, repo)
 	}
 
-	// Invalid
+	// Invalid.
 	owner, repo = extractOwnerRepo("not-a-url")
 	if owner != "" || repo != "" {
 		t.Fatalf("expected empty for invalid URL, got %s/%s", owner, repo)
@@ -713,16 +713,16 @@ func TestExtractLabelNames(t *testing.T) {
 		t.Fatalf("unexpected label names: %v", names)
 	}
 
-	// Empty slice
+	// Empty slice.
 	names = extractLabelNames(nil)
 	if names != nil {
 		t.Fatalf("expected nil for empty labels")
 	}
 }
 
-// ---- Integration-like mapping tests ----
+// ---- Integration-like mapping tests ----.
 
-// TestParseIssueToSignal_ContentHashStability verifies that the same issue
+// TestParseIssueToSignal_ContentHashStability verifies that the same issue.
 // produces the same content hash across multiple parse calls.
 func TestParseIssueToSignal_ContentHashStability(t *testing.T) {
 	t.Parallel()
@@ -752,7 +752,7 @@ func TestParseIssueToSignal_ContentHashStability(t *testing.T) {
 	}
 }
 
-// TestParseDiscussionToSignal_ContentHashStability verifies content hash stability
+// TestParseDiscussionToSignal_ContentHashStability verifies content hash stability.
 // for discussions.
 func TestParseDiscussionToSignal_ContentHashStability(t *testing.T) {
 	t.Parallel()

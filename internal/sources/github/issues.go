@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// ---- Upstream API types (REST) ----
+// ---- Upstream API types (REST) ----.
 
 type ghIssue struct {
 	ID          int64           `json:"id"`
@@ -67,9 +67,9 @@ type ghSearchResponse struct {
 	Items      []ghIssue `json:"items"`
 }
 
-// ---- Fetching issues ----
+// ---- Fetching issues ----.
 
-// fetchIssues fetches issues from GitHub using the appropriate strategy
+// fetchIssues fetches issues from GitHub using the appropriate strategy.
 // (search API or per-repo listing) based on the scope.
 func fetchIssues(ctx context.Context, c *githubClient, scope collectionScope) ([]ghIssue, error) {
 	if !scope.searchIssues {
@@ -96,13 +96,13 @@ func fetchIssuesPerRepoStrategy(ctx context.Context, c *githubClient, scope coll
 		owner, repoName, err := parseRepo(repo)
 		if err != nil {
 			lastErr = err
-			continue // skip invalid repos
+			continue // skip invalid repos.
 		}
 
 		issues, err := listRepoIssues(ctx, c, owner, repoName, scope.since, maxItems)
 		if err != nil {
 			lastErr = err
-			continue // Partial failure: continue with other repos
+			continue // Partial failure: continue with other repos.
 		}
 
 		allIssues = append(allIssues, issues...)
@@ -112,7 +112,7 @@ func fetchIssuesPerRepoStrategy(ctx context.Context, c *githubClient, scope coll
 		}
 	}
 
-	// If no issues were returned and there were errors, surface the error
+	// If no issues were returned and there were errors, surface the error.
 	if len(allIssues) == 0 && lastErr != nil {
 		return nil, lastErr
 	}
@@ -156,7 +156,7 @@ func fetchIssuesSearchStrategy(ctx context.Context, c *githubClient, scope colle
 
 		allIssues = append(allIssues, searchResp.Items...)
 
-		// Check if there are more pages
+		// Check if there are more pages.
 		if len(searchResp.Items) < perPage || (scope.maxItems > 0 && len(allIssues) >= scope.maxItems) {
 			break
 		}
@@ -196,7 +196,7 @@ func listRepoIssues(ctx context.Context, c *githubClient, owner, repo, since str
 		cacheKey := "REST:GET:" + u
 
 		var issues []ghIssue
-		// The per-repo endpoint returns an array, not a search wrapper
+		// The per-repo endpoint returns an array, not a search wrapper.
 		resp, err := c.doJSONRequest(ctx, requestOptions{
 			Method:   "GET",
 			Path:     u,
@@ -206,7 +206,7 @@ func listRepoIssues(ctx context.Context, c *githubClient, owner, repo, since str
 			return nil, fmt.Errorf("list repo issues %s/%s: %w", owner, repo, err)
 		}
 
-		// Filter out pull requests (the issues endpoint returns PRs too)
+		// Filter out pull requests (the issues endpoint returns PRs too).
 		for _, iss := range issues {
 			if iss.PullRequest == nil {
 				allIssues = append(allIssues, iss)
@@ -221,7 +221,7 @@ func listRepoIssues(ctx context.Context, c *githubClient, owner, repo, since str
 			break
 		}
 
-		// Check Link header for next page
+		// Check Link header for next page.
 		links := parseLinkHeader(resp.Header.Get("Link"))
 		if _, ok := links["next"]; !ok {
 			break
@@ -292,7 +292,7 @@ func buildSearchQuery(scope collectionScope) string {
 
 	parts = append(parts, "is:issue", "is:open")
 
-	// Add language filter
+	// Add language filter.
 	if len(scope.languages) > 0 {
 		for _, lang := range scope.languages {
 			if lang != "" {
@@ -301,7 +301,7 @@ func buildSearchQuery(scope collectionScope) string {
 		}
 	}
 
-	// Add label filter
+	// Add label filter.
 	if len(scope.labels) > 0 {
 		for _, label := range scope.labels {
 			if label != "" {
@@ -310,7 +310,7 @@ func buildSearchQuery(scope collectionScope) string {
 		}
 	}
 
-	// Add repository filter (only for search strategy with repos specified)
+	// Add repository filter (only for search strategy with repos specified).
 	if len(scope.repos) > 0 && scope.strategy == strategySearch {
 		for _, repo := range scope.repos {
 			if repo != "" {
@@ -319,13 +319,13 @@ func buildSearchQuery(scope collectionScope) string {
 		}
 	}
 
-	// Add created/updated filter (search API doesn't support "since" directly for issues,
-	// but we can use updated:>=YYYY-MM-DD)
+	// Add created/updated filter since the search API does not support "since" directly for issues.
+	// but we can use updated:>=YYYY-MM-DD.)
 	if scope.since != "" {
-		// Convert ISO date to search format
+		// Convert ISO date to search format.
 		sinceDate := scope.since
 		if len(sinceDate) > 10 {
-			sinceDate = sinceDate[:10] // just YYYY-MM-DD
+			sinceDate = sinceDate[:10] // just YYYY-MM-DD.
 		}
 		parts = append(parts, "updated:>="+sinceDate)
 	}
@@ -333,4 +333,4 @@ func buildSearchQuery(scope collectionScope) string {
 	return strings.Join(parts, " ")
 }
 
-// ensure interface check for unused import
+// ensure interface check for unused import.

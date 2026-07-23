@@ -102,16 +102,16 @@ files
 `internal/sources/github/integration_test.go`,
 `internal/sources/github/cache_test.go`,
 `internal/config/config_test.go`
-  - [ ] Add `t.Parallel()` as first statement in every
+  - [x] Add `t.Parallel()` as first statement in every
 top-level test function across all test files
-  - [ ] For table-driven subtests
+  - [x] For table-driven subtests
 (TestGitHubConfigValidate, TestNormalizeSourceName in
 config_test.go): add `tc := tc` before `t.Run`, call
 `t.Parallel()` inside subtest closure
-  - [ ] For tests using shared test fixtures
+  - [x] For tests using shared test fixtures
 (parser_test.go globals), ensure all test functions call
 t.Parallel() before reading globals
-  - [ ] Run `go test ./...` — must pass with `-race`
+  - [x] Run `go test ./...` — must pass with `-race`
 flag (ensure parallel tests don't race)
 ### Task 3: Fix godot (139 issues) — Comment punctuation
 **Files:**

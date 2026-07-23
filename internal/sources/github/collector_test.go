@@ -91,7 +91,7 @@ func TestCollector_WithNow(t *testing.T) {
 	}
 }
 
-// TestCollector_Collect_Empty verifies that Collect returns empty results
+// TestCollector_Collect_Empty verifies that Collect returns empty results.
 // when both sources are disabled.
 func TestCollector_Collect_Empty(t *testing.T) {
 	t.Parallel()
@@ -135,7 +135,7 @@ func TestDeriveScope_SearchStrategy(t *testing.T) {
 	t.Parallel()
 	scope := deriveScope(
 		configValues{MaxItemsPerRun: 100, MaxCommentsPerItem: 10},
-		nil, // empty repos
+		nil, // empty repos.
 		[]string{"bug"},
 		[]string{"go"},
 		100,
@@ -232,7 +232,7 @@ func TestDeriveScope_EmptyValues(t *testing.T) {
 // TestErrorTypes verifies the custom error types work as expected.
 func TestErrorTypes(t *testing.T) {
 	t.Parallel()
-	// RateLimitError
+	// RateLimitError.
 	rle := &RateLimitError{
 		IsPrimary: true,
 		Remaining: 0,
@@ -249,7 +249,7 @@ func TestErrorTypes(t *testing.T) {
 		t.Fatal("expected IsSecondaryRateLimit to return false")
 	}
 
-	// Secondary rate limit
+	// Secondary rate limit.
 	sl := &RateLimitError{IsSecondary: true, RetryAfter: 10 * time.Second}
 	if !IsRateLimit(sl) {
 		t.Fatal("expected IsRateLimit to return true")
@@ -261,19 +261,19 @@ func TestErrorTypes(t *testing.T) {
 		t.Fatal("expected IsPrimaryRateLimit to return false")
 	}
 
-	// RetryExhaustionError
+	// RetryExhaustionError.
 	re := &RetryExhaustionError{Wrapped: http.ErrAbortHandler, Attempts: 3}
 	if re.Error() == "" {
 		t.Fatal("expected non-empty error string")
 	}
 
-	// MalformedResponseError
+	// MalformedResponseError.
 	mr := &MalformedResponseError{Wrapped: http.ErrBodyNotAllowed, Body: "<bad>"}
 	if mr.Error() == "" {
 		t.Fatal("expected non-empty error string")
 	}
 
-	// RequestLimitError
+	// RequestLimitError.
 	rl := &RequestLimitError{Limit: 100}
 	if rl.Error() == "" {
 		t.Fatal("expected non-empty error string")

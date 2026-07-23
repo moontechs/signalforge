@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// ---- Upstream API types (GraphQL) ----
+// ---- Upstream API types (GraphQL) ----.
 
 // discussionsQuery is the GraphQL query for fetching discussions.
 const discussionsQuery = `
@@ -34,7 +34,7 @@ query($owner: String!, $repo: String!, $cursor: String, $first: Int = 50) {
 }`
 
 // graphQLDiscussionResponse mirrors the data portion returned by the GitHub GraphQL API.
-// It is deserialized from the json.RawMessage inside graphQLResponse.Data,
+// It is deserialized from the json.RawMessage inside graphQLResponse.Data,.
 // so the outer {"data": ...} wrapper is already removed.
 type graphQLDiscussionResponse struct {
 	Repository *struct {
@@ -78,7 +78,7 @@ type graphQLDiscussionComment struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
-// ---- Fetching discussions ----
+// ---- Fetching discussions ----.
 
 // fetchDiscussions fetches GitHub Discussions for the given repositories using GraphQL.
 func fetchDiscussions(ctx context.Context, c *githubClient, repos []string, scope collectionScope) ([]graphQLDiscussionNode, error) {
@@ -87,7 +87,7 @@ func fetchDiscussions(ctx context.Context, c *githubClient, repos []string, scop
 	}
 
 	if len(repos) == 0 {
-		// Discussions can only be fetched per-repo; use repos from scope
+		// Discussions can only be fetched per-repo; use repos from scope.
 		repos = scope.repos
 	}
 
@@ -113,7 +113,7 @@ func fetchDiscussions(ctx context.Context, c *githubClient, repos []string, scop
 		discussions, err := listRepoDiscussions(ctx, c, owner, repoName, scope.since, maxItems)
 		if err != nil {
 			lastErr = err
-			continue // Partial failure: skip repo
+			continue // Partial failure: skip repo.
 		}
 
 		allDiscussions = append(allDiscussions, discussions...)
@@ -123,7 +123,7 @@ func fetchDiscussions(ctx context.Context, c *githubClient, repos []string, scop
 		}
 	}
 
-	// If no discussions were returned and there were errors, surface the error
+	// If no discussions were returned and there were errors, surface the error.
 	if len(allDiscussions) == 0 && lastErr != nil {
 		return nil, lastErr
 	}
@@ -148,26 +148,26 @@ func listRepoDiscussions(ctx context.Context, c *githubClient, owner, repo, sinc
 
 		gqlResp, err := c.doGraphQL(ctx, discussionsQuery, vars)
 		if err != nil {
-			// Return partial results if we have some, wrap the error
+			// Return partial results if we have some, wrap the error.
 			if len(allDiscussions) > 0 {
 				return allDiscussions, fmt.Errorf("graphql error after partial results: %w", err)
 			}
 			return nil, fmt.Errorf("fetch discussions %s/%s: %w", owner, repo, err)
 		}
 
-		// Parse the response
+		// Parse the response.
 		var resp graphQLDiscussionResponse
 		if err := parseGraphQLResponse(gqlResp, &resp); err != nil {
 			return allDiscussions, fmt.Errorf("parse discussions %s/%s: %w", owner, repo, err)
 		}
 
 		if resp.Repository == nil {
-			break // repository not found or no access
+			break // repository not found or no access.
 		}
 
 		nodes := resp.Repository.Discussions.Nodes
 
-		// Filter by since date if provided
+		// Filter by since date if provided.
 		if since != "" {
 			sinceTime, err := time.Parse(time.RFC3339, since)
 			if err == nil {
