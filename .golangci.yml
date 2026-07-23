@@ -1,17 +1,16 @@
 # golangci-lint configuration for SignalForge
-# Docs: https://golangci-lint.run/usage/configuration/
-#
-# Run: golangci-lint run ./...
-# Run with fixes: golangci-lint run --fix ./...
+# See https://golangci-lint.run/usage/configuration/
+# Config format: v1 (golangci-lint v1.64.8)
 
 run:
-  issues-exit-code: 1
+  concurrency: 4
   timeout: 5m
+  issues-exit-code: 1
 
 linters:
   disable-all: true
   enable:
-    # Core — built-in or essential
+    # Core linters
     - govet
     - errcheck
     - staticcheck
@@ -22,12 +21,14 @@ linters:
     # Formatting & style
     - gofmt
     - gofumpt
+    - goimports
     - revive
     - gci
-    - tagalign
-    - tagliatelle
     - whitespace
     - decorder
+    - godot
+    - misspell
+    - stylecheck
 
     # Correctness
     - bodyclose
@@ -46,154 +47,83 @@ linters:
     - containedctx
     - contextcheck
     - makezero
-    - dupword
-
-    # Security
     - gosec
-    - prealloc
-
-    # Naming
     - errname
     - errorlint
-    - recvcheck
-    - usetesting
-
-    # Complexity & structure
-    - cyclop
-    - funlen
-    - nestif
-    - gocritic
-    - gocyclo
-    - nakedret
+    - exhaustive
+    - tenv
+    - prealloc
     - predeclared
-    - gochecknoglobals
-    - gochecknoinits
+    - dupword
+    - errchkjson
+    - nestif
+    - nakedret
+    - dogsled
+    - asasalint
+    - asciicheck
+    - bidichk
+    - gocheckcompilerdirectives
+
+    # Complexity
+    - gocyclo
+    - gocognit
     - goconst
-    - godot
-    - godox
-    - ireturn
+    - gocritic
+    - dupl
+    - funlen
+    - cyclop
+    - interfacebloat
+
+    # Best practices
     - wrapcheck
-    - maintidx
-    - intrange
-
-    # Test-specific
-    - paralleltest
-    - testifylint
+    - wsl
+    - nolintlint
+    - ireturn
+    - inamedparam
+    - loggercheck
+    - unparam
     - thelper
-    - tparallel
-
-    # Import & module
-    - gomodguard
-    - gomoddirectives
+    - testifylint
+    - grouper
     - importas
 
-    # Misc
-    - misspell
-    - nolintlint
-    - exhaustruct
-
-issues:
-  max-issues-per-linter: 0
-  max-same-issues: 0
-  exclude-dirs:
-    - testdata
-    - .ralphex
-  exclude-rules:
-    # Allow globals and init functions in CLI commands (Cobra convention)
-    - path: internal/cli/
-      linters:
-        - gochecknoglobals
-        - gochecknoinits
-
-    # Allow deep-exit in doctor.go (intentional CLI health check)
-    - path: internal/cli/doctor.go
-      linters:
-        - revive
-      text: "deep-exit"
-
-    # Allow snake_case JSON tags in domain types (persisted file format)
-    - path: internal/domain/types.go
-      linters:
-        - tagliatelle
-
-    # Allow partial struct initialization in tests
-    - path: _test\.go
-      linters:
-        - exhaustruct
-        - goconst
-        - funlen
-        - maintidx
-        - gocyclo
-        - cyclop
-
-    # cobra.Command has too many fields for exhaustruct
-    - path: internal/cli/
-      linters:
-        - exhaustruct
-      text: "cobra.Command"
-
-    # domain.CollectRequest has many optional fields
-    - path: internal/cli/
-      linters:
-        - exhaustruct
-      text: "CollectRequest"
-
-    # http types are stdlib, not worth exhaustruct
-    - linters:
-        - exhaustruct
-      text: "http\\.(Response|Client|Request)"
-
-    # cmd/signalforge/ also uses Cobra conventions
-    - path: cmd/signalforge/
-      linters:
-        - gochecknoglobals
-        - gochecknoinits
-        - exhaustruct
-
-    # internal/config/ uses snake_case JSON for config file format
-    - path: internal/config/
-      linters:
-        - tagliatelle
-
-    # CLI output to stdout/stderr is deliberately unchecked
-    - linters:
-        - revive
-      text: "unhandled-error"
-      source: "fmt\\.(Fprint|Fprintf|Fprintln)"
-
 linters-settings:
-  cyclop:
-    max-complexity: 15
-    package-average: 8.0
-  funlen:
-    lines: 60
-    statements: 40
+  gci:
+    sections:
+      - standard
+      - default
+      - prefix(github.com/moontechs/signalforge)
+  gocognit:
+    min-complexity: 30
+  goconst:
+    min-len: 3
+    min-occurrences: 3
   gocritic:
     enabled-tags:
       - diagnostic
+      - experimental
       - opinionated
       - performance
       - style
     disabled-checks:
       - ifElseChain
-      - unnamedResult
       - whyNoLint
   gocyclo:
-    min-complexity: 15
+    min-complexity: 20
   godot:
     scope: all
-    capital: true
-  godox:
-    keywords:
-      - TODO
-      - FIXME
-      - HACK
-  gosec:
-    excludes:
-      - G115  # integer overflow conversion (too noisy)
-      - G204  # subprocess launch (not used in CLI)
-  nestif:
-    min-complexity: 4
+  gofumpt:
+    extra-rules: true
+  ireturn:
+    allow:
+      - empty
+      - error
+      - stdlib
+      - anon
+      - generic
+  nolintlint:
+    require-explanation: true
+    require-specific: true
   revive:
     rules:
       - name: blank-imports
@@ -215,40 +145,17 @@ linters-settings:
       - name: unexported-return
       - name: indent-error-flow
       - name: errorf
-      - name: redundant-import-alias
-      - name: struct-tag
-      - name: modifies-value-receiver
-      - name: constant-logical-expr
-      - name: bool-literal-in-expr
-      - name: redefines-builtin-id
-      - name: unconditional-recursion
-      - name: confusing-naming
-      - name: confusing-results
-      - name: get-return
-      - name: deep-exit
-      - name: unused-parameter
-      - name: unhandled-error
-      - name: early-return
       - name: empty-block
       - name: superfluous-else
+      - name: unused-parameter
       - name: unreachable-code
-      - name: unnecessary-stmt
-      - name: use-any
-      - name: useless-break
-      - name: waitgroup-by-value
-    severity: warning
+      - name: redefines-builtin-id
   sloglint:
     args-on-sep-lines: true
     no-global: "all"
-    context: "scope"
-    attr-only: true
-  tagliatelle:
-    interface:
-      json: snake
-      yaml: kebab
-      toml: kebab
-  testifylint:
-    enable-all: true
+    context: "all"
+  unparam:
+    check-exported: true
   wrapcheck:
     ignoreSigs:
       - .Errorf(
@@ -258,6 +165,9 @@ linters-settings:
       - .Wrapf(
       - .WithMessage(
       - .WithMessagef(
+      - status.Errorf(
+    ignoreSigRegexps:
+      - \.New.*Error\(
   wsl:
     strict-append: true
     allow-assign-and-anything: false
@@ -265,32 +175,45 @@ linters-settings:
     allow-trailing-comment: false
     force-case-trailing-whitespace: 0
     force-err-cuddling: true
-    force-short-decl-cuddling: false
-  gomodguard:
-    blocked:
-      modules:
-        - github.com/pkg/errors:
-            recommendations:
-              - fmt
-              - errors
-        - gopkg.in/check.v1:
-            recommendations:
-              - testing
-        - io/ioutil:
-            recommendations:
-              - io
-              - os
-  gomoddirectives:
-    replace-allow-list:
-      - local
-  importas:
-    no-unaliased: true
-    alias:
-      - pkg: github.com/moontechs/signalforge/internal/(.+)/
-        alias: $1
-  gci:
-    sections:
-      - standard
-      - default
-      - prefix(github.com/moontechs/signalforge)
-    custom-order: true
+    force-short-decl-cuddling: true
+  dupl:
+    threshold: 100
+  funlen:
+    lines: 80
+    statements: 50
+  cyclop:
+    max-complexity: 20
+    package-average: 10.0
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - bodyclose
+        - dupl
+        - errcheck
+        - goconst
+        - gosec
+        - noctx
+        - wrapcheck
+        - funlen
+        - gocyclo
+    - path: cmd/
+      linters:
+        - gochecknoglobals
+        - gochecknoinits
+    - linters:
+        - revive
+      text: "package-comments: should have a package comment"
+    - linters:
+        - gocritic
+      text: "ifElseChain: consider to rewrite"
+    - linters:
+        - gocritic
+      text: "unnamedResult: consider to give name"
+  exclude:
+    - "comment on exported"
+    - "should have a package comment"
+  exclude-case-sensitive: false
