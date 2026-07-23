@@ -266,13 +266,13 @@ defer resp.Body.Close() (excluded via Task 1 exclude-rule)
 **Files:**
   - Modify: `internal/config/config.go`,
 `internal/config/config_test.go`
-  - [ ] `config.go:275` — Change `0o644` to `0o600` in
+  - [x] `config.go:275` — Change `0o644` to `0o600` in
 SaveConfig (config file may contain tokens)
-  - [ ] `config_test.go:122` — Change `0o644` to `0o600`
+  - [x] `config_test.go:122` — Change `0o644` to `0o600`
 in test
-  - [ ] Verify G404 (rand.Intn) is excluded by rule from
+  - [x] Verify G404 (rand.Intn) is excluded by rule from
 Task 1
-  - [ ] Run tests — must pass
+  - [x] Run tests — must pass
 ### Task 10: Fix small remaining issues — staticcheck,
 unused, errorlint, unconvert, tparallel, goconst, gocyclo,
 nestif, errcheck

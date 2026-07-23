@@ -124,7 +124,7 @@ func TestLoadConfigValidatesGitHubConfig(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
 	data := `{"sources":{"github":{"max_items_per_run":0}}}`
-	if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 
