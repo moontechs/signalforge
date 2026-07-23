@@ -161,9 +161,9 @@ casing
 1 work)
   - If any tagliatelle issues remain on non-excluded
 files, fix those JSON tags
-  - [ ] Run linter to confirm all 11 tagliatelle issues
+  - [x] Run linter to confirm all 11 tagliatelle issues
 are excluded
-  - [ ] If any remain (config types not previously
+  - [x] If any remain (config types not previously
 excluded), fix those: rename snake_case json tags to
 camelCase
 ### Task 6: Fix gocritic (16 issues) — hugeParam,
