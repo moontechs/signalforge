@@ -18,6 +18,7 @@ var DefaultSites = []string{"stackoverflow", "serverfault", "superuser"}
 
 type searchResponse struct {
 	Items          []questionDTO `json:"items"`
+	Questions      []questionDTO `json:"-"`
 	HasMore        bool          `json:"has_more"`
 	QuotaMax       int           `json:"quota_max"`
 	QuotaRemaining int           `json:"quota_remaining"`
