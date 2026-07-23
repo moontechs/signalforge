@@ -327,15 +327,15 @@ threshold
 signature substrings
   - [x] Run `go test ./...` — must pass
 ### Task 12: Final verification
-  - [ ] Run `golangci-lint run ./...` — must exit with
+  - [x] Run `golangci-lint run ./...` — must exit with
 code 0
-  - [ ] Run `go test ./...` — all tests pass
-  - [ ] Run `golangci-lint run --fix ./...` — no changes
+  - [x] Run `go test ./...` — all tests pass
+  - [x] Run `golangci-lint run --fix ./...` — no changes
 generated (idempotent)
-  - [ ] Run `go vet ./...` — no issues
-  - [ ] Verify total issue count: ~293 -> 0
+  - [x] Run `go vet ./...` — no issues
+  - [x] Verify total issue count: ~293 -> 0
 ### Task 13: Update documentation
-  - [ ] Update `.golangci.yml` comments for each new
+  - [x] Update `.golangci.yml` comments for each new
 exclude-rule (document why the pattern is intentional)
-  - [ ] Update `AGENTS.md` if new important project
+  - [x] Update `AGENTS.md` if new important project
 patterns were established

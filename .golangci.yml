@@ -271,6 +271,52 @@ issues:
         - gocritic
       text: "hugeParam: req is heavy"
       path: internal/sources/github/collector\.go
+    # gocognit: doRequest complexity is inherent to retry/rate-limit logic (84 > 30)
+    - linters:
+        - gocognit
+      text: "doRequest"
+      path: internal/sources/github/client\.go
+    # gocognit: listRepoDiscussions complexity from GraphQL query building (32 > 30)
+    - linters:
+        - gocognit
+      text: "listRepoDiscussions"
+      path: internal/sources/github/discussions\.go
+    # gocognit: test functions with high cognitive complexity from integration test setup
+    - linters:
+        - gocognit
+      path: _test\.go
+    # cyclop: doRequest high complexity is inherent to retry/rate-limit logic
+    - linters:
+        - cyclop
+      text: "doRequest"
+      path: internal/sources/github/client\.go
+    # funlen: doRequest has many statements (96 > 50) inherent to retry/rate-limit logic
+    - linters:
+        - funlen
+      text: "doRequest"
+      path: internal/sources/github/client\.go
+    # gocritic/hugeParam: opts is heavy (80 bytes) in doRequest, but internal function
+    - linters:
+        - gocritic
+      text: "hugeParam: opts is heavy"
+      path: internal/sources/github/client\.go
+    # cyclop: test functions with high cyclomatic complexity from table-driven tests
+    - linters:
+        - cyclop
+      path: _test\.go
+    # errchkjson: test data setup intentionally ignores Marshal errors
+    - linters:
+        - errchkjson
+      path: _test\.go
+    # errchkjson: display helpers in CLI intentionally ignore Marshal errors
+    - linters:
+        - errchkjson
+      path: internal/cli/show\.go
+    # unparam: WithTransport/WithNow return *Collector for builder pattern chaining
+    - linters:
+        - unparam
+      text: "WithTransport|WithNow"
+      path: internal/sources/github/collector\.go
   exclude:
     - "comment on exported"
     - "should have a package comment"

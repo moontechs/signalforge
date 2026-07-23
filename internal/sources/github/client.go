@@ -177,12 +177,11 @@ func (c *githubClient) updateRateLimits(resp *http.Response, isGraphQL bool) {
 	}
 }
 
-// incrementRequestCount increases the request counter and returns the new count.
-func (c *githubClient) incrementRequestCount() int {
+// incrementRequestCount increases the request counter.
+func (c *githubClient) incrementRequestCount() {
 	c.statsMutex.Lock()
 	defer c.statsMutex.Unlock()
 	c.requestCount++
-	return c.requestCount
 }
 
 // requestCountValue returns the current request count (thread-safe).
@@ -526,7 +525,10 @@ func cacheKeyForGraphQL(query string, variables map[string]any) string {
 	// Use query + sorted variable values as cache key.
 	varsStr := ""
 	if variables != nil {
-		vb, _ := json.Marshal(variables)
+		vb, err := json.Marshal(variables)
+		if err != nil {
+			return fmt.Sprintf("gql:%s:err", query)
+		}
 		varsStr = string(vb)
 	}
 	return fmt.Sprintf("gql:%s:%s", query, varsStr)
