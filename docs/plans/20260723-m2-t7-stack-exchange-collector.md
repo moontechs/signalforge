@@ -53,7 +53,7 @@
 
 ### Task 4: Implement Stack Exchange API client
 
-- [ ] Create `internal/sources/stackexchange/client.go` with a context-aware HTTP client:
+- [x] Create `internal/sources/stackexchange/client.go` with a context-aware HTTP client:
   - Constructor takes base URL, optional API key, injectable http.RoundTripper for tests
   - Single `getQuestions(ctx, site, fromUnix, toUnix, page, pageSize, filter) (*searchResponse, error)` method
   - Build URL with query params: site, fromdate, todate, page, pagesize, filter, order=desc, sort=creation, optional key
