@@ -402,7 +402,7 @@ func TestCollect_RequestLimitCutoff(t *testing.T) {
 		SearchDiscussions:  false,
 		MaxItemsPerRun:     100,
 		MaxCommentsPerItem: 0,
-				MaxRequests:        1, // Only 1 request allowed.
+		MaxRequests:        1, // Only 1 request allowed.
 	}, fake)
 
 	// Pre-fill request count to 1 so the next request hits the limit.

@@ -316,7 +316,7 @@ func TestCache_KeyExcludesSecrets(t *testing.T) {
 	store := storage.New(t.TempDir())
 	rc := newResponseCache(store)
 
-	// a caller error, but the path itself should not contain the raw key).
+	// A caller error, but the path itself should not contain the raw key).
 	key := "REST:GET:/repos/owner/repo?access_token=ghp_abc123"
 	path := rc.cacheFilePath(key)
 
