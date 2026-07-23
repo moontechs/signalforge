@@ -38,11 +38,11 @@
 
 ### Task 5: Implement dry-run planning output
 
-- [ ] Add a dry-run branch before any collector API invocation.
-- [ ] For every selected source, print the planned source name, relevant endpoint/feed/query targets, estimated request count, since/until window, max-items limit, language filter, and resume cursor status.
-- [ ] Reuse collector configuration and known source request shapes to calculate plans without making HTTP requests.
-- [ ] Return successfully after printing the plan and do not call `Collect`, mutate deduplication memory, update cursors, or write collection results.
-- [ ] Ensure dry-run output follows the same fixed source order as real collection.
+- [x] Add a dry-run branch before any collector API invocation.
+- [x] For every selected source, print the planned source name, relevant endpoint/feed/query targets, estimated request count, since/until window, max-items limit, language filter, and resume cursor status.
+- [x] Reuse collector configuration and known source request shapes to calculate plans without making HTTP requests.
+- [x] Return successfully after printing the plan and do not call `Collect`, mutate deduplication memory, update cursors, or write collection results.
+- [x] Ensure dry-run output follows the same fixed source order as real collection.
 
 ### Task 6: Update collection statistics and summary reporting
 

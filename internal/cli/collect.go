@@ -3,6 +3,7 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -52,6 +53,7 @@ Example:
 type collectEnv struct {
 	store           *storage.Storage
 	mem             *memory.DefaultMemory
+	cfg             *config.Config
 	selectedSources []string
 	collectors      []domain.SourceCollector
 	before          *domain.ResearchStats
@@ -151,6 +153,7 @@ func setupCollectEnv(sourceFlag, sinceFlag, untilFlag string, maxItems int, lang
 	return &collectEnv{
 		store:           store,
 		mem:             mem,
+		cfg:             cfg,
 		selectedSources: selectedSources,
 		collectors:      collectors,
 		before:          &beforeStats,
@@ -197,7 +200,227 @@ type cursorAware interface {
 	Cursor() map[string]string
 }
 
+// dryRunPlan describes the planned collection for a single source in dry-run mode.
+type dryRunPlan struct {
+	Source        string
+	Targets       []string
+	EstimatedReqs int
+	Since         string
+	Until         string
+	MaxItems      int
+	Language      string
+	HasCursor     bool
+	CursorValue   string
+}
+
+// buildDryRunPlans constructs dry-run plans for all selected sources without
+// making any HTTP requests. It uses the environment's configuration values
+// and known source request shapes to estimate request counts.
+func buildDryRunPlans(env *collectEnv, cfg *config.Config) []dryRunPlan {
+	plans := make([]dryRunPlan, 0, len(env.selectedSources))
+
+	for _, src := range env.selectedSources {
+		plan := dryRunPlan{
+			Source:   src,
+			MaxItems: env.maxItems,
+			Language: env.language,
+			Since:    time.Now().Add(-env.sinceWindow).Format("2006-01-02"),
+		}
+
+		if env.untilWindow != 0 {
+			plan.Until = time.Now().Add(env.untilWindow).Format("2006-01-02")
+		} else {
+			plan.Until = "now"
+		}
+
+		if env.resume {
+			if cursor, exists := env.mem.GetCursor(src); exists {
+				plan.HasCursor = true
+				plan.CursorValue = cursor
+			}
+		}
+
+		switch src {
+		case "github":
+			plan.Targets = buildGitHubTargets(cfg)
+			plan.EstimatedReqs = estimateGitHubRequests(cfg, env)
+		case "hackernews":
+			plan.Targets = buildHNFeeds(cfg)
+			plan.EstimatedReqs = estimateHNRequests(cfg, env)
+		case "stackexchange":
+			plan.Targets = buildSETargets(cfg)
+			plan.EstimatedReqs = estimateSERequests(cfg, env)
+		default:
+			plan.Targets = []string{src}
+			plan.EstimatedReqs = 1
+		}
+
+		plans = append(plans, plan)
+	}
+
+	return plans
+}
+
+func buildGitHubTargets(cfg *config.Config) []string {
+	var targets []string
+	if cfg.Sources.GitHub.SearchIssues {
+		targets = append(targets, "Search Issues API")
+	}
+	if cfg.Sources.GitHub.SearchDiscussions {
+		targets = append(targets, "GraphQL Discussions API")
+	}
+	if len(cfg.Sources.GitHub.Repositories) > 0 {
+		for _, repo := range cfg.Sources.GitHub.Repositories {
+			targets = append(targets, "repo: "+repo)
+		}
+	} else {
+		targets = append(targets, "language filter: "+fmt.Sprintf("%v", cfg.Sources.GitHub.Languages))
+	}
+	return targets
+}
+
+func buildHNFeeds(cfg *config.Config) []string {
+	feeds := make([]string, len(cfg.Sources.HackerNews.Feeds))
+	for i, f := range cfg.Sources.HackerNews.Feeds {
+		feeds[i] = "feed: " + f
+	}
+	return feeds
+}
+
+func buildSETargets(cfg *config.Config) []string {
+	sites := make([]string, len(cfg.Sources.StackExchange.Sites))
+	for i, s := range cfg.Sources.StackExchange.Sites {
+		sites[i] = "site: " + s
+	}
+	return sites
+}
+
+func estimateGitHubRequests(cfg *config.Config, env *collectEnv) int {
+	maxItems := cfg.Sources.GitHub.MaxItemsPerRun
+	if env.maxItems > 0 {
+		maxItems = env.maxItems
+	}
+	itemsPerPage := 100
+	// Search pages for issues + 1 comment request per result (if comments enabled).
+	searchPages := (maxItems + itemsPerPage - 1) / itemsPerPage
+	var total int
+	if cfg.Sources.GitHub.SearchIssues {
+		total += searchPages
+		if cfg.Sources.GitHub.MaxCommentsPerItem > 0 {
+			total += maxItems // one comment fetch per issue.
+		}
+	}
+	if cfg.Sources.GitHub.SearchDiscussions {
+		// GraphQL fetches 50 per page.
+		total += (maxItems + 49) / 50
+	}
+	if total < 1 {
+		total = 1
+	}
+	return total
+}
+
+func estimateHNRequests(cfg *config.Config, env *collectEnv) int {
+	feeds := len(cfg.Sources.HackerNews.Feeds)
+	maxItems := cfg.Sources.HackerNews.MaxItemsPerRun
+	if env.maxItems > 0 {
+		maxItems = env.maxItems
+	}
+	total := feeds + maxItems
+	if cfg.Sources.HackerNews.MaxCommentsPerItem > 0 {
+		total += maxItems
+	}
+	if total < 1 {
+		total = 1
+	}
+	return total
+}
+
+func estimateSERequests(cfg *config.Config, _ *collectEnv) int {
+	sites := len(cfg.Sources.StackExchange.Sites)
+	pagesPerSite := cfg.Sources.StackExchange.MaxPagesPerSite
+	total := sites * pagesPerSite
+	if total < 1 {
+		total = 1
+	}
+	return total
+}
+
+// printDryRunPlan prints the dry-run collection plan to the command output.
+func printDryRunPlan(cmd *cobra.Command, plans []dryRunPlan) error {
+	w := cmd.OutOrStdout()
+	if _, err := fmt.Fprintln(w, "=== Collection Plan (dry-run) ==="); err != nil {
+		return fmt.Errorf("write dry-run header: %w", err)
+	}
+
+	hasResume := hasAnyCursor(plans)
+
+	for i := range plans {
+		p := &plans[i]
+		printPlanHeader(w, p.Source)
+		printPlanTargets(w, p.Targets)
+		printPlanField(w, "estimated requests", strconv.Itoa(p.EstimatedReqs))
+		printPlanField(w, "since", p.Since)
+		printPlanField(w, "until", p.Until)
+		printPlanField(w, "max-items", strconv.Itoa(p.MaxItems))
+		printPlanLanguage(w, p.Language)
+		printPlanCursor(w, p, hasResume)
+	}
+
+	if _, err := fmt.Fprintln(w, "\n(dry-run) No API calls were made. No data was persisted."); err != nil {
+		return fmt.Errorf("write dry-run footer: %w", err)
+	}
+	return nil
+}
+
+func printPlanHeader(w io.Writer, source string) {
+	_, _ = fmt.Fprintf(w, "\n--- %s ---\n", source)
+}
+
+func printPlanTargets(w io.Writer, targets []string) {
+	for _, t := range targets {
+		_, _ = fmt.Fprintf(w, "  target: %s\n", t)
+	}
+}
+
+func printPlanField(w io.Writer, key, value string) {
+	_, _ = fmt.Fprintf(w, "  %s: %s\n", key, value)
+}
+
+func printPlanLanguage(w io.Writer, lang string) {
+	if lang != "" {
+		_, _ = fmt.Fprintf(w, "  language: %s\n", lang)
+	}
+}
+
+func printPlanCursor(w io.Writer, p *dryRunPlan, hasResume bool) {
+	if !hasResume {
+		return
+	}
+	cursorVal := "none"
+	if p.HasCursor {
+		cursorVal = p.CursorValue
+	}
+	_, _ = fmt.Fprintf(w, "  resume cursor: %s\n", cursorVal)
+}
+
+// hasAnyCursor returns true if at least one plan has a cursor set.
+func hasAnyCursor(plans []dryRunPlan) bool {
+	for i := range plans {
+		if plans[i].HasCursor {
+			return true
+		}
+	}
+	return false
+}
+
 func executeCollect(cmd *cobra.Command, env *collectEnv) error {
+	// Dry-run: print plan and return without making any API calls.
+	if env.dryRun {
+		plans := buildDryRunPlans(env, env.cfg)
+		return printDryRunPlan(cmd, plans)
+	}
+
 	var totalSignals int
 	for _, collector := range env.collectors {
 		req := buildCollectRequest(env, collector)

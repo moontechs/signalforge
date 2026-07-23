@@ -739,3 +739,567 @@ func TestDeduplicateSignals_ForceReturnsAll(t *testing.T) {
 		t.Fatalf("expected 2 signals, got %d", len(result))
 	}
 }
+
+// mockCollectorInvoked tracks whether a collector was called.
+type mockCollectorInvoked struct {
+	name    string
+	invoked bool
+}
+
+func (m *mockCollectorInvoked) Name() string { return m.name }
+
+func (m *mockCollectorInvoked) Collect(_ context.Context, req domain.CollectRequest) ([]domain.RawSignal, error) { //nolint:gocritic // must match SourceCollector interface
+	m.invoked = true
+	_ = req
+	return nil, nil
+}
+
+func TestExecuteCollect_DryRunDoesNotInvokeCollectors(t *testing.T) {
+	t.Parallel()
+
+	store := storage.New(t.TempDir())
+	mem := memory.New(store)
+
+	invokedA := &mockCollectorInvoked{name: "source-a"}
+	invokedB := &mockCollectorInvoked{name: "source-b"}
+
+	beforeStats := mem.GetStats()
+
+	env := &collectEnv{
+		mem:             mem,
+		collectors:      []domain.SourceCollector{invokedA, invokedB},
+		selectedSources: []string{"source-a", "source-b"},
+		before:          &beforeStats,
+		dryRun:          true,
+		sinceWindow:     30 * 24 * time.Hour,
+	}
+
+	cmd := &cobra.Command{}
+	buf := new(strings.Builder)
+	cmd.SetOut(buf)
+
+	if err := executeCollect(cmd, env); err != nil {
+		t.Fatalf("executeCollect dry-run failed: %v", err)
+	}
+
+	if invokedA.invoked {
+		t.Error("collector A was invoked during dry-run")
+	}
+	if invokedB.invoked {
+		t.Error("collector B was invoked during dry-run")
+	}
+}
+
+func TestExecuteCollect_DryRunOutputContainsPlanFields(t *testing.T) {
+	t.Parallel()
+
+	store := storage.New(t.TempDir())
+	mem := memory.New(store)
+
+	cfg := &config.Config{
+		Sources: config.SourcesConfig{
+			GitHub: config.GitHubConfig{
+				Enabled:            true,
+				SearchIssues:       true,
+				SearchDiscussions:  false,
+				MaxItemsPerRun:     500,
+				MaxCommentsPerItem: 20,
+			},
+			HackerNews: config.HackerNewsConfig{
+				Enabled:            true,
+				Feeds:              []string{"askstories", "showstories"},
+				MaxItemsPerRun:     300,
+				MaxCommentsPerItem: 30,
+				MinimumScore:       2,
+			},
+			StackExchange: config.StackExchangeConfig{
+				Enabled:         true,
+				Sites:           []string{"stackoverflow"},
+				MaxItemsPerSite: 300,
+				PageSize:        25,
+				MaxPagesPerSite: 10,
+			},
+		},
+	}
+
+	beforeStats := mem.GetStats()
+
+	env := &collectEnv{
+		mem:             mem,
+		cfg:             cfg,
+		collectors:      []domain.SourceCollector{},
+		selectedSources: []string{"github", "hackernews", "stackexchange"},
+		before:          &beforeStats,
+		dryRun:          true,
+		sinceWindow:     30 * 24 * time.Hour,
+	}
+
+	cmd := &cobra.Command{}
+	buf := new(strings.Builder)
+	cmd.SetOut(buf)
+
+	if err := executeCollect(cmd, env); err != nil {
+		t.Fatalf("executeCollect dry-run failed: %v", err)
+	}
+
+	output := buf.String()
+
+	// Check header.
+	if !strings.Contains(output, "dry-run") {
+		t.Errorf("expected dry-run header, got: %s", output)
+	}
+
+	// Check source sections appear.
+	if !strings.Contains(output, "--- github ---") {
+		t.Errorf("expected github section, got: %s", output)
+	}
+	if !strings.Contains(output, "--- hackernews ---") {
+		t.Errorf("expected hackernews section, got: %s", output)
+	}
+	if !strings.Contains(output, "--- stackexchange ---") {
+		t.Errorf("expected stackexchange section, got: %s", output)
+	}
+
+	// Check field labels appear.
+	if !strings.Contains(output, "target:") {
+		t.Errorf("expected target field, got: %s", output)
+	}
+	if !strings.Contains(output, "estimated requests:") {
+		t.Errorf("expected estimated requests field, got: %s", output)
+	}
+	if !strings.Contains(output, "since:") {
+		t.Errorf("expected since field, got: %s", output)
+	}
+	if !strings.Contains(output, "until:") {
+		t.Errorf("expected until field, got: %s", output)
+	}
+	if !strings.Contains(output, "max-items:") {
+		t.Errorf("expected max-items field, got: %s", output)
+	}
+
+	// Check no API calls message.
+	if !strings.Contains(output, "No API calls were made") {
+		t.Errorf("expected no-api-calls message, got: %s", output)
+	}
+	if !strings.Contains(output, "No data was persisted") {
+		t.Errorf("expected no-data-persisted message, got: %s", output)
+	}
+}
+
+func TestExecuteCollect_DryRunWithResumeShowsCursor(t *testing.T) {
+	t.Parallel()
+
+	store := storage.New(t.TempDir())
+	mem := memory.New(store)
+	mem.SetCursor("hackernews", "test-cursor-value")
+
+	cfg := &config.Config{
+		Sources: config.SourcesConfig{
+			GitHub: config.GitHubConfig{
+				Enabled:            true,
+				SearchIssues:       true,
+				SearchDiscussions:  false,
+				MaxItemsPerRun:     100,
+				MaxCommentsPerItem: 0,
+			},
+			HackerNews: config.HackerNewsConfig{
+				Enabled:            true,
+				Feeds:              []string{"newstories"},
+				MaxItemsPerRun:     100,
+				MaxCommentsPerItem: 0,
+				MinimumScore:       0,
+			},
+		},
+	}
+
+	beforeStats := mem.GetStats()
+
+	env := &collectEnv{
+		mem:             mem,
+		cfg:             cfg,
+		collectors:      []domain.SourceCollector{},
+		selectedSources: []string{"github", "hackernews"},
+		before:          &beforeStats,
+		dryRun:          true,
+		resume:          true,
+		sinceWindow:     7 * 24 * time.Hour,
+	}
+
+	cmd := &cobra.Command{}
+	buf := new(strings.Builder)
+	cmd.SetOut(buf)
+
+	if err := executeCollect(cmd, env); err != nil {
+		t.Fatalf("executeCollect dry-run with resume failed: %v", err)
+	}
+
+	output := buf.String()
+
+	// Check that hackernews has cursor info.
+	if !strings.Contains(output, "test-cursor-value") {
+		t.Errorf("expected cursor value in dry-run output, got: %s", output)
+	}
+
+	// The output should also mention "resume cursor".
+	if !strings.Contains(output, "resume cursor:") {
+		t.Errorf("expected resume cursor field, got: %s", output)
+	}
+}
+
+func TestBuildDryRunPlans_EstimatesCount(t *testing.T) {
+	t.Parallel()
+
+	store := storage.New(t.TempDir())
+	mem := memory.New(store)
+
+	cfg := &config.Config{
+		Sources: config.SourcesConfig{
+			GitHub: config.GitHubConfig{
+				Enabled:            true,
+				SearchIssues:       true,
+				SearchDiscussions:  false,
+				MaxItemsPerRun:     500,
+				MaxCommentsPerItem: 20,
+			},
+			HackerNews: config.HackerNewsConfig{
+				Enabled:            true,
+				Feeds:              []string{"askstories", "showstories", "newstories"},
+				MaxItemsPerRun:     300,
+				MaxCommentsPerItem: 30,
+			},
+			StackExchange: config.StackExchangeConfig{
+				Enabled:         true,
+				Sites:           []string{"stackoverflow", "serverfault"},
+				MaxItemsPerSite: 300,
+				PageSize:        25,
+				MaxPagesPerSite: 5,
+			},
+		},
+	}
+
+	beforeStats := mem.GetStats()
+
+	env := &collectEnv{
+		mem:             mem,
+		cfg:             cfg,
+		collectors:      []domain.SourceCollector{},
+		selectedSources: []string{"github", "hackernews", "stackexchange"},
+		before:          &beforeStats,
+		dryRun:          true,
+		sinceWindow:     30 * 24 * time.Hour,
+	}
+
+	plans := buildDryRunPlans(env, cfg)
+
+	// Should have 3 plans.
+	if len(plans) != 3 {
+		t.Fatalf("expected 3 plans, got %d", len(plans))
+	}
+
+	// Check plan order.
+	if plans[0].Source != "github" {
+		t.Errorf("expected first plan github, got %s", plans[0].Source)
+	}
+	if plans[1].Source != "hackernews" {
+		t.Errorf("expected second plan hackernews, got %s", plans[1].Source)
+	}
+	if plans[2].Source != "stackexchange" {
+		t.Errorf("expected third plan stackexchange, got %s", plans[2].Source)
+	}
+
+	// GitHub: 500 items / 100 per page = 5 search pages + 500 comment requests = 505.
+	if plans[0].EstimatedReqs <= 0 {
+		t.Errorf("expected positive estimate for GitHub, got %d", plans[0].EstimatedReqs)
+	}
+
+	// HN: 3 feeds + 300 items + 300 comments = 603.
+	if plans[1].EstimatedReqs <= 0 {
+		t.Errorf("expected positive estimate for HN, got %d", plans[1].EstimatedReqs)
+	}
+
+	// SE: 2 sites * 5 pages = 10.
+	if plans[2].EstimatedReqs <= 0 {
+		t.Errorf("expected positive estimate for SE, got %d", plans[2].EstimatedReqs)
+	}
+
+	// Check targets are populated.
+	if len(plans[0].Targets) == 0 {
+		t.Errorf("expected GitHub targets, got empty")
+	}
+	if len(plans[1].Targets) == 0 {
+		t.Errorf("expected HN targets, got empty")
+	}
+	if len(plans[2].Targets) == 0 {
+		t.Errorf("expected SE targets, got empty")
+	}
+}
+
+func TestBuildDryRunPlans_WithLanguage(t *testing.T) {
+	t.Parallel()
+
+	store := storage.New(t.TempDir())
+	mem := memory.New(store)
+
+	cfg := &config.Config{
+		Sources: config.SourcesConfig{
+			GitHub: config.GitHubConfig{
+				Enabled:            true,
+				SearchIssues:       true,
+				SearchDiscussions:  false,
+				MaxItemsPerRun:     100,
+				MaxCommentsPerItem: 0,
+			},
+		},
+	}
+
+	beforeStats := mem.GetStats()
+
+	env := &collectEnv{
+		mem:             mem,
+		cfg:             cfg,
+		collectors:      []domain.SourceCollector{},
+		selectedSources: []string{"github"},
+		before:          &beforeStats,
+		dryRun:          true,
+		language:        "go",
+		sinceWindow:     30 * 24 * time.Hour,
+	}
+
+	plans := buildDryRunPlans(env, cfg)
+	if len(plans) != 1 {
+		t.Fatalf("expected 1 plan, got %d", len(plans))
+	}
+	if plans[0].Language != "go" {
+		t.Errorf("expected language 'go', got %q", plans[0].Language)
+	}
+}
+
+func TestDryRunPlan_NonZeroMaxItems(t *testing.T) {
+	t.Parallel()
+
+	store := storage.New(t.TempDir())
+	mem := memory.New(store)
+
+	cfg := &config.Config{
+		Sources: config.SourcesConfig{
+			GitHub: config.GitHubConfig{
+				Enabled:            true,
+				SearchIssues:       true,
+				SearchDiscussions:  false,
+				MaxItemsPerRun:     100,
+				MaxCommentsPerItem: 0,
+			},
+		},
+	}
+
+	beforeStats := mem.GetStats()
+
+	// Override maxItems from environment.
+	env := &collectEnv{
+		mem:             mem,
+		cfg:             cfg,
+		collectors:      []domain.SourceCollector{},
+		selectedSources: []string{"github"},
+		before:          &beforeStats,
+		dryRun:          true,
+		maxItems:        50,
+		sinceWindow:     7 * 24 * time.Hour,
+	}
+
+	plans := buildDryRunPlans(env, cfg)
+	if len(plans) != 1 {
+		t.Fatalf("expected 1 plan, got %d", len(plans))
+	}
+	if plans[0].MaxItems != 50 {
+		t.Errorf("expected max-items 50, got %d", plans[0].MaxItems)
+	}
+}
+
+func TestEstimateGitHubRequests_WithSearchIssuesAndComments(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{
+		Sources: config.SourcesConfig{
+			GitHub: config.GitHubConfig{
+				MaxItemsPerRun:     500,
+				MaxCommentsPerItem: 20,
+				SearchIssues:       true,
+				SearchDiscussions:  false,
+			},
+		},
+	}
+
+	env := &collectEnv{}
+	reqs := estimateGitHubRequests(cfg, env)
+	// 500/100 = 5 pages + 500 comment requests = 505.
+	if reqs != 505 {
+		t.Errorf("expected 505 requests, got %d", reqs)
+	}
+}
+
+func TestEstimateGitHubRequests_WithEnvMaxItems(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{
+		Sources: config.SourcesConfig{
+			GitHub: config.GitHubConfig{
+				MaxItemsPerRun:     500,
+				MaxCommentsPerItem: 0,
+				SearchIssues:       true,
+				SearchDiscussions:  false,
+			},
+		},
+	}
+
+	env := &collectEnv{maxItems: 50}
+	reqs := estimateGitHubRequests(cfg, env)
+	// 50/100 = 1 page.
+	if reqs != 1 {
+		t.Errorf("expected 1 request, got %d", reqs)
+	}
+}
+
+func TestEstimateHNRequests(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{
+		Sources: config.SourcesConfig{
+			HackerNews: config.HackerNewsConfig{
+				Feeds:              []string{"askstories", "showstories", "newstories"},
+				MaxItemsPerRun:     300,
+				MaxCommentsPerItem: 30,
+			},
+		},
+	}
+
+	env := &collectEnv{}
+	reqs := estimateHNRequests(cfg, env)
+	// 3 feeds + 300 items + 300 comments = 603.
+	if reqs != 603 {
+		t.Errorf("expected 603 requests, got %d", reqs)
+	}
+}
+
+func TestEstimateSERequests(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{
+		Sources: config.SourcesConfig{
+			StackExchange: config.StackExchangeConfig{
+				Sites:           []string{"stackoverflow", "serverfault"},
+				MaxPagesPerSite: 5,
+			},
+		},
+	}
+
+	env := &collectEnv{}
+	reqs := estimateSERequests(cfg, env)
+	// 2 sites * 5 pages = 10.
+	if reqs != 10 {
+		t.Errorf("expected 10 requests, got %d", reqs)
+	}
+}
+
+func TestPrintDryRunPlan_OutputFormat(t *testing.T) {
+	t.Parallel()
+
+	plans := []dryRunPlan{
+		{
+			Source:        "github",
+			Targets:       []string{"Search Issues API"},
+			EstimatedReqs: 5,
+			Since:         "2026-06-23",
+			Until:         "now",
+			MaxItems:      500,
+			Language:      "go",
+		},
+	}
+
+	cmd := &cobra.Command{}
+	buf := new(strings.Builder)
+	cmd.SetOut(buf)
+
+	err := printDryRunPlan(cmd, plans)
+	if err != nil {
+		t.Fatalf("printDryRunPlan failed: %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "Collection Plan (dry-run)") {
+		t.Errorf("expected header in output, got: %s", output)
+	}
+	if !strings.Contains(output, "--- github ---") {
+		t.Errorf("expected github section, got: %s", output)
+	}
+	if !strings.Contains(output, "language: go") {
+		t.Errorf("expected language field, got: %s", output)
+	}
+}
+
+func TestPrintDryRunPlan_EmptyPlans(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+	buf := new(strings.Builder)
+	cmd.SetOut(buf)
+
+	err := printDryRunPlan(cmd, []dryRunPlan{})
+	if err != nil {
+		t.Fatalf("printDryRunPlan with empty plans failed: %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "Collection Plan (dry-run)") {
+		t.Errorf("expected header, got: %s", output)
+	}
+}
+
+func TestExecuteCollect_DryRunNoMemoryMutation(t *testing.T) {
+	t.Parallel()
+
+	store := storage.New(t.TempDir())
+	mem := memory.New(store)
+	beforeStats := mem.GetStats()
+
+	cfg := &config.Config{
+		Sources: config.SourcesConfig{
+			GitHub: config.GitHubConfig{
+				Enabled:            true,
+				SearchIssues:       true,
+				SearchDiscussions:  false,
+				MaxItemsPerRun:     100,
+				MaxCommentsPerItem: 0,
+			},
+		},
+	}
+
+	env := &collectEnv{
+		store:           store,
+		mem:             mem,
+		cfg:             cfg,
+		collectors:      []domain.SourceCollector{},
+		selectedSources: []string{"github"},
+		before:          &beforeStats,
+		dryRun:          true,
+		sinceWindow:     30 * 24 * time.Hour,
+	}
+
+	cmd := &cobra.Command{}
+	buf := new(strings.Builder)
+	cmd.SetOut(buf)
+
+	if err := executeCollect(cmd, env); err != nil {
+		t.Fatalf("executeCollect dry-run failed: %v", err)
+	}
+
+	// Memory should not have changed.
+	afterStats := mem.GetStats()
+	if afterStats != beforeStats {
+		t.Errorf("memory stats changed during dry-run: before %+v, after %+v", beforeStats, afterStats)
+	}
+
+	// Cursor map should be unchanged.
+	if len(mem.SourceCursors()) != 0 {
+		t.Errorf("cursors changed during dry-run: %v", mem.SourceCursors())
+	}
+}
