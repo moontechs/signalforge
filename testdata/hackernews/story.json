@@ -1,0 +1,12 @@
+{
+  "id": 40000001,
+  "type": "story",
+  "by": "alice",
+  "time": 1700000000,
+  "title": "Building a Better Parser: Lessons Learned from Real-World Data",
+  "url": "https://example.com/blog/parser-lessons",
+  "text": "",
+  "score": 150,
+  "descendants": 6,
+  "kids": [40000002, 40000003, 40000004, 40000005, 40000006]
+}
