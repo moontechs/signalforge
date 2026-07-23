@@ -307,7 +307,7 @@ client.go doRequest
 client.go
   - [ ] **errcheck (2):** Already excluded in Task 1 for
 cache_test.go
-  - [ ] Run `go test ./...` — must pass
+  - [x] Run `go test ./...` — must pass
 ### Task 11: Fix funlen (2) + wrapcheck (4)
 **Files:**
   - Modify: `internal/config/config.go`,

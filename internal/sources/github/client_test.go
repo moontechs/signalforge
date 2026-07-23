@@ -28,7 +28,6 @@ type fakeTransport struct {
 	responses map[string][]fakeResponse // URL -> ordered responses (consumed in order).
 	callCount map[string]int
 	calls     []*http.Request
-	nextSeq   int // for auto-generating sequence keys.
 }
 
 // newFakeTransport creates a fakeTransport ready for use.

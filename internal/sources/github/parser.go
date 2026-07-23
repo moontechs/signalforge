@@ -49,7 +49,7 @@ func parseIssueToSignal(issue *ghIssue, owner, repo string, comments []ghIssueCo
 		CollectedAt:  collectedAt,
 		ContentHash:  "",
 		Metadata:     nil,
-		Score:        int(issue.Reactions.Total()),
+		Score:        issue.Reactions.Total(),
 	}
 
 	// Map and cap comments.
