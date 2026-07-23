@@ -10,3 +10,6 @@ coverage.out
 
 # OS
 .DS_Store
+
+# Ralphex working directory
+.ralphex/
