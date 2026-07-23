@@ -23,11 +23,11 @@ func TestClient_questions_success(t *testing.T) {
 	t.Parallel()
 	fake := newFakeTransport()
 	body := `{"items":[{"question_id":42,"title":"Test","score":10}],"has_more":false,"quota_remaining":98}`
-	fake.addResponse("https://api.stackexchange.com/2.3/questions*",
+	fake.addResponse("https://api.stackexchange.com/2.3/search/advanced*",
 		fakeResponse{statusCode: 200, body: body})
 
 	c := testClient(fake)
-	resp, err := c.questions(t.Context(), "stackoverflow", 0, 0, 1, 100)
+	resp, err := c.getQuestions(t.Context(), "stackoverflow", 0, 0, 1, 100)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -98,7 +98,7 @@ func TestClient_backoffDelay(t *testing.T) {
 	// First response returns backoff=2, second is normal.
 	firstBody := `{"items":[{"question_id":1}],"has_more":false,"quota_remaining":90,"backoff":2}`
 	secondBody := `{"items":[{"question_id":2}],"has_more":false,"quota_remaining":89}`
-	url := "https://api.stackexchange.com/2.3/questions*"
+	url := "https://api.stackexchange.com/2.3/search/advanced*"
 
 	fake.addSequentialResponses(url,
 		fakeResponse{statusCode: 200, body: firstBody},
@@ -109,7 +109,7 @@ func TestClient_backoffDelay(t *testing.T) {
 
 	// First call should succeed with backoff=2.
 	start := time.Now()
-	resp1, err := c.questions(t.Context(), "stackoverflow", 0, 0, 1, 100)
+	resp1, err := c.getQuestions(t.Context(), "stackoverflow", 0, 0, 1, 100)
 	if err != nil {
 		t.Fatalf("first call: %v", err)
 	}
@@ -118,7 +118,7 @@ func TestClient_backoffDelay(t *testing.T) {
 	}
 
 	// Second call should be delayed by the forced backoff.
-	resp2, err := c.questions(t.Context(), "stackoverflow", 0, 0, 1, 100)
+	resp2, err := c.getQuestions(t.Context(), "stackoverflow", 0, 0, 1, 100)
 	if err != nil {
 		t.Fatalf("second call: %v", err)
 	}
@@ -137,13 +137,13 @@ func TestClient_backoffContextCancellation(t *testing.T) {
 
 	// Return backoff=10 to force a long wait.
 	body := `{"items":[{"question_id":1}],"has_more":false,"quota_remaining":90,"backoff":10}`
-	fake.addResponse("https://api.stackexchange.com/2.3/questions*",
+	fake.addResponse("https://api.stackexchange.com/2.3/search/advanced*",
 		fakeResponse{statusCode: 200, body: body})
 
 	c := testClient(fake)
 
 	// First call consumes the backoff=10 response.
-	_, err := c.questions(t.Context(), "stackoverflow", 0, 0, 1, 100)
+	_, err := c.getQuestions(t.Context(), "stackoverflow", 0, 0, 1, 100)
 	if err != nil {
 		t.Fatalf("first call: %v", err)
 	}
@@ -152,7 +152,7 @@ func TestClient_backoffContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
 
-	_, err = c.questions(ctx, "stackoverflow", 0, 0, 1, 100)
+	_, err = c.getQuestions(ctx, "stackoverflow", 0, 0, 1, 100)
 	if err == nil {
 		t.Fatal("expected error from backoff cancellation, got nil")
 	}
@@ -168,11 +168,11 @@ func TestClient_quotaExhausted(t *testing.T) {
 	fake := newFakeTransport()
 	// quota_remaining == 0 triggers ErrQuotaExhausted.
 	body := `{"items":[{"question_id":1}],"has_more":false,"quota_remaining":0}`
-	fake.addResponse("https://api.stackexchange.com/2.3/questions*",
+	fake.addResponse("https://api.stackexchange.com/2.3/search/advanced*",
 		fakeResponse{statusCode: 200, body: body})
 
 	c := testClient(fake)
-	_, err := c.questions(t.Context(), "stackoverflow", 0, 0, 1, 100)
+	_, err := c.getQuestions(t.Context(), "stackoverflow", 0, 0, 1, 100)
 	if !errors.Is(err, ErrQuotaExhausted) {
 		t.Fatalf("expected ErrQuotaExhausted, got %v", err)
 	}
@@ -190,10 +190,10 @@ func TestClient_apiKeyInURL(t *testing.T) {
 	})
 
 	// Register a wildcard so the fake catches the URL.
-	fake.addResponse("https://api.stackexchange.com/2.3/questions*",
+	fake.addResponse("https://api.stackexchange.com/2.3/search/advanced*",
 		fakeResponse{statusCode: 200, body: `{"items":[],"quota_remaining":99}`})
 
-	_, err := c.questions(t.Context(), "stackoverflow", 0, 0, 1, 100)
+	_, err := c.getQuestions(t.Context(), "stackoverflow", 0, 0, 1, 100)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -220,21 +220,21 @@ func TestClient_cacheHit(t *testing.T) {
 
 	body := `{"items":[{"question_id":99,"title":"Cached","score":5}],"has_more":false,"quota_remaining":98}`
 	// Use a broad wildcard to match any questions URL.
-	fake.addResponse("https://api.stackexchange.com/2.3/questions*",
+	fake.addResponse("https://api.stackexchange.com/2.3/search/advanced*",
 		fakeResponse{statusCode: 200, body: body})
 
 	c := testClient(fake)
 	c.WithCache(store)
 
 	// First call: HTTP, cache miss.
-	resp1, err := c.questions(t.Context(), "stackoverflow", 0, 0, 1, 100)
+	resp1, err := c.getQuestions(t.Context(), "stackoverflow", 0, 0, 1, 100)
 	if err != nil {
 		t.Fatalf("first call: %v", err)
 	}
 
 	// Second call: cache hit, no HTTP.
 	fake.resetCallCount()
-	resp2, err := c.questions(t.Context(), "stackoverflow", 0, 0, 1, 100)
+	resp2, err := c.getQuestions(t.Context(), "stackoverflow", 0, 0, 1, 100)
 	if err != nil {
 		t.Fatalf("second call: %v", err)
 	}
@@ -276,13 +276,13 @@ func TestClient_cacheExpiration(t *testing.T) {
 	}
 
 	freshBody := `{"items":[{"question_id":100,"title":"Fresh"}],"has_more":false,"quota_remaining":97}`
-	fake.addResponse("https://api.stackexchange.com/2.3/questions*",
+	fake.addResponse("https://api.stackexchange.com/2.3/search/advanced*",
 		fakeResponse{statusCode: 200, body: freshBody})
 
 	c := testClient(fake)
 	c.WithCache(store)
 
-	resp, err := c.questions(t.Context(), "stackoverflow", 0, 0, 1, 100)
+	resp, err := c.getQuestions(t.Context(), "stackoverflow", 0, 0, 1, 100)
 	if err != nil {
 		t.Fatalf("call failed: %v", err)
 	}
@@ -297,7 +297,7 @@ func TestClient_retryTransientRecovers(t *testing.T) {
 	t.Parallel()
 	fake := newFakeTransport()
 
-	url := "https://api.stackexchange.com/2.3/questions*"
+	url := "https://api.stackexchange.com/2.3/search/advanced*"
 	fake.addSequentialResponses(url,
 		fakeResponse{statusCode: 500, body: `{}`},
 		fakeResponse{statusCode: 200, body: `{"items":[{"question_id":1}],"has_more":false,"quota_remaining":99}`},
@@ -307,7 +307,7 @@ func TestClient_retryTransientRecovers(t *testing.T) {
 	c.retryMax = 2
 	c.retryBackoff = func(_ int) time.Duration { return time.Millisecond }
 
-	resp, err := c.questions(t.Context(), "stackoverflow", 0, 0, 1, 100)
+	resp, err := c.getQuestions(t.Context(), "stackoverflow", 0, 0, 1, 100)
 	if err != nil {
 		t.Fatalf("expected recovery after retry, got: %v", err)
 	}
@@ -320,14 +320,14 @@ func TestClient_retryExhaustion(t *testing.T) {
 	t.Parallel()
 	fake := newFakeTransport()
 
-	url := "https://api.stackexchange.com/2.3/questions*"
+	url := "https://api.stackexchange.com/2.3/search/advanced*"
 	fake.addResponse(url, fakeResponse{statusCode: 500, body: `{}`})
 
 	c := testClient(fake)
 	c.retryMax = 1
 	c.retryBackoff = func(_ int) time.Duration { return time.Millisecond }
 
-	_, err := c.questions(t.Context(), "stackoverflow", 0, 0, 1, 100)
+	_, err := c.getQuestions(t.Context(), "stackoverflow", 0, 0, 1, 100)
 	if err == nil {
 		t.Fatal("expected error but got nil")
 	}
@@ -341,14 +341,14 @@ func TestClient_retryExhaustion(t *testing.T) {
 func TestClient_contextCancellation(t *testing.T) {
 	t.Parallel()
 	fake := newFakeTransport()
-	fake.addResponse("https://api.stackexchange.com/2.3/questions*",
+	fake.addResponse("https://api.stackexchange.com/2.3/search/advanced*",
 		fakeResponse{statusCode: 200, body: `{"items":[],"quota_remaining":99}`})
 
 	c := testClient(fake)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
-	_, err := c.questions(ctx, "stackoverflow", 0, 0, 1, 100)
+	_, err := c.getQuestions(ctx, "stackoverflow", 0, 0, 1, 100)
 	if err == nil {
 		t.Fatal("expected error for cancelled context")
 	}
@@ -360,7 +360,7 @@ func TestClient_contextCancellation(t *testing.T) {
 func TestClient_contextCancellationDuringRetry(t *testing.T) {
 	t.Parallel()
 	fake := newFakeTransport()
-	fake.addResponse("https://api.stackexchange.com/2.3/questions*",
+	fake.addResponse("https://api.stackexchange.com/2.3/search/advanced*",
 		fakeResponse{statusCode: 500, body: `{}`})
 
 	c := testClient(fake)
@@ -373,7 +373,7 @@ func TestClient_contextCancellationDuringRetry(t *testing.T) {
 		cancel()
 	}()
 
-	_, err := c.questions(ctx, "stackoverflow", 0, 0, 1, 100)
+	_, err := c.getQuestions(ctx, "stackoverflow", 0, 0, 1, 100)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -384,20 +384,20 @@ func TestClient_contextCancellationDuringRetry(t *testing.T) {
 func TestClient_requestCap(t *testing.T) {
 	t.Parallel()
 	fake := newFakeTransport()
-	fake.addResponse("https://api.stackexchange.com/2.3/questions*",
+	fake.addResponse("https://api.stackexchange.com/2.3/search/advanced*",
 		fakeResponse{statusCode: 200, body: `{"items":[{"question_id":1}],"has_more":false,"quota_remaining":99}`})
 
 	c := testClient(fake)
 	c.maxRequests = 1 // allow only 1 request
 
 	// First request should succeed.
-	_, err := c.questions(t.Context(), "stackoverflow", 0, 0, 1, 100)
+	_, err := c.getQuestions(t.Context(), "stackoverflow", 0, 0, 1, 100)
 	if err != nil {
 		t.Fatalf("first request: %v", err)
 	}
 
 	// Second request should hit cap.
-	_, err = c.questions(t.Context(), "stackoverflow", 0, 0, 1, 100)
+	_, err = c.getQuestions(t.Context(), "stackoverflow", 0, 0, 1, 100)
 	if !errors.Is(err, ErrRequestCap) {
 		t.Fatalf("expected ErrRequestCap, got %v", err)
 	}
@@ -408,11 +408,11 @@ func TestClient_requestCap(t *testing.T) {
 func TestClient_malformedJSON(t *testing.T) {
 	t.Parallel()
 	fake := newFakeTransport()
-	fake.addResponse("https://api.stackexchange.com/2.3/questions*",
+	fake.addResponse("https://api.stackexchange.com/2.3/search/advanced*",
 		fakeResponse{statusCode: 200, body: `{not valid json}`})
 
 	c := testClient(fake)
-	_, err := c.questions(t.Context(), "stackoverflow", 0, 0, 1, 100)
+	_, err := c.getQuestions(t.Context(), "stackoverflow", 0, 0, 1, 100)
 	if err == nil {
 		t.Fatal("expected error for malformed JSON")
 	}
@@ -426,11 +426,11 @@ func TestClient_malformedJSON(t *testing.T) {
 func TestClient_nonRetryable4xx(t *testing.T) {
 	t.Parallel()
 	fake := newFakeTransport()
-	fake.addResponse("https://api.stackexchange.com/2.3/questions*",
+	fake.addResponse("https://api.stackexchange.com/2.3/search/advanced*",
 		fakeResponse{statusCode: 400, body: `{"error_id":400,"error_name":"bad_request","error_message":"invalid parameter"}`})
 
 	c := testClient(fake)
-	_, err := c.questions(t.Context(), "stackoverflow", 0, 0, 1, 100)
+	_, err := c.getQuestions(t.Context(), "stackoverflow", 0, 0, 1, 100)
 	if err == nil {
 		t.Fatal("expected error for 400")
 	}
@@ -446,7 +446,7 @@ func TestClient_429retry(t *testing.T) {
 	t.Parallel()
 	fake := newFakeTransport()
 
-	url := "https://api.stackexchange.com/2.3/questions*"
+	url := "https://api.stackexchange.com/2.3/search/advanced*"
 	fake.addSequentialResponses(url,
 		fakeResponse{statusCode: 429, body: `{}`},
 		fakeResponse{statusCode: 200, body: `{"items":[{"question_id":1}],"has_more":false,"quota_remaining":99}`},
@@ -456,7 +456,7 @@ func TestClient_429retry(t *testing.T) {
 	c.retryMax = 2
 	c.retryBackoff = func(_ int) time.Duration { return time.Millisecond }
 
-	resp, err := c.questions(t.Context(), "stackoverflow", 0, 0, 1, 100)
+	resp, err := c.getQuestions(t.Context(), "stackoverflow", 0, 0, 1, 100)
 	if err != nil {
 		t.Fatalf("expected recovery from 429, got: %v", err)
 	}
@@ -474,13 +474,13 @@ func TestClient_oversizedBody(t *testing.T) {
 	// Create a body that exceeds the max body size (10 bytes).
 	bigBody := strings.Repeat("x", 20)
 	body := fmt.Sprintf(`{"items":[{"question_id":1,"body_markdown":%q}],"has_more":false,"quota_remaining":99}`, bigBody)
-	fake.addResponse("https://api.stackexchange.com/2.3/questions*",
+	fake.addResponse("https://api.stackexchange.com/2.3/search/advanced*",
 		fakeResponse{statusCode: 200, body: body})
 
 	c := testClient(fake)
 	c.maxBodySize = 10
 
-	_, err := c.questions(t.Context(), "stackoverflow", 0, 0, 1, 100)
+	_, err := c.getQuestions(t.Context(), "stackoverflow", 0, 0, 1, 100)
 	if err == nil {
 		t.Fatal("expected error for oversized body")
 	}
@@ -496,7 +496,7 @@ func TestClient_statsTracking(t *testing.T) {
 	fake := newFakeTransport()
 
 	body := `{"items":[{"question_id":1}],"has_more":false,"quota_remaining":99}`
-	fake.addResponse("https://api.stackexchange.com/2.3/questions*",
+	fake.addResponse("https://api.stackexchange.com/2.3/search/advanced*",
 		fakeResponse{statusCode: 200, body: body})
 
 	c := testClient(fake)
@@ -506,7 +506,7 @@ func TestClient_statsTracking(t *testing.T) {
 		t.Fatalf("expected zero stats, got %+v", stats)
 	}
 
-	_, err := c.questions(t.Context(), "stackoverflow", 0, 0, 1, 100)
+	_, err := c.getQuestions(t.Context(), "stackoverflow", 0, 0, 1, 100)
 	if err != nil {
 		t.Fatalf("call: %v", err)
 	}
@@ -525,7 +525,7 @@ func TestClient_concurrentAccess(t *testing.T) {
 
 	body := `{"items":[{"question_id":%d}],"has_more":false,"quota_remaining":99}`
 	// Use wildcard for all question requests.
-	fake.addResponse("https://api.stackexchange.com/2.3/questions*",
+	fake.addResponse("https://api.stackexchange.com/2.3/search/advanced*",
 		fakeResponse{statusCode: 200, body: fmt.Sprintf(body, 1)})
 
 	c := testClient(fake)
@@ -535,7 +535,7 @@ func TestClient_concurrentAccess(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := c.questions(t.Context(), "stackoverflow", 0, 0, 1, 100)
+			_, err := c.getQuestions(t.Context(), "stackoverflow", 0, 0, 1, 100)
 			if err != nil {
 				t.Logf("concurrent call error: %v", err)
 			}
@@ -555,13 +555,13 @@ func TestClient_paginationMetadata(t *testing.T) {
 	page2 := `{"items":[{"question_id":2}],"has_more":false,"quota_remaining":89}`
 
 	// Use wildcard plus sequential responses for distinct pages.
-	fake.addSequentialResponses("https://api.stackexchange.com/2.3/questions*",
+	fake.addSequentialResponses("https://api.stackexchange.com/2.3/search/advanced*",
 		fakeResponse{statusCode: 200, body: page1},
 		fakeResponse{statusCode: 200, body: page2})
 
 	c := testClient(fake)
 
-	resp1, err := c.questions(t.Context(), "stackoverflow", 0, 0, 1, 100)
+	resp1, err := c.getQuestions(t.Context(), "stackoverflow", 0, 0, 1, 100)
 	if err != nil {
 		t.Fatalf("page 1: %v", err)
 	}
@@ -572,7 +572,7 @@ func TestClient_paginationMetadata(t *testing.T) {
 		t.Fatalf("unexpected page 1: %+v", resp1.Questions)
 	}
 
-	resp2, err := c.questions(t.Context(), "stackoverflow", 0, 0, 2, 100)
+	resp2, err := c.getQuestions(t.Context(), "stackoverflow", 0, 0, 2, 100)
 	if err != nil {
 		t.Fatalf("page 2: %v", err)
 	}
@@ -590,11 +590,11 @@ func TestClient_apiError(t *testing.T) {
 	t.Parallel()
 	fake := newFakeTransport()
 	body := `{"error_id":502,"error_name":"throttle_violation","error_message":"too many requests from this IP"}`
-	fake.addResponse("https://api.stackexchange.com/2.3/questions*",
+	fake.addResponse("https://api.stackexchange.com/2.3/search/advanced*",
 		fakeResponse{statusCode: 200, body: body})
 
 	c := testClient(fake)
-	_, err := c.questions(t.Context(), "stackoverflow", 0, 0, 1, 100)
+	_, err := c.getQuestions(t.Context(), "stackoverflow", 0, 0, 1, 100)
 	if err == nil {
 		t.Fatal("expected API error")
 	}
@@ -613,7 +613,7 @@ func TestClient_408retry(t *testing.T) {
 	t.Parallel()
 	fake := newFakeTransport()
 
-	url := "https://api.stackexchange.com/2.3/questions*"
+	url := "https://api.stackexchange.com/2.3/search/advanced*"
 	fake.addSequentialResponses(url,
 		fakeResponse{statusCode: 408, body: `{}`},
 		fakeResponse{statusCode: 200, body: `{"items":[{"question_id":1}],"has_more":false,"quota_remaining":99}`},
@@ -623,7 +623,7 @@ func TestClient_408retry(t *testing.T) {
 	c.retryMax = 2
 	c.retryBackoff = func(_ int) time.Duration { return time.Millisecond }
 
-	resp, err := c.questions(t.Context(), "stackoverflow", 0, 0, 1, 100)
+	resp, err := c.getQuestions(t.Context(), "stackoverflow", 0, 0, 1, 100)
 	if err != nil {
 		t.Fatalf("expected recovery from 408, got: %v", err)
 	}
@@ -642,10 +642,10 @@ func TestClient_questionsFromDateToDate(t *testing.T) {
 		BaseURL: "https://api.stackexchange.com/2.3",
 	})
 
-	fake.addResponse("https://api.stackexchange.com/2.3/questions*",
+	fake.addResponse("https://api.stackexchange.com/2.3/search/advanced*",
 		fakeResponse{statusCode: 200, body: `{"items":[],"quota_remaining":99}`})
 
-	_, err := c.questions(t.Context(), "stackoverflow", 1000000, 2000000, 1, 100)
+	_, err := c.getQuestions(t.Context(), "stackoverflow", 1000000, 2000000, 1, 100)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -696,10 +696,10 @@ func TestClient_questionsQueryParams(t *testing.T) {
 		BaseURL: "https://api.stackexchange.com/2.3",
 	})
 
-	fake.addResponse("https://api.stackexchange.com/2.3/questions*",
+	fake.addResponse("https://api.stackexchange.com/2.3/search/advanced*",
 		fakeResponse{statusCode: 200, body: `{"items":[],"quota_remaining":99}`})
 
-	_, err := c.questions(t.Context(), "superuser", 0, 0, 3, 50)
+	_, err := c.getQuestions(t.Context(), "superuser", 0, 0, 3, 50)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -725,7 +725,7 @@ func TestClient_questionsQueryParams(t *testing.T) {
 	if q.Get("order") != "desc" {
 		t.Fatalf("expected order=desc, got %q", q.Get("order"))
 	}
-	if q.Get("filter") != "withbody" {
+	if q.Get("filter") != APIFieldFilter {
 		t.Fatalf("expected filter=withbody, got %q", q.Get("filter"))
 	}
 }

@@ -4,9 +4,36 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/moontechs/signalforge/internal/domain"
 )
+
+func TestCollector_statsTracking(t *testing.T) {
+	fake := newFakeTransport()
+	fake.addResponse("https://api.stackexchange.com/2.3/search/advanced*", fakeResponse{statusCode: 200, body: `{"items":[{"question_id":1,"title":"q","body_markdown":"<p>b</p>","creation_date":1740000000}],"quota_remaining":10}`})
+	c := New(&ConfigValues{Enabled: true, Sites: []string{"stackoverflow"}}, testClient(fake))
+	if _, err := c.Collect(context.Background(), domain.CollectRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	stats := c.Stats()
+	if stats.Requests == 0 && stats.CacheHits == 0 {
+		t.Fatalf("expected non-zero stats, got %+v", stats)
+	}
+}
+
+func TestCollector_sinceFiltering(t *testing.T) {
+	fake := newFakeTransport()
+	fake.addResponse("https://api.stackexchange.com/2.3/search/advanced*", fakeResponse{statusCode: 200, body: `{"items":[{"question_id":1,"title":"old","body_markdown":"old body","creation_date":1700000000},{"question_id":2,"title":"new","body_markdown":"new body","creation_date":1740000000}],"quota_remaining":10}`})
+	c := New(&ConfigValues{Enabled: true, Sites: []string{"stackoverflow"}, MinimumScore: 0, MinimumViews: 0}, testClient(fake))
+	got, err := c.Collect(context.Background(), domain.CollectRequest{Since: time.Unix(1730000000, 0)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) == 0 {
+		t.Fatal("expected signals, got none")
+	}
+}
 
 func TestCollectorMultiSitePaginationAndLimits(t *testing.T) {
 	fake := newFakeTransport()

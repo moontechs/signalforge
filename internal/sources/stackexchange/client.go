@@ -52,7 +52,11 @@ type client struct {
 	forcedBackoff         time.Time
 }
 
-func (c *client) getQuestions(ctx context.Context, site string, fromUnix, toUnix int64, page, pageSize int, filter string) (*searchResponse, error) {
+func (c *client) questions(ctx context.Context, site string, fromUnix, toUnix int64, page, pageSize int, filters ...string) (*searchResponse, error) {
+	filter := APIFieldFilter
+	if len(filters) > 0 {
+		filter = filters[0]
+	}
 	v := url.Values{}
 	v.Set("site", site)
 	v.Set("fromdate", strconv.FormatInt(fromUnix, 10))
@@ -65,7 +69,7 @@ func (c *client) getQuestions(ctx context.Context, site string, fromUnix, toUnix
 	if c.apiKey != "" {
 		v.Set("key", c.apiKey)
 	}
-	r, err := c.get(ctx, "/search/advanced?"+v.Encode(), 0)
+	r, err := c.get(ctx, "/search/advanced?"+v.Encode(), 5*time.Minute)
 	if r == nil {
 		return nil, err
 	}
@@ -73,7 +77,14 @@ func (c *client) getQuestions(ctx context.Context, site string, fromUnix, toUnix
 	if len(r.Items) > 0 && json.Unmarshal(r.Items, &out.Items) != nil {
 		return nil, fmt.Errorf("%w: items", ErrMalformedResponse)
 	}
+	out.Questions = out.Items
 	return out, err
+}
+
+// getQuestions is retained for package-level tests and callers while the
+// active endpoint implementation is named questions.
+func (c *client) getQuestions(ctx context.Context, site string, fromUnix, toUnix int64, page, pageSize int, filters ...string) (*searchResponse, error) {
+	return c.questions(ctx, site, fromUnix, toUnix, page, pageSize, filters...)
 }
 
 // newClient creates a Stack Exchange API client with the given transport and config.
@@ -323,40 +334,6 @@ func (c *client) setForcedBackoff(seconds int) {
 	if c.forcedBackoff.IsZero() || until.After(c.forcedBackoff) {
 		c.forcedBackoff = until
 	}
-}
-
-// questions fetches questions from a site created within the [fromdate, todate]
-// window (Unix timestamps). Results are sorted by creation date descending.
-func (c *client) questions(ctx context.Context, site string, fromUnix, toUnix int64, page, pageSize int) (*questionsResponse, error) {
-	v := url.Values{}
-	v.Set("site", site)
-	v.Set("sort", "creation")
-	v.Set("order", "desc")
-	v.Set("filter", "withbody")
-	v.Set("page", strconv.Itoa(page))
-	v.Set("pagesize", strconv.Itoa(pageSize))
-	if fromUnix > 0 {
-		v.Set("fromdate", strconv.FormatInt(fromUnix, 10))
-	}
-	if toUnix > 0 {
-		v.Set("todate", strconv.FormatInt(toUnix, 10))
-	}
-	if c.apiKey != "" {
-		v.Set("key", c.apiKey)
-	}
-	path := "/questions?" + v.Encode()
-
-	env, err := c.get(ctx, path, 5*time.Minute)
-	if err != nil {
-		return nil, err
-	}
-	out := &questionsResponse{apiResponse: *env}
-	if len(env.Items) > 0 {
-		if err := json.Unmarshal(env.Items, &out.Questions); err != nil {
-			return nil, fmt.Errorf("%w: decode questions: %w", ErrMalformedResponse, err)
-		}
-	}
-	return out, nil
 }
 
 // answers fetches answers for a specific question.

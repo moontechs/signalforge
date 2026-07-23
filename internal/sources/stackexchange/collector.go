@@ -72,20 +72,27 @@ func (c *Collector) processParsedSignals(parsed []domain.RawSignal, seen map[str
 
 // collectSite collects questions from one site across pages,
 // filtering through dedup and memory.
-func (c *Collector) collectSite(ctx context.Context, site string, from, to int64, pageSize, maxPages int, mem *memory.DefaultMemory) ([]domain.RawSignal, error) {
+func (c *Collector) collectSite(ctx context.Context, site string, from, to int64, pageSize, maxPages, maxItems int, since time.Time, mem *memory.DefaultMemory) ([]domain.RawSignal, error) {
 	var signals []domain.RawSignal
 	items := 0
 	seen := make(map[string]struct{})
-	for page := 1; page <= maxPages && items < c.config.MaxItemsPerSite; page++ {
+	for page := 1; page <= maxPages && (maxItems <= 0 || items < maxItems); page++ {
 		if err := ctx.Err(); err != nil {
 			return signals, err
 		}
-		resp, err := c.client.getQuestions(ctx, site, from, to, page, pageSize, APIFieldFilter)
+		resp, err := c.client.questions(ctx, site, from, to, page, pageSize, APIFieldFilter)
 		if err != nil && resp == nil {
 			return signals, fmt.Errorf("site %s: %w", site, err)
 		}
-		parsed, _ := parseQuestionsWithStats(site, resp.Items, c.config.MinimumScore, c.config.MinimumViews)
-		signals, items = c.processParsedSignals(parsed, seen, mem, c.config.MaxItemsPerSite, signals)
+		eligible := make([]questionDTO, 0, len(resp.Items))
+		for i := range resp.Items {
+			q := &resp.Items[i]
+			if eligibleQuestion(q, QuestionScope{MinimumScore: c.config.MinimumScore, MinimumViews: c.config.MinimumViews, Since: since}) {
+				eligible = append(eligible, *q)
+			}
+		}
+		parsed, _ := parseQuestionsWithStats(site, eligible, c.config.MinimumScore, c.config.MinimumViews)
+		signals, items = c.processParsedSignals(parsed, seen, mem, maxItems, signals)
 		if err != nil {
 			// getQuestions may return a parsed page alongside quota exhaustion;
 			// preserve that page, but report the exhaustion to the caller.
@@ -134,7 +141,7 @@ func (c *Collector) Collect(ctx context.Context, req domain.CollectRequest) ([]d
 			c.updateStats()
 			return signals, err
 		}
-		siteSignals, err := c.collectSite(ctx, site, from, to, pageSize, maxPages, mem)
+		siteSignals, err := c.collectSite(ctx, site, from, to, pageSize, maxPages, c.config.MaxItemsPerSite, req.Since, mem)
 		if err != nil {
 			errs = append(errs, err)
 			// collectSite returns partial results alongside errors (e.g. quota exhaustion).
