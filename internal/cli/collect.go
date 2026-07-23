@@ -39,6 +39,12 @@ Example:
 
 	cmd.Flags().String("sources", "github", "Comma-separated sources to collect from")
 	cmd.Flags().String("since", "30d", "Look back window such as 24h, 7d, or 30d")
+	cmd.Flags().String("until", "", "ISO date or duration window (e.g., 2024-01-15, 7d, 24h) — if omitted, uses now")
+	cmd.Flags().Int("max-items", 0, "Maximum items to collect per source (0 = use source default)")
+	cmd.Flags().String("language", "", "Optional language filter (e.g., 'go', 'python')")
+	cmd.Flags().Bool("force", false, "Skip deduplication and re-collect already-seen signals")
+	cmd.Flags().Bool("dry-run", false, "Print planned collection and exit without making API calls")
+	cmd.Flags().Bool("resume", false, "Resume collection from last stored cursor per source")
 
 	return cmd
 }
@@ -50,13 +56,29 @@ type collectEnv struct {
 	collectors      []domain.SourceCollector
 	before          *domain.ResearchStats
 	sinceWindow     time.Duration
+	untilWindow     time.Duration
+	maxItems        int
+	language        string
+	force           bool
+	dryRun          bool
+	resume          bool
 }
 
 func runCollect(cmd *cobra.Command, _ []string) error {
 	sourceFlag, _ := cmd.Flags().GetString("sources")
 	sinceFlag, _ := cmd.Flags().GetString("since")
+	untilFlag, _ := cmd.Flags().GetString("until")
+	maxItems, _ := cmd.Flags().GetInt("max-items")
+	language, _ := cmd.Flags().GetString("language")
+	force, _ := cmd.Flags().GetBool("force")
+	dryRun, _ := cmd.Flags().GetBool("dry-run")
+	resume, _ := cmd.Flags().GetBool("resume")
 
-	env, err := setupCollectEnv(sourceFlag, sinceFlag)
+	if maxItems < 0 {
+		return errors.New("--max-items must be a non-negative integer")
+	}
+
+	env, err := setupCollectEnv(sourceFlag, sinceFlag, untilFlag, maxItems, language, force, dryRun, resume)
 	if err != nil {
 		return err
 	}
@@ -64,8 +86,13 @@ func runCollect(cmd *cobra.Command, _ []string) error {
 	return executeCollect(cmd, env)
 }
 
-func setupCollectEnv(sourceFlag, sinceFlag string) (*collectEnv, error) {
+func setupCollectEnv(sourceFlag, sinceFlag, untilFlag string, maxItems int, language string, force, dryRun, resume bool) (*collectEnv, error) {
 	sinceWindow, err := parseSinceWindow(sinceFlag)
+	if err != nil {
+		return nil, err
+	}
+
+	untilWindow, err := parseUntilWindow(untilFlag)
 	if err != nil {
 		return nil, err
 	}
@@ -116,6 +143,12 @@ func setupCollectEnv(sourceFlag, sinceFlag string) (*collectEnv, error) {
 		collectors:      collectors,
 		before:          &beforeStats,
 		sinceWindow:     sinceWindow,
+		untilWindow:     untilWindow,
+		maxItems:        maxItems,
+		language:        language,
+		force:           force,
+		dryRun:          dryRun,
+		resume:          resume,
 	}, nil
 }
 
@@ -215,6 +248,34 @@ func parseSinceWindow(raw string) (time.Duration, error) {
 		return 0, errors.New("since window must be greater than zero")
 	}
 	return window, nil
+}
+
+// parseUntilWindow parses an until flag value into a duration from now.
+// Accepts ISO-8601 dates (e.g., "2024-01-15") and duration/window formats
+// compatible with parseSinceWindow (e.g., "7d", "24h").
+// Returns 0 if raw is empty (no constraint).
+func parseUntilWindow(raw string) (time.Duration, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return 0, nil
+	}
+
+	// Try ISO-8601 date format first (e.g., "2024-01-15").
+	if t, err := time.Parse("2006-01-02", value); err == nil {
+		until := t.Truncate(24 * time.Hour)
+		// Compute the duration from now.
+		d := time.Until(until)
+		// If until is in the past, duration is negative.
+		return d, nil
+	}
+
+	// Try duration/window format (e.g., "7d", "24h").
+	window, err := parseSinceWindow(value)
+	if err != nil {
+		return 0, fmt.Errorf("invalid until value %q: must be ISO date (2006-01-02) or duration (7d, 24h)", raw)
+	}
+	// For until, a positive window means "n time units before now".
+	return -window, nil
 }
 
 func ensureStorageLayout(dir string) error {

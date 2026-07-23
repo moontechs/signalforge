@@ -2,12 +2,12 @@
 
 ### Task 1: Extend collect command configuration and flags
 
-- [ ] Update `internal/cli/collect.go` to add `collectEnv` fields for `until`, `maxItems`, `language`, `force`, `dryRun`, and `resume`.
-- [ ] Register `--until` as a string flag accepting an ISO date or existing duration-style window format.
-- [ ] Register `--max-items` as an integer flag with validation that rejects negative values.
-- [ ] Register `--language` as an optional string filter passed through the collection request.
-- [ ] Register boolean `--force`, `--dry-run`, and `--resume` flags.
-- [ ] Preserve current `--sources` and `--since` behavior and defaults.
+- [x] Update `internal/cli/collect.go` to add `collectEnv` fields for `until`, `maxItems`, `language`, `force`, `dryRun`, and `resume`.
+- [x] Register `--until` as a string flag accepting an ISO date or existing duration-style window format.
+- [x] Register `--max-items` as an integer flag with validation that rejects negative values.
+- [x] Register `--language` as an optional string filter passed through the collection request.
+- [x] Register boolean `--force`, `--dry-run`, and `--resume` flags.
+- [x] Preserve current `--sources` and `--since` behavior and defaults.
 
 ### Task 2: Parse and construct complete collection requests
 
