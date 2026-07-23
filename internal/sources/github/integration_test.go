@@ -51,6 +51,7 @@ func setupCollector(t *testing.T, cfg CollectorConfig, fake *fakeTransport) *Col
 // TestCollect_MixedIssuesAndDiscussions verifies that Collect returns both
 // issues and discussions parsed into RawSignals.
 func TestCollect_MixedIssuesAndDiscussions(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
 	// We use per-repo strategy so discussions can also be fetched.
@@ -202,6 +203,7 @@ func TestCollect_MixedIssuesAndDiscussions(t *testing.T) {
 // TestCollect_IssuesOnly verifies that Collect returns only issues
 // when SearchDiscussions is disabled.
 func TestCollect_IssuesOnly(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
 	searchResp := ghSearchResponse{
@@ -257,6 +259,7 @@ func TestCollect_IssuesOnly(t *testing.T) {
 // TestCollect_DiscussionsOnly verifies that Collect returns only discussions
 // when SearchIssues is disabled.
 func TestCollect_DiscussionsOnly(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
 	discPage := graphQLResponse{
@@ -317,6 +320,7 @@ func TestCollect_DiscussionsOnly(t *testing.T) {
 // TestCollect_Dedup verifies that signals with duplicate IDs are filtered out
 // within a single Collect run.
 func TestCollect_Dedup(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
 	// Return one issue (per-repo strategy, so discussions also work).
@@ -394,6 +398,7 @@ func TestCollect_Dedup(t *testing.T) {
 
 // TestCollect_RequestLimitCutoff verifies that the request cap is enforced.
 func TestCollect_RequestLimitCutoff(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
 	c := setupCollector(t, CollectorConfig{
@@ -422,6 +427,7 @@ func TestCollect_RequestLimitCutoff(t *testing.T) {
 
 // TestCollect_RateLimitExhaustion verifies behavior when rate limit is reached.
 func TestCollect_RateLimitExhaustion(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
 	c := setupCollector(t, CollectorConfig{
@@ -456,6 +462,7 @@ func TestCollect_RateLimitExhaustion(t *testing.T) {
 
 // TestCollect_NilContext verifies that nil context returns an error.
 func TestCollect_NilContext(t *testing.T) {
+	t.Parallel()
 	c, err := New(CollectorConfig{Enabled: true, MaxRequests: 100})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -468,6 +475,7 @@ func TestCollect_NilContext(t *testing.T) {
 
 // TestCollect_NotEnabled verifies that disabled collector returns ErrNotEnabled.
 func TestCollect_NotEnabled(t *testing.T) {
+	t.Parallel()
 	_, err := New(CollectorConfig{Enabled: false})
 	if err != ErrNotEnabled {
 		t.Fatalf("expected ErrNotEnabled, got %v", err)
@@ -476,6 +484,7 @@ func TestCollect_NotEnabled(t *testing.T) {
 
 // TestCollect_EmptyResults verifies empty results when no sources configured.
 func TestCollect_EmptyResults(t *testing.T) {
+	t.Parallel()
 	c := setupCollector(t, CollectorConfig{
 		Enabled:           true,
 		SearchIssues:      false,
@@ -495,6 +504,7 @@ func TestCollect_EmptyResults(t *testing.T) {
 
 // TestCollect_MaxItemsLimit verifies max-items limit across both sources.
 func TestCollect_MaxItemsLimit(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
 	// Per-repo issues: return 2 issues but maxItems=2 total.
@@ -575,6 +585,7 @@ func TestCollect_MaxItemsLimit(t *testing.T) {
 
 // TestCollect_PerRepoStrategy verifies collection with specific repos.
 func TestCollect_PerRepoStrategy(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
 	issuesPrefix := "https://api.github.com/repos/myrepo/awesome/issues?state=open&sort=updated&direction=asc&per_page="
@@ -621,6 +632,7 @@ func TestCollect_PerRepoStrategy(t *testing.T) {
 // TestCollect_PartialFailure_IssueError verifies that when issues fail,
 // discussions are still returned and errors are surfaced.
 func TestCollect_PartialFailure_IssueError(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
 	// But discussions should succeed.
@@ -675,6 +687,7 @@ func TestCollect_PartialFailure_IssueError(t *testing.T) {
 // TestCollect_PartialFailure_DiscussionError verifies that when discussions fail,
 // issues are still returned and errors are surfaced.
 func TestCollect_PartialFailure_DiscussionError(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
 	// Issues per-repo endpoint succeeds.
@@ -720,6 +733,7 @@ func TestCollect_PartialFailure_DiscussionError(t *testing.T) {
 
 // TestCollect_WithCache verifies integration with the response cache.
 func TestCollect_WithCache(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
 	searchResp := ghSearchResponse{
@@ -788,6 +802,7 @@ func TestCollect_WithCache(t *testing.T) {
 
 // TestCollect_IssueWithoutRepoURL verifies fallback to HTML URL for owner/repo.
 func TestCollect_IssueWithoutRepoURL(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
 	searchResp := ghSearchResponse{
@@ -829,6 +844,7 @@ func TestCollect_IssueWithoutRepoURL(t *testing.T) {
 
 // TestCollect_InvalidIssueURL verifies issues with unresolvable URLs are skipped.
 func TestCollect_InvalidIssueURL(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
 	searchResp := ghSearchResponse{

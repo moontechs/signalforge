@@ -10,6 +10,7 @@ import (
 
 // TestCollector_New_NotEnabled verifies that New returns ErrNotEnabled when disabled.
 func TestCollector_New_NotEnabled(t *testing.T) {
+	t.Parallel()
 	_, err := New(CollectorConfig{Enabled: false})
 	if err != ErrNotEnabled {
 		t.Fatalf("expected ErrNotEnabled, got %v", err)
@@ -18,6 +19,7 @@ func TestCollector_New_NotEnabled(t *testing.T) {
 
 // TestCollector_New_Defaults verifies that New returns a usable collector with defaults.
 func TestCollector_New_Defaults(t *testing.T) {
+	t.Parallel()
 	cfg := CollectorConfig{
 		Enabled:            true,
 		SearchIssues:       true,
@@ -59,6 +61,7 @@ func TestCollector_New_Defaults(t *testing.T) {
 
 // TestCollector_WithTransport verifies that WithTransport replaces the transport.
 func TestCollector_WithTransport(t *testing.T) {
+	t.Parallel()
 	c, err := New(CollectorConfig{Enabled: true, MaxRequests: 100})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -74,6 +77,7 @@ func TestCollector_WithTransport(t *testing.T) {
 
 // TestCollector_WithNow verifies that WithNow overrides the time function.
 func TestCollector_WithNow(t *testing.T) {
+	t.Parallel()
 	c, err := New(CollectorConfig{Enabled: true, MaxRequests: 100})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -90,6 +94,7 @@ func TestCollector_WithNow(t *testing.T) {
 // TestCollector_Collect_Empty verifies that Collect returns empty results
 // when both sources are disabled.
 func TestCollector_Collect_Empty(t *testing.T) {
+	t.Parallel()
 	c, err := New(CollectorConfig{
 		Enabled:           true,
 		SearchIssues:      false,
@@ -113,6 +118,7 @@ func TestCollector_Collect_Empty(t *testing.T) {
 
 // TestCollector_Collect_NilContext verifies that nil context returns an error.
 func TestCollector_Collect_NilContext(t *testing.T) {
+	t.Parallel()
 	c, err := New(CollectorConfig{Enabled: true, MaxRequests: 100})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -126,6 +132,7 @@ func TestCollector_Collect_NilContext(t *testing.T) {
 
 // TestDeriveScope_SearchStrategy verifies that empty repositories produce search strategy.
 func TestDeriveScope_SearchStrategy(t *testing.T) {
+	t.Parallel()
 	scope := deriveScope(
 		configValues{MaxItemsPerRun: 100, MaxCommentsPerItem: 10},
 		nil, // empty repos
@@ -163,6 +170,7 @@ func TestDeriveScope_SearchStrategy(t *testing.T) {
 
 // TestDeriveScope_PerRepoStrategy verifies that populated repos produce per-repo strategy.
 func TestDeriveScope_PerRepoStrategy(t *testing.T) {
+	t.Parallel()
 	repos := []string{"owner/repo1", "owner/repo2"}
 	scope := deriveScope(
 		configValues{},
@@ -201,6 +209,7 @@ func TestDeriveScope_PerRepoStrategy(t *testing.T) {
 
 // TestDeriveScope_EmptyValues verifies scope derivation with minimal inputs.
 func TestDeriveScope_EmptyValues(t *testing.T) {
+	t.Parallel()
 	scope := deriveScope(
 		configValues{},
 		nil,
@@ -222,6 +231,7 @@ func TestDeriveScope_EmptyValues(t *testing.T) {
 
 // TestErrorTypes verifies the custom error types work as expected.
 func TestErrorTypes(t *testing.T) {
+	t.Parallel()
 	// RateLimitError
 	rle := &RateLimitError{
 		IsPrimary: true,
@@ -272,5 +282,6 @@ func TestErrorTypes(t *testing.T) {
 
 // TestInterfaceCompliance verifies Collector implements domain.SourceCollector.
 func TestInterfaceCompliance(t *testing.T) {
+	t.Parallel()
 	var _ domain.SourceCollector = (*Collector)(nil)
 }

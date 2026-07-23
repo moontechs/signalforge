@@ -18,6 +18,7 @@ var (
 
 // TestParseIssueToSignal_Basic verifies a basic issue is correctly mapped.
 func TestParseIssueToSignal_Basic(t *testing.T) {
+	t.Parallel()
 	issue := &ghIssue{
 		ID:        42,
 		Number:    1,
@@ -125,6 +126,7 @@ func TestParseIssueToSignal_Basic(t *testing.T) {
 
 // TestParseIssueToSignal_EmptyFields verifies parsing with minimal/empty fields.
 func TestParseIssueToSignal_EmptyFields(t *testing.T) {
+	t.Parallel()
 	issue := &ghIssue{
 		ID:        1,
 		Number:    1,
@@ -178,6 +180,7 @@ func TestParseIssueToSignal_EmptyFields(t *testing.T) {
 // TestParseIssueToSignal_MissingOptionalValues verifies parsing when optional
 // fields like reactions are absent.
 func TestParseIssueToSignal_MissingOptionalValues(t *testing.T) {
+	t.Parallel()
 	issue := &ghIssue{
 		ID:        99,
 		Number:    99,
@@ -217,6 +220,7 @@ func TestParseIssueToSignal_MissingOptionalValues(t *testing.T) {
 // TestParseIssueToSignal_CommentCap verifies that comments are truncated
 // to the maxComments limit and sorted by CreatedAt ascending.
 func TestParseIssueToSignal_CommentCap(t *testing.T) {
+	t.Parallel()
 	issue := &ghIssue{
 		ID:        5,
 		Number:    5,
@@ -259,6 +263,7 @@ func TestParseIssueToSignal_CommentCap(t *testing.T) {
 
 // TestParseIssueToSignal_NoComments verifies handling when no comments are provided.
 func TestParseIssueToSignal_NoComments(t *testing.T) {
+	t.Parallel()
 	issue := &ghIssue{
 		ID:        10,
 		Number:    10,
@@ -282,6 +287,7 @@ func TestParseIssueToSignal_NoComments(t *testing.T) {
 
 // TestParseDiscussionToSignal_Basic verifies a basic discussion is correctly mapped.
 func TestParseDiscussionToSignal_Basic(t *testing.T) {
+	t.Parallel()
 	disc := &graphQLDiscussionNode{
 		ID:        "D_kwDOABC123",
 		Number:    1,
@@ -398,6 +404,7 @@ func TestParseDiscussionToSignal_Basic(t *testing.T) {
 
 // TestParseDiscussionToSignal_EmptyFields verifies parsing with minimal/empty discussion fields.
 func TestParseDiscussionToSignal_EmptyFields(t *testing.T) {
+	t.Parallel()
 	disc := &graphQLDiscussionNode{
 		ID:          "D_kwEMPTY",
 		Number:      0,
@@ -454,6 +461,7 @@ func TestParseDiscussionToSignal_EmptyFields(t *testing.T) {
 
 // TestParseDiscussionToSignal_MissingLabels verifies parsing when labels and category are nil.
 func TestParseDiscussionToSignal_MissingLabels(t *testing.T) {
+	t.Parallel()
 	disc := &graphQLDiscussionNode{
 		ID:        "D_kwMISS",
 		Number:    1,
@@ -493,6 +501,7 @@ func TestParseDiscussionToSignal_MissingLabels(t *testing.T) {
 
 // TestParseDiscussionToSignal_CommentCap verifies discussion comment truncation.
 func TestParseDiscussionToSignal_CommentCap(t *testing.T) {
+	t.Parallel()
 	disc := &graphQLDiscussionNode{
 		ID:        "D_kwCAP",
 		Number:    1,
@@ -538,6 +547,7 @@ func TestParseDiscussionToSignal_CommentCap(t *testing.T) {
 
 // TestContentHash_Stability verifies that identical inputs produce identical hashes.
 func TestContentHash_Stability(t *testing.T) {
+	t.Parallel()
 	hash1 := generateContentHash("Title", "Body", []domain.Comment{
 		{Body: "Comment 1"},
 		{Body: "Comment 2"},
@@ -557,6 +567,7 @@ func TestContentHash_Stability(t *testing.T) {
 
 // TestContentHash_DifferentInputs verifies that different inputs produce different hashes.
 func TestContentHash_DifferentInputs(t *testing.T) {
+	t.Parallel()
 	hash1 := generateContentHash("Title A", "Body A", []domain.Comment{
 		{Body: "Comment"},
 	})
@@ -583,6 +594,7 @@ func TestContentHash_DifferentInputs(t *testing.T) {
 
 // TestContentHash_EmptyParts verifies that empty parts still produce a consistent hash.
 func TestContentHash_EmptyParts(t *testing.T) {
+	t.Parallel()
 	hash1 := generateContentHash("", "", nil)
 	hash2 := generateContentHash("", "", nil)
 
@@ -597,6 +609,7 @@ func TestContentHash_EmptyParts(t *testing.T) {
 // TestContentHash_CommentOrder verifies that different comment ordering
 // produces different hashes (because we sort them).
 func TestContentHash_CommentOrder(t *testing.T) {
+	t.Parallel()
 	// Both have same comments, but hash should be stable because
 	// comments are sorted by CreatedAt in the mapping functions.
 	hashA := generateContentHash("Title", "Body", []domain.Comment{
@@ -617,6 +630,7 @@ func TestContentHash_CommentOrder(t *testing.T) {
 
 // TestIssueSourceID verifies the source ID format for issues.
 func TestIssueSourceID(t *testing.T) {
+	t.Parallel()
 	id := issueSourceID(12345)
 	if id != "github_issue:12345" {
 		t.Fatalf("expected github_issue:12345, got %q", id)
@@ -625,6 +639,7 @@ func TestIssueSourceID(t *testing.T) {
 
 // TestDiscussionSourceID verifies the source ID format for discussions.
 func TestDiscussionSourceID(t *testing.T) {
+	t.Parallel()
 	id := discussionSourceID("D_kwDOABC123")
 	if id != "github_discussion:D_kwDOABC123" {
 		t.Fatalf("expected github_discussion:D_kwDOABC123, got %q", id)
@@ -635,6 +650,7 @@ func TestDiscussionSourceID(t *testing.T) {
 
 // TestExtractOwnerRepoFromHTML verifies HTML URL parsing for owner/repo extraction.
 func TestExtractOwnerRepoFromHTML(t *testing.T) {
+	t.Parallel()
 	owner, repo := extractOwnerRepoFromHTML("https://github.com/owner/repo/issues/1")
 	if owner != "owner" || repo != "repo" {
 		t.Fatalf("expected owner/repo, got %s/%s", owner, repo)
@@ -666,6 +682,7 @@ func TestExtractOwnerRepoFromHTML(t *testing.T) {
 
 // TestExtractOwnerRepo verifies repository URL parsing.
 func TestExtractOwnerRepo(t *testing.T) {
+	t.Parallel()
 	owner, repo := extractOwnerRepo("https://api.github.com/repos/owner/repo")
 	if owner != "owner" || repo != "repo" {
 		t.Fatalf("expected owner/repo, got %s/%s", owner, repo)
@@ -686,6 +703,7 @@ func TestExtractOwnerRepo(t *testing.T) {
 
 // TestExtractLabelNames verifies label name extraction.
 func TestExtractLabelNames(t *testing.T) {
+	t.Parallel()
 	labels := []ghLabel{
 		{Name: "bug", Color: "red"},
 		{Name: "enhancement", Color: "blue"},
@@ -707,6 +725,7 @@ func TestExtractLabelNames(t *testing.T) {
 // TestParseIssueToSignal_ContentHashStability verifies that the same issue
 // produces the same content hash across multiple parse calls.
 func TestParseIssueToSignal_ContentHashStability(t *testing.T) {
+	t.Parallel()
 	issue := &ghIssue{
 		ID:        100,
 		Number:    1,
@@ -736,6 +755,7 @@ func TestParseIssueToSignal_ContentHashStability(t *testing.T) {
 // TestParseDiscussionToSignal_ContentHashStability verifies content hash stability
 // for discussions.
 func TestParseDiscussionToSignal_ContentHashStability(t *testing.T) {
+	t.Parallel()
 	disc := &graphQLDiscussionNode{
 		ID:        "D_kwTEST",
 		Number:    1,

@@ -154,6 +154,7 @@ func testClient(fake *fakeTransport) *githubClient {
 // TestClient_RESTPagination verifies that paginated search results
 // are collected across multiple pages.
 func TestClient_RESTPagination(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
 	// Use maxItems >= 100 so per_page=100 (the default)
@@ -224,6 +225,7 @@ func TestClient_RESTPagination(t *testing.T) {
 
 // TestClient_GraphQLPagination verifies cursor-based pagination for discussions.
 func TestClient_GraphQLPagination(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
 	// GraphQL responses need to match the POST to /graphql
@@ -309,6 +311,7 @@ func TestClient_GraphQLPagination(t *testing.T) {
 // TestClient_TransientRetrySuccess verifies that a transient 500 error
 // is retried and the client recovers.
 func TestClient_TransientRetrySuccess(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
 	// per_page will be 10 since maxItems=10 and len(allIssues)=0
@@ -352,6 +355,7 @@ func TestClient_TransientRetrySuccess(t *testing.T) {
 
 // TestClient_RetryExhaustion verifies that repeated errors eventually fail.
 func TestClient_RetryExhaustion(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
 	// per_page will be 10 since maxItems=10 and len(allIssues)=0
@@ -390,6 +394,7 @@ func TestClient_RetryExhaustion(t *testing.T) {
 
 // TestClient_PrimaryRateLimit verifies handling of 429 Too Many Requests.
 func TestClient_PrimaryRateLimit(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
 	perPage := 10
@@ -437,6 +442,7 @@ func TestClient_PrimaryRateLimit(t *testing.T) {
 
 // TestClient_SecondaryRateLimit verifies handling of 403 + Retry-After.
 func TestClient_SecondaryRateLimit(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
 	perPage := 10
@@ -480,6 +486,7 @@ func TestClient_SecondaryRateLimit(t *testing.T) {
 
 // TestClient_304ConditionalResponse verifies ETag/If-None-Match handling.
 func TestClient_304ConditionalResponse(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
 	// Simulate two requests to the same endpoint.
@@ -558,6 +565,7 @@ func TestClient_304ConditionalResponse(t *testing.T) {
 
 // TestClient_RequestLimitCutoff verifies that the request cap is enforced.
 func TestClient_RequestLimitCutoff(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
 	// Create a client with only 1 request allowed
@@ -590,6 +598,7 @@ func TestClient_RequestLimitCutoff(t *testing.T) {
 
 // TestClient_ParseLinkHeader verifies Link header parsing.
 func TestClient_ParseLinkHeader(t *testing.T) {
+	t.Parallel()
 	header := `<https://api.github.com/search/issues?page=2>; rel="next", <https://api.github.com/search/issues?page=5>; rel="last"`
 	links := parseLinkHeader(header)
 
@@ -610,6 +619,7 @@ func TestClient_ParseLinkHeader(t *testing.T) {
 
 // TestClient_ParseRepo verifies repository string parsing.
 func TestClient_ParseRepo(t *testing.T) {
+	t.Parallel()
 	owner, repo, err := parseRepo("owner/repo")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -638,6 +648,7 @@ func TestClient_ParseRepo(t *testing.T) {
 
 // TestClient_BuildSearchQuery verifies search query construction.
 func TestClient_BuildSearchQuery(t *testing.T) {
+	t.Parallel()
 	scope := collectionScope{
 		labels:    []string{"bug", "enhancement"},
 		languages: []string{"go", "python"},
@@ -683,6 +694,7 @@ func TestClient_BuildSearchQuery(t *testing.T) {
 
 // TestClient_RateLimitCheck verifies rate-limit checking.
 func TestClient_RateLimitCheck(t *testing.T) {
+	t.Parallel()
 	c := testClient(newFakeTransport())
 
 	// Initially should be fine
@@ -727,6 +739,7 @@ func TestClient_RateLimitCheck(t *testing.T) {
 
 // TestClient_RequestCountValue verifies that request counts are tracked.
 func TestClient_RequestCountValue(t *testing.T) {
+	t.Parallel()
 	c := testClient(newFakeTransport())
 
 	if c.requestCountValue() != 0 {
@@ -742,6 +755,7 @@ func TestClient_RequestCountValue(t *testing.T) {
 
 // TestClient_ParseRetryAfter verifies Retry-After header parsing.
 func TestClient_ParseRetryAfter(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 
 	d := parseRetryAfter("30", now)
@@ -757,6 +771,7 @@ func TestClient_ParseRetryAfter(t *testing.T) {
 
 // TestClient_doJSONRequest_non200 tests error handling for non-2xx responses.
 func TestClient_doJSONRequest_non200(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 	fake.addResponse("https://api.github.com/some/path", fakeResponse{
 		statusCode: 404,
@@ -782,6 +797,7 @@ func TestClient_doJSONRequest_non200(t *testing.T) {
 
 // TestClient_RateLimitUpdate verifies rate-limit header parsing.
 func TestClient_RateLimitUpdate(t *testing.T) {
+	t.Parallel()
 	c := testClient(newFakeTransport())
 
 	// Default values

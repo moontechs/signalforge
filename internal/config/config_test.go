@@ -8,6 +8,7 @@ import (
 )
 
 func TestDefaultConfigGitHubDefaults(t *testing.T) {
+	t.Parallel()
 	cfg := DefaultConfig()
 
 	if !cfg.Sources.GitHub.Enabled {
@@ -25,6 +26,7 @@ func TestDefaultConfigGitHubDefaults(t *testing.T) {
 }
 
 func TestGitHubConfigValidate(t *testing.T) {
+	t.Parallel()
 	valid := DefaultConfig().Sources.GitHub
 	valid.Repositories = []string{"openai/codex"}
 	valid.Languages = []string{"go"}
@@ -97,7 +99,9 @@ func TestGitHubConfigValidate(t *testing.T) {
 	}
 
 	for _, tc := range tests {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			err := tc.cfg.Validate()
 			if tc.wantErr == "" {
 				if err != nil {
@@ -116,6 +120,7 @@ func TestGitHubConfigValidate(t *testing.T) {
 }
 
 func TestLoadConfigValidatesGitHubConfig(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
 	data := `{"sources":{"github":{"max_items_per_run":0}}}`
@@ -148,7 +153,9 @@ func TestNormalizeSourceName(t *testing.T) {
 	}
 
 	for _, tc := range tests {
+		tc := tc
 		t.Run(tc.input, func(t *testing.T) {
+			t.Parallel()
 			got, ok := NormalizeSourceName(tc.input)
 			if ok != tc.ok {
 				t.Fatalf("NormalizeSourceName(%q) ok = %v, want %v", tc.input, ok, tc.ok)

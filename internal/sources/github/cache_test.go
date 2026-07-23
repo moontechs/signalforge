@@ -13,6 +13,7 @@ import (
 // TestCache_KeyGeneration verifies that cache file paths are deterministic
 // and derived from the key, not from secrets or other non-stable inputs.
 func TestCache_KeyGeneration(t *testing.T) {
+	t.Parallel()
 	store := storage.New(t.TempDir())
 	rc := newResponseCache(store)
 
@@ -58,6 +59,7 @@ func TestCache_KeyGeneration(t *testing.T) {
 
 // TestCache_Miss verifies that a non-existent key returns nil, false.
 func TestCache_Miss(t *testing.T) {
+	t.Parallel()
 	store := storage.New(t.TempDir())
 	rc := newResponseCache(store)
 
@@ -73,6 +75,7 @@ func TestCache_Miss(t *testing.T) {
 // TestCache_SetAndGet verifies that a stored entry can be retrieved
 // and is considered fresh within the TTL.
 func TestCache_SetAndGet(t *testing.T) {
+	t.Parallel()
 	store := storage.New(t.TempDir())
 	rc := newResponseCache(store)
 
@@ -110,6 +113,7 @@ func TestCache_SetAndGet(t *testing.T) {
 
 // TestCache_SetWithoutETag verifies that entries without ETag/LM are stored correctly.
 func TestCache_SetWithoutETag(t *testing.T) {
+	t.Parallel()
 	store := storage.New(t.TempDir())
 	rc := newResponseCache(store)
 
@@ -136,6 +140,7 @@ func TestCache_SetWithoutETag(t *testing.T) {
 
 // TestCache_Expiry verifies that entries beyond the TTL are considered stale.
 func TestCache_Expiry(t *testing.T) {
+	t.Parallel()
 	store := storage.New(t.TempDir())
 	rc := newResponseCache(store)
 
@@ -174,6 +179,7 @@ func TestCache_Expiry(t *testing.T) {
 
 // TestCache_Touch verifies that touch() extends the TTL of an existing entry.
 func TestCache_Touch(t *testing.T) {
+	t.Parallel()
 	store := storage.New(t.TempDir())
 	rc := newResponseCache(store)
 
@@ -206,6 +212,7 @@ func TestCache_Touch(t *testing.T) {
 
 // TestCache_TouchNonExistent verifies that touching a non-existent key is a no-op.
 func TestCache_TouchNonExistent(t *testing.T) {
+	t.Parallel()
 	store := storage.New(t.TempDir())
 	rc := newResponseCache(store)
 
@@ -215,6 +222,7 @@ func TestCache_TouchNonExistent(t *testing.T) {
 
 // TestCache_SetOverwrite verifies that setting the same key overwrites the old value.
 func TestCache_SetOverwrite(t *testing.T) {
+	t.Parallel()
 	store := storage.New(t.TempDir())
 	rc := newResponseCache(store)
 
@@ -245,6 +253,7 @@ func TestCache_SetOverwrite(t *testing.T) {
 // TestCache_StorageRoundTrip verifies persistence across different cache instances
 // by using the same storage directory.
 func TestCache_StorageRoundTrip(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 
 	// First instance: set.
@@ -277,6 +286,7 @@ func TestCache_StorageRoundTrip(t *testing.T) {
 // TestCache_ExpiredEntryReturnsETag verifies that an expired entry still
 // returns the ETag/LM data for conditional revalidation.
 func TestCache_ExpiredEntryReturnsETag(t *testing.T) {
+	t.Parallel()
 	store := storage.New(t.TempDir())
 	rc := newResponseCache(store)
 	rc.ttl = 20 * time.Millisecond
@@ -313,6 +323,7 @@ func TestCache_ExpiredEntryReturnsETag(t *testing.T) {
 // be set by the caller to exclude secrets. This test verifies that the
 // cacheFilePath hashing prevents key contents from appearing in the path.
 func TestCache_KeyExcludesSecrets(t *testing.T) {
+	t.Parallel()
 	store := storage.New(t.TempDir())
 	rc := newResponseCache(store)
 
@@ -334,6 +345,7 @@ func TestCache_KeyExcludesSecrets(t *testing.T) {
 // TestCache_ConcurrentAccess verifies that the cache handles concurrent
 // get/set operations without panicking.
 func TestCache_ConcurrentAccess(t *testing.T) {
+	t.Parallel()
 	store := storage.New(t.TempDir())
 	rc := newResponseCache(store)
 
@@ -356,6 +368,7 @@ func TestCache_ConcurrentAccess(t *testing.T) {
 
 // TestCache_CustomTTL verifies that a custom TTL is respected.
 func TestCache_CustomTTL(t *testing.T) {
+	t.Parallel()
 	store := storage.New(t.TempDir())
 	rc := newResponseCache(store)
 
@@ -390,6 +403,7 @@ func TestCache_CustomTTL(t *testing.T) {
 
 // TestCache_CorruptEntry verifies that a corrupt cache file returns miss.
 func TestCache_CorruptEntry(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	store := storage.New(dir)
 
