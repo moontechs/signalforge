@@ -90,10 +90,56 @@ func (c *HackerNewsConfig) Validate() error {
 // StackExchangeConfig holds Stack Exchange-specific configuration.
 type StackExchangeConfig struct {
 	Enabled         bool     `json:"enabled"`
+	APIKey          string   `json:"-"`
 	Sites           []string `json:"sites"`
 	MaxItemsPerSite int      `json:"max_items_per_site"`
 	MinimumScore    int      `json:"minimum_score"`
 	MinimumViews    int      `json:"minimum_views"`
+	MaxPagesPerSite int      `json:"max_pages_per_site"`
+	PageSize        int      `json:"page_size"`
+}
+
+// Validate checks the Stack Exchange collector configuration.
+func (c *StackExchangeConfig) Validate() error {
+	if !c.Enabled {
+		return nil
+	}
+	if c.MaxItemsPerSite <= 0 {
+		return errors.New("max_items_per_site must be greater than zero")
+	}
+	if c.MinimumScore < 0 {
+		return errors.New("minimum_score must be zero or greater")
+	}
+	if c.MinimumViews < 0 {
+		return errors.New("minimum_views must be zero or greater")
+	}
+	if len(c.Sites) == 0 {
+		return errors.New("at least one Stack Exchange site must be specified")
+	}
+	for _, site := range c.Sites {
+		if !IsValidStackExchangeSite(site) {
+			return fmt.Errorf("unsupported Stack Exchange site %q", site)
+		}
+	}
+	if c.PageSize < 1 || c.PageSize > 100 {
+		return errors.New("page_size must be between 1 and 100")
+	}
+	if c.MaxPagesPerSite <= 0 {
+		return errors.New("max_pages_per_site must be greater than zero")
+	}
+	return nil
+}
+
+var validStackExchangeSites = map[string]struct{}{
+	"stackoverflow": {}, "serverfault": {}, "superuser": {}, "askubuntu": {},
+	"math": {}, "unix": {}, "webapps": {}, "dba": {}, "security": {},
+	"softwareengineering": {}, "stackapps": {}, "tex": {},
+}
+
+// IsValidStackExchangeSite reports whether site is a supported Stack Exchange slug.
+func IsValidStackExchangeSite(site string) bool {
+	_, ok := validStackExchangeSites[strings.ToLower(strings.TrimSpace(site))]
+	return ok
 }
 
 // RedditConfig holds Reddit-specific configuration.
@@ -183,10 +229,12 @@ func DefaultConfig() *Config {
 			},
 			StackExchange: StackExchangeConfig{
 				Enabled:         true,
-				Sites:           []string{"stackoverflow", "superuser", "webapps"},
-				MaxItemsPerSite: 200,
+				Sites:           []string{"stackoverflow", "serverfault", "superuser"},
+				MaxItemsPerSite: 300,
 				MinimumScore:    0,
 				MinimumViews:    0,
+				PageSize:        25,
+				MaxPagesPerSite: 10,
 			},
 			Reddit: RedditConfig{
 				Enabled:            false,
@@ -232,6 +280,7 @@ func LoadConfig(dir string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
+			cfg.Sources.StackExchange.APIKey = strings.TrimSpace(os.Getenv("STACKEXCHANGE_API_KEY"))
 			return cfg, nil
 		}
 		return nil, fmt.Errorf("read config: %w", err)
@@ -239,6 +288,7 @@ func LoadConfig(dir string) (*Config, error) {
 	if err := json.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("parse config: %w", err)
 	}
+	cfg.Sources.StackExchange.APIKey = strings.TrimSpace(os.Getenv("STACKEXCHANGE_API_KEY"))
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
@@ -270,6 +320,9 @@ func (c *Config) Validate() error {
 	}
 	if err := c.Sources.HackerNews.Validate(); err != nil {
 		return fmt.Errorf("validate hackernews config: %w", err)
+	}
+	if err := c.Sources.StackExchange.Validate(); err != nil {
+		return fmt.Errorf("validate stackexchange config: %w", err)
 	}
 	return nil
 }

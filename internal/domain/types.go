@@ -398,27 +398,27 @@ type RunError struct {
 
 // ResearchStats holds statistics for a pipeline run.
 type ResearchStats struct {
-	RawSignalsCollected int `json:"raw_signals_collected"`
-	RawSignalsSkipped   int `json:"raw_signals_skipped"`
-	ProblemSignalsFound int `json:"problem_signals_found"`
-	NoiseSignals        int `json:"noise_signals"`
-	ClustersCreated     int `json:"clusters_created"`
-	JobsCreated         int `json:"jobs_created"`
-	IdeasCreated        int `json:"ideas_created"`
-	DuplicateIdeas      int `json:"duplicate_ideas"`
-	GitHubRequests      int `json:"github_requests"`
-	HackerNewsRequests  int `json:"hackernews_requests"`
-	StackExchangeReqs   int `json:"stackexchange_requests"`
-	RedditRequests      int `json:"reddit_requests"`
-	SERPRequests        int `json:"serp_requests"`
-	UnlockerRequests    int `json:"unlocker_requests"`
-	LLMRequests         int `json:"llm_requests"`
-	GitHubCacheHits     int `json:"github_cache_hits"`
-	HackerNewsCacheHits int `json:"hackernews_cache_hits"`
-	StackExchangeCache  int `json:"stackexchange_cache_hits"`
-	RedditCacheHits     int `json:"reddit_cache_hits"`
-	SERPCacheHits       int `json:"serp_cache_hits"`
-	UnlockerCacheHits   int `json:"unlocker_cache_hits"`
+	RawSignalsCollected    int `json:"raw_signals_collected"`
+	RawSignalsSkipped      int `json:"raw_signals_skipped"`
+	ProblemSignalsFound    int `json:"problem_signals_found"`
+	NoiseSignals           int `json:"noise_signals"`
+	ClustersCreated        int `json:"clusters_created"`
+	JobsCreated            int `json:"jobs_created"`
+	IdeasCreated           int `json:"ideas_created"`
+	DuplicateIdeas         int `json:"duplicate_ideas"`
+	GitHubRequests         int `json:"github_requests"`
+	HackerNewsRequests     int `json:"hackernews_requests"`
+	StackExchangeRequests  int `json:"stackexchange_requests"`
+	RedditRequests         int `json:"reddit_requests"`
+	SERPRequests           int `json:"serp_requests"`
+	UnlockerRequests       int `json:"unlocker_requests"`
+	LLMRequests            int `json:"llm_requests"`
+	GitHubCacheHits        int `json:"github_cache_hits"`
+	HackerNewsCacheHits    int `json:"hackernews_cache_hits"`
+	StackExchangeCacheHits int `json:"stackexchange_cache_hits"`
+	RedditCacheHits        int `json:"reddit_cache_hits"`
+	SERPCacheHits          int `json:"serp_cache_hits"`
+	UnlockerCacheHits      int `json:"unlocker_cache_hits"`
 }
 
 // Memory represents the persistent memory of the system.

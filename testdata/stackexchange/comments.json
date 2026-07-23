@@ -1,0 +1,67 @@
+[
+  {
+    "comment_id": 3001,
+    "post_id": 1001,
+    "body_markdown": "<p>Have you looked at Go 1.20's error wrapping improvements?</p>",
+    "owner": {
+      "display_name": "commenter1",
+      "user_id": 7001,
+      "reputation": 200,
+      "user_type": "registered"
+    },
+    "creation_date": 1700005000,
+    "score": 5
+  },
+  {
+    "comment_id": 3002,
+    "post_id": 1001,
+    "body_markdown": "<p>I recommend using the <code>pkg/errors</code> library for stack traces.</p>",
+    "owner": {
+      "display_name": "commenter2",
+      "user_id": 7002,
+      "reputation": 150,
+      "user_type": "registered"
+    },
+    "creation_date": 1700030000,
+    "score": 3
+  },
+  {
+    "comment_id": 3003,
+    "post_id": 1002,
+    "body_markdown": "<p>Check if you're using Python 2 vs Python 3.</p>",
+    "owner": {
+      "display_name": "debugger",
+      "user_id": 7003,
+      "reputation": 500,
+      "user_type": "registered"
+    },
+    "creation_date": 1699905000,
+    "score": 7
+  },
+  {
+    "comment_id": 3004,
+    "post_id": 1003,
+    "body_markdown": "<p>Try running with <code>docker run -it</code> to see if it stays alive.</p>",
+    "owner": {
+      "display_name": "helper1",
+      "user_id": 7004,
+      "reputation": 300,
+      "user_type": "registered"
+    },
+    "creation_date": 1699805000,
+    "score": 12
+  },
+  {
+    "comment_id": 3005,
+    "post_id": 1003,
+    "body_markdown": "<p>Check if your Node.js process is designed to run as a daemon.</p>",
+    "owner": {
+      "display_name": "helper2",
+      "user_id": 7005,
+      "reputation": 180,
+      "user_type": "registered"
+    },
+    "creation_date": 1699815000,
+    "score": 4
+  }
+]
