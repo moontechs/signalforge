@@ -198,6 +198,66 @@ func TestReportCollectSummary_NoHN(t *testing.T) {
 	}
 }
 
+func TestReportCollectSummary_OnlyHN(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+	buf := new(strings.Builder)
+	cmd.SetOut(buf)
+
+	delta := collectStatsDelta{
+		collected:   8,
+		skipped:     1,
+		hnRequests:  12,
+		hnCacheHits: 4,
+	}
+
+	err := reportCollectSummary(cmd, "hackernews", 8, delta)
+	if err != nil {
+		t.Fatalf("reportCollectSummary failed: %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "HN requests: 12") {
+		t.Errorf("expected HN requests: 12 in output, got: %s", output)
+	}
+	if !strings.Contains(output, "cache hits: 4") {
+		t.Errorf("expected cache hits: 4 in output, got: %s", output)
+	}
+	if strings.Contains(output, "GitHub requests") {
+		t.Errorf("unexpected GitHub requests in output when delta.requests=0: %s", output)
+	}
+}
+
+func TestReportCollectSummary_NoRequests(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+	buf := new(strings.Builder)
+	cmd.SetOut(buf)
+
+	delta := collectStatsDelta{
+		collected: 3,
+		skipped:   0,
+	}
+
+	err := reportCollectSummary(cmd, "stackexchange", 3, delta)
+	if err != nil {
+		t.Fatalf("reportCollectSummary failed: %v", err)
+	}
+
+	output := buf.String()
+	if strings.Contains(output, "GitHub requests") {
+		t.Errorf("unexpected GitHub requests when delta.requests=0: %s", output)
+	}
+	if strings.Contains(output, "HN requests") {
+		t.Errorf("unexpected HN requests when delta.hnRequests=0: %s", output)
+	}
+	if !strings.HasSuffix(strings.TrimSpace(output), "New: 3, skipped: 0") {
+		t.Errorf("unexpected output format: %s", output)
+	}
+}
+
 func TestBuildCollector_HN_RequiresNoToken(t *testing.T) {
 	t.Parallel()
 	// Unlike GitHub, HN collector does not require any environment token.

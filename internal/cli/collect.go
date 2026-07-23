@@ -299,33 +299,18 @@ func statsDelta(before, after *domain.ResearchStats) collectStatsDelta {
 }
 
 func reportCollectSummary(cmd *cobra.Command, source string, totalSignals int, delta collectStatsDelta) error {
-	if delta.hnRequests > 0 {
-		_, err := fmt.Fprintf(
-			cmd.OutOrStdout(),
-			"Collected %d signals from %s. New: %d, skipped: %d, GitHub requests: %d, HN requests: %d (cache hits: %d)\n",
-			totalSignals,
-			source,
-			delta.collected,
-			delta.skipped,
-			delta.requests,
-			delta.hnRequests,
-			delta.hnCacheHits,
-		)
-		if err != nil {
-			return fmt.Errorf("write collection summary: %w", err)
-		}
-		return nil
-	}
+	msg := fmt.Sprintf("Collected %d signals from %s. New: %d, skipped: %d",
+		totalSignals, source, delta.collected, delta.skipped)
 
-	_, err := fmt.Fprintf(
-		cmd.OutOrStdout(),
-		"Collected %d signals from %s. New: %d, skipped: %d, GitHub requests: %d\n",
-		totalSignals,
-		source,
-		delta.collected,
-		delta.skipped,
-		delta.requests,
-	)
+	if delta.requests > 0 {
+		msg += fmt.Sprintf(", GitHub requests: %d", delta.requests)
+	}
+	if delta.hnRequests > 0 {
+		msg += fmt.Sprintf(", HN requests: %d (cache hits: %d)", delta.hnRequests, delta.hnCacheHits)
+	}
+	msg += "\n"
+
+	_, err := fmt.Fprint(cmd.OutOrStdout(), msg)
 	if err != nil {
 		return fmt.Errorf("write collection summary: %w", err)
 	}
