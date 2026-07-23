@@ -15,6 +15,7 @@ import (
 	"github.com/moontechs/signalforge/internal/domain"
 	"github.com/moontechs/signalforge/internal/memory"
 	"github.com/moontechs/signalforge/internal/sources/github"
+	"github.com/moontechs/signalforge/internal/sources/hackernews"
 	"github.com/moontechs/signalforge/internal/storage"
 )
 
@@ -125,6 +126,14 @@ func executeCollect(cmd *cobra.Command, env *collectEnv) error {
 			Sources: env.selectedSources,
 		})
 		totalSignals += len(signals)
+
+		// Track HN request/cache-hit stats.
+		if hnCol, ok := collector.(*hackernews.Collector); ok {
+			stats := hnCol.Stats()
+			env.mem.AddHNRequests(stats.Requests)
+			env.mem.AddHNCacheHits(stats.CacheHits)
+		}
+
 		if err != nil {
 			afterStats := env.mem.GetStats()
 			if outputErr := reportCollectSummary(cmd, collector.Name(), len(signals), statsDelta(env.before, &afterStats)); outputErr != nil {
@@ -244,26 +253,70 @@ func buildCollector(source string, cfg *config.Config, store *storage.Storage) (
 		collector.WithCache(store)
 		return collector, nil
 
+	case "hackernews":
+		if !cfg.Sources.HackerNews.Enabled {
+			return nil, errors.New("hackernews collection is disabled in config")
+		}
+
+		hnCfg := &hackernews.ConfigValues{
+			Enabled:            cfg.Sources.HackerNews.Enabled,
+			Feeds:              cfg.Sources.HackerNews.Feeds,
+			MaxItemsPerRun:     cfg.Sources.HackerNews.MaxItemsPerRun,
+			MaxCommentsPerItem: cfg.Sources.HackerNews.MaxCommentsPerItem,
+			MinimumScore:       cfg.Sources.HackerNews.MinimumScore,
+			MaxRequests:        cfg.Limits.MaxHNRequests,
+		}
+
+		collector, err := hackernews.New(hnCfg)
+		if err != nil {
+			return nil, fmt.Errorf("create hackernews collector: %w", err)
+		}
+
+		collector.WithCache(store)
+		return collector, nil
+
 	default:
 		return nil, fmt.Errorf("source %q is not supported by the collect command yet", source)
 	}
 }
 
 type collectStatsDelta struct {
-	collected int
-	skipped   int
-	requests  int
+	collected   int
+	skipped     int
+	requests    int
+	hnRequests  int
+	hnCacheHits int
 }
 
 func statsDelta(before, after *domain.ResearchStats) collectStatsDelta {
 	return collectStatsDelta{
-		collected: after.RawSignalsCollected - before.RawSignalsCollected,
-		skipped:   after.RawSignalsSkipped - before.RawSignalsSkipped,
-		requests:  after.GitHubRequests - before.GitHubRequests,
+		collected:   after.RawSignalsCollected - before.RawSignalsCollected,
+		skipped:     after.RawSignalsSkipped - before.RawSignalsSkipped,
+		requests:    after.GitHubRequests - before.GitHubRequests,
+		hnRequests:  after.HackerNewsRequests - before.HackerNewsRequests,
+		hnCacheHits: after.HackerNewsCacheHits - before.HackerNewsCacheHits,
 	}
 }
 
 func reportCollectSummary(cmd *cobra.Command, source string, totalSignals int, delta collectStatsDelta) error {
+	if delta.hnRequests > 0 {
+		_, err := fmt.Fprintf(
+			cmd.OutOrStdout(),
+			"Collected %d signals from %s. New: %d, skipped: %d, GitHub requests: %d, HN requests: %d (cache hits: %d)\n",
+			totalSignals,
+			source,
+			delta.collected,
+			delta.skipped,
+			delta.requests,
+			delta.hnRequests,
+			delta.hnCacheHits,
+		)
+		if err != nil {
+			return fmt.Errorf("write collection summary: %w", err)
+		}
+		return nil
+	}
+
 	_, err := fmt.Fprintf(
 		cmd.OutOrStdout(),
 		"Collected %d signals from %s. New: %d, skipped: %d, GitHub requests: %d\n",

@@ -117,6 +117,22 @@ Each stage is resumable. The `pipeline` command runs all stages sequentially.
 - Repeat runs skip previously seen GitHub source IDs and duplicate content hashes
 - Cursor-aware request fields exist in the collector, but the current MVP CLI uses a since-window rather than saved resume cursors
 
+## Hacker News collector (M2-T6)
+
+- HN collector is fully wired: `signalforge collect --sources hackernews --since 30d`
+- No authentication required — uses HN Firebase API at `https://hacker-news.firebaseio.com/v0/`
+- Supported feeds: `askstories`, `showstories`, `newstories`, `topstories`, `beststories`
+- Default feeds (in config): `askstories`, `showstories`, `newstories`
+- **Collection pipeline:** scan feeds → dedup IDs across feeds → bounded worker pool (5 workers via `chan struct{}` semaphore) → fetch items → `eligibleStory()` filter (type, dead/deleted, score, since) → flatten comments via BFS (max depth 50) → sort by time descending → apply max-items cap
+- **Comment flattening:** BFS traversal using a queue of `commentRef{id, depth}` refs. Dead/deleted/non-comment items are skipped and their children are not enqueued. Max depth 50 enforced. Configurable `maxComments` cap
+- **BFS ordering:** comments are returned in breadth-first order (all depth-1, then depth-2, etc.). Dead comments at any level cause their entire subtree to be skipped (since kids are not enqueued from a dead item)
+- **TTL caching:** 5 min for feed lists, 24h for items. Cache stored as `cachedResponse{Body, CollectedAt}` on disk under `cache/hackernews/`
+- **No conditional requests** — HN Firebase API does not support ETags or If-Modified-Since
+- **Error handling:** typed sentinel errors (`ErrDisabled`, `ErrInvalidFeed`, `ErrRequestCap`, `ErrMalformedResponse`, `ErrRetriesExhausted`). Partial failures joined with `errors.Join`
+- **Dedup:** by item ID across feeds within a single run (`map[int]bool`). Content hash from title + body + sorted comment bodies
+- **Stats:** `Stats{Requests, CacheHits}` exposed by both `client` and `Collector`. Tracked in memory via `AddHNRequests`/`AddHNCacheHits`
+- **Test patterns:** `fakeTransport` with sequential responses per URL, `testClient()` helper, `testCollector()` helper. All tests use `t.Parallel()` where safe. Test fixtures in `testdata/hackernews/`
+
 ## MVP scope (4 milestones)
 
 | Milestone | What | Status |

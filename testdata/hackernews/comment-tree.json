@@ -1,0 +1,95 @@
+{
+  "root": {
+    "id": 40000010,
+    "type": "story",
+    "by": "bob",
+    "time": 1700100000,
+    "title": "BFS Comment Flattening Test Story",
+    "url": "https://example.com/bfs-test",
+    "text": "",
+    "score": 85,
+    "descendants": 9,
+    "kids": [40000011, 40000012, 40000013]
+  },
+  "items": [
+    {
+      "id": 40000011,
+      "type": "comment",
+      "by": "charlie",
+      "time": 1700100100,
+      "text": "Level 1 comment A with children",
+      "parent": 40000010,
+      "kids": [40000014, 40000015]
+    },
+    {
+      "id": 40000012,
+      "type": "comment",
+      "by": "dave",
+      "time": 1700100200,
+      "text": "Level 1 comment B — dead comment",
+      "parent": 40000010,
+      "dead": true,
+      "kids": [40000016]
+    },
+    {
+      "id": 40000013,
+      "type": "comment",
+      "by": "eve",
+      "time": 1700100300,
+      "text": "Level 1 comment C with a child",
+      "parent": 40000010,
+      "kids": [40000017]
+    },
+    {
+      "id": 40000014,
+      "type": "comment",
+      "by": "frank",
+      "time": 1700100400,
+      "text": "Level 2 comment from A with a child",
+      "parent": 40000011,
+      "kids": [40000018]
+    },
+    {
+      "id": 40000015,
+      "type": "comment",
+      "by": "grace",
+      "time": 1700100500,
+      "text": "Level 2 comment from A no children",
+      "parent": 40000011
+    },
+    {
+      "id": 40000016,
+      "type": "comment",
+      "by": "heidi",
+      "time": 1700100600,
+      "text": "Child of dead comment — visited but parent is filtered out",
+      "parent": 40000012
+    },
+    {
+      "id": 40000017,
+      "type": "comment",
+      "by": "ivan",
+      "time": 1700100700,
+      "text": "Level 2 comment from C with a deleted child",
+      "parent": 40000013,
+      "kids": [40000019]
+    },
+    {
+      "id": 40000018,
+      "type": "comment",
+      "by": "judy",
+      "time": 1700100800,
+      "text": "Level 3 comment — deepest surviving leaf",
+      "parent": 40000014
+    },
+    {
+      "id": 40000019,
+      "type": "comment",
+      "by": "karl",
+      "time": 1700100900,
+      "text": "Level 3 comment — deleted",
+      "parent": 40000017,
+      "deleted": true
+    }
+  ]
+}

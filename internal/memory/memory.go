@@ -2,8 +2,9 @@
 package memory
 
 import (
+	"errors"
 	"fmt"
-	"os"
+	"io/fs"
 	"path/filepath"
 	"sync"
 	"time"
@@ -51,7 +52,7 @@ func (m *DefaultMemory) Load() error {
 
 	var mem domain.Memory
 	if err := m.store.LoadJSON(m.path, &mem); err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return nil
 		}
 		return fmt.Errorf("load memory: %w", err)
@@ -250,6 +251,28 @@ func (m *DefaultMemory) AddGitHubRequests(count int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.mem.Stats.GitHubRequests += count
+}
+
+// AddHNRequests increments the HackerNews request count.
+func (m *DefaultMemory) AddHNRequests(count int) {
+	if count <= 0 {
+		return
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.mem.Stats.HackerNewsRequests += count
+}
+
+// AddHNCacheHits increments the HackerNews cache hit count.
+func (m *DefaultMemory) AddHNCacheHits(count int) {
+	if count <= 0 {
+		return
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.mem.Stats.HackerNewsCacheHits += count
 }
 
 // GetMemory returns the full memory struct (for serialization).
