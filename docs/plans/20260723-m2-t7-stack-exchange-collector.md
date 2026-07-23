@@ -2,7 +2,7 @@
 
 ### Task 1: Define Stack Exchange source types
 
-- [ ] Create `internal/sources/stackexchange/types.go` with:
+- [x] Create `internal/sources/stackexchange/types.go` with:
   - API DTOs: `searchResponse` (items, has_more, quota_max, quota_remaining, backoff, error_id, error_name, error_message), `questionDTO` (question_id, title, body_markdown, link, owner.display_name, creation_date, last_activity_date, score, answer_count, view_count, tag_count, tags, is_answered, accepted_answer_id, closed_date, protected_date), `ownerDTO` (display_name, user_id, reputation, user_type, accept_rate)
   - Collector config struct following HN's pattern (injectable HTTP client, base URL, test transport)
   - SiteConfig struct with: name, minimum_score, minimum_views, page_size, max_pages
@@ -12,8 +12,8 @@
   - API filter string that requests fields: `!m(fMuA8s6W7k*5U0oVWnI*C)lS` (custom filter for minimal payload)
   - Note: API key is NEVER stored in types, cache keys, or persisted data
 
-- [ ] Add `internal/sources/stackexchange/doc.go` with package documentation (mirror HN pattern)
-- [ ] Add `internal/sources/stackexchange/errors.go` with typed errors:
+- [x] Add `internal/sources/stackexchange/doc.go` with package documentation (mirror HN pattern)
+- [x] Add `internal/sources/stackexchange/errors.go` with typed errors:
   - `ErrDisabled` — stackexchange disabled in config
   - `ErrNoSitesConfigured` — empty site list
   - `ErrRequestCap` — per-run request limit reached
