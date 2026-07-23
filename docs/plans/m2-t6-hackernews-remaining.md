@@ -177,7 +177,7 @@ Before any collector/CLI work, the `configValues` struct must be exported so the
 - Modify: `internal/memory/memory.go`
 - Modify: `internal/memory/memory_test.go` (create if not exists)
 
-- [ ] Add `AddHNRequests(count int)` and `AddHNCacheHits(count int)` methods to `*DefaultMemory` following `AddGitHubRequests` pattern:
+- [x] Add `AddHNRequests(count int)` and `AddHNCacheHits(count int)` methods to `*DefaultMemory` following `AddGitHubRequests` pattern:
   ```go
   func (m *DefaultMemory) AddHNRequests(count int) {
       if count <= 0 { return }
@@ -192,13 +192,13 @@ Before any collector/CLI work, the `configValues` struct must be exported so the
       m.mem.Stats.HackerNewsCacheHits += count
   }
   ```
-- [ ] Add tests in `internal/memory/memory_test.go`:
+- [x] Add tests in `internal/memory/memory_test.go`:
   - Basic increment: add N → get stats shows N
   - Zero/negative: no change
   - Accumulation: add 3 + add 7 = 10
   - Concurrent safety (10 goroutines, each adding 1, verify total 10)
-- [ ] Run `go test -v -count=1 -race ./internal/memory/...` and fix failures before Task 5
-- [ ] Commit and push after Task 4
+- [x] Run `go test -v -count=1 -race ./internal/memory/...` and fix failures before Task 5
+- [x] Commit and push after Task 4
 
 ### Task 5: Wire HN collector into CLI collect command
 
