@@ -1,13 +1,16 @@
 package cli
 
 import (
+	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/moontechs/signalforge/internal/config"
 	"github.com/moontechs/signalforge/internal/domain"
+	"github.com/moontechs/signalforge/internal/memory"
 	"github.com/moontechs/signalforge/internal/sources/hackernews"
 	"github.com/moontechs/signalforge/internal/sources/stackexchange"
 	"github.com/moontechs/signalforge/internal/storage"
@@ -315,5 +318,197 @@ func TestBuildCollector_HN_RequiresNoToken(t *testing.T) {
 	}
 	if collector == nil {
 		t.Fatal("collector is nil")
+	}
+}
+
+// mockCollector implements domain.SourceCollector for testing resume cursor flow.
+type mockCollector struct {
+	name      string
+	collectFn func(domain.CollectRequest) ([]domain.RawSignal, error)
+}
+
+func (m *mockCollector) Name() string { return m.name }
+
+func (m *mockCollector) Collect(_ context.Context, req domain.CollectRequest) ([]domain.RawSignal, error) { //nolint:gocritic // must match SourceCollector interface signature
+	if m.collectFn != nil {
+		return m.collectFn(req)
+	}
+	return nil, nil
+}
+
+func TestExecuteCollect_ResumeLoadsCursorForMatchingSource(t *testing.T) {
+	t.Parallel()
+
+	store := storage.New(t.TempDir())
+	mem := memory.New(store)
+
+	// Set cursors for multiple sources.
+	mem.SetCursor("source-a", "cursor-a-value")
+	mem.SetCursor("source-b", "cursor-b-value")
+	// source-c has no stored cursor.
+
+	capturedA := make(map[string]string)
+	capturedB := make(map[string]string)
+	capturedC := make(map[string]string)
+
+	collectorA := &mockCollector{
+		name: "source-a",
+		collectFn: func(req domain.CollectRequest) ([]domain.RawSignal, error) {
+			capturedA = req.Cursor
+			return nil, nil
+		},
+	}
+	collectorB := &mockCollector{
+		name: "source-b",
+		collectFn: func(req domain.CollectRequest) ([]domain.RawSignal, error) {
+			capturedB = req.Cursor
+			return nil, nil
+		},
+	}
+	collectorC := &mockCollector{
+		name: "source-c",
+		collectFn: func(req domain.CollectRequest) ([]domain.RawSignal, error) {
+			capturedC = req.Cursor
+			return nil, nil
+		},
+	}
+
+	// Must use a real beforeStats to avoid panic.
+	beforeStats := mem.GetStats()
+
+	env := &collectEnv{
+		mem:             mem,
+		collectors:      []domain.SourceCollector{collectorA, collectorB, collectorC},
+		selectedSources: []string{"source-a", "source-b", "source-c"},
+		before:          &beforeStats,
+		resume:          true,
+		sinceWindow:     30 * 24 * time.Hour,
+	}
+
+	cmd := &cobra.Command{}
+	buf := new(strings.Builder)
+	cmd.SetOut(buf)
+
+	if err := executeCollect(cmd, env); err != nil {
+		t.Fatalf("executeCollect failed: %v", err)
+	}
+
+	// source-a should receive its cursor.
+	if len(capturedA) != 1 || capturedA["source-a"] != "cursor-a-value" {
+		t.Errorf("source-a expected cursor, got %v", capturedA)
+	}
+
+	// source-b should receive its cursor.
+	if len(capturedB) != 1 || capturedB["source-b"] != "cursor-b-value" {
+		t.Errorf("source-b expected cursor, got %v", capturedB)
+	}
+
+	// source-c (no stored cursor) should receive nil cursor.
+	if capturedC != nil {
+		t.Errorf("source-c expected nil cursor, got %v", capturedC)
+	}
+}
+
+func TestExecuteCollect_NoResumeNoCursor(t *testing.T) {
+	t.Parallel()
+
+	store := storage.New(t.TempDir())
+	mem := memory.New(store)
+	mem.SetCursor("test-source", "stored-cursor")
+
+	captured := make(map[string]string)
+	collector := &mockCollector{
+		name: "test-source",
+		collectFn: func(req domain.CollectRequest) ([]domain.RawSignal, error) {
+			captured = req.Cursor
+			return nil, nil
+		},
+	}
+
+	beforeStats := mem.GetStats()
+
+	env := &collectEnv{
+		mem:             mem,
+		collectors:      []domain.SourceCollector{collector},
+		selectedSources: []string{"test-source"},
+		before:          &beforeStats,
+		resume:          false, // resume is off
+		sinceWindow:     30 * 24 * time.Hour,
+	}
+
+	cmd := &cobra.Command{}
+	buf := new(strings.Builder)
+	cmd.SetOut(buf)
+
+	if err := executeCollect(cmd, env); err != nil {
+		t.Fatalf("executeCollect failed: %v", err)
+	}
+
+	if captured != nil {
+		t.Errorf("expected nil cursor when resume is disabled, got %v", captured)
+	}
+}
+
+// testCursorCollector implements domain.SourceCollector plus cursorAware for testing.
+type testCursorCollector struct {
+	mockCollector
+	returnCursor map[string]string
+}
+
+func (tcc *testCursorCollector) Cursor() map[string]string {
+	return tcc.returnCursor
+}
+
+func TestExecuteCollect_ResumePersistsCursor(t *testing.T) {
+	t.Parallel()
+
+	store := storage.New(t.TempDir())
+	mem := memory.New(store)
+
+	// Set an initial cursor.
+	mem.SetCursor("cursor-source", "initial-cursor")
+
+	collector := &testCursorCollector{
+		mockCollector: mockCollector{
+			name: "cursor-source",
+			collectFn: func(_ domain.CollectRequest) ([]domain.RawSignal, error) {
+				return nil, nil
+			},
+		},
+		returnCursor: map[string]string{"cursor-source": "updated-cursor"},
+	}
+
+	// Verify the Cursor() method is defined.
+	_, implementsCursor := interface{}(collector).(cursorAware)
+	if !implementsCursor {
+		t.Fatal("collector should implement cursorAware")
+	}
+
+	beforeStats := mem.GetStats()
+
+	env := &collectEnv{
+		mem:             mem,
+		collectors:      []domain.SourceCollector{collector},
+		selectedSources: []string{"cursor-source"},
+		before:          &beforeStats,
+		resume:          true,
+		sinceWindow:     30 * 24 * time.Hour,
+	}
+
+	cmd := &cobra.Command{}
+	buf := new(strings.Builder)
+	cmd.SetOut(buf)
+
+	if err := executeCollect(cmd, env); err != nil {
+		t.Fatalf("executeCollect failed: %v", err)
+	}
+
+	// Check that the cursor was persisted back to memory.
+	cursor, exists := mem.GetCursor("cursor-source")
+	if !exists {
+		t.Fatal("expected cursor after collection")
+	}
+	if cursor != "updated-cursor" {
+		t.Errorf("expected updated-cursor, got %q", cursor)
 	}
 }

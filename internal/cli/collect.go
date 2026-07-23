@@ -161,6 +161,12 @@ func setupCollectEnv(sourceFlag, sinceFlag, untilFlag string, maxItems int, lang
 	}, nil
 }
 
+// cursorAware is an optional interface collectors can implement to report
+// their cursor state after a collection run.
+type cursorAware interface {
+	Cursor() map[string]string
+}
+
 func executeCollect(cmd *cobra.Command, env *collectEnv) error {
 	var totalSignals int
 	for _, collector := range env.collectors {
@@ -173,6 +179,15 @@ func executeCollect(cmd *cobra.Command, env *collectEnv) error {
 		if env.language != "" {
 			languages = []string{env.language}
 		}
+
+		// Load cursor state for resume support.
+		var cursor map[string]string
+		if env.resume {
+			if c, exists := env.mem.GetCursor(collector.Name()); exists {
+				cursor = map[string]string{collector.Name(): c}
+			}
+		}
+
 		req := domain.CollectRequest{
 			Since:     since,
 			Until:     until,
@@ -181,6 +196,7 @@ func executeCollect(cmd *cobra.Command, env *collectEnv) error {
 			DryRun:    env.dryRun,
 			Sources:   env.selectedSources,
 			Languages: languages,
+			Cursor:    cursor,
 		}
 		signals, err := collector.Collect(cmd.Context(), req)
 		totalSignals += len(signals)
@@ -203,6 +219,14 @@ func executeCollect(cmd *cobra.Command, env *collectEnv) error {
 				return fmt.Errorf("write collection summary: %w", outputErr)
 			}
 			return fmt.Errorf("%s collection completed with errors: %w", collector.Name(), err)
+		}
+
+		// Persist cursor state after successful collection.
+		if ca, ok := collector.(cursorAware); ok {
+			cursors := ca.Cursor()
+			for src, cur := range cursors {
+				env.mem.SetCursor(src, cur)
+			}
 		}
 
 		for i := range signals {

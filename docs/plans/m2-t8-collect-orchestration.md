@@ -19,13 +19,13 @@
 
 ### Task 3: Add resumable per-source cursor state to memory
 
-- [ ] Extend `internal/memory/memory.go` persisted memory schema with a per-source cursor map of type `map[string]string`.
-- [ ] Initialize the cursor map safely when loading older `memory.json` files that do not contain cursor state.
-- [ ] Add memory accessors to read, update, and persist a cursor for a named source.
-- [ ] When `--resume` is enabled, load each source’s stored cursor and set it on that source’s `CollectRequest`.
-- [ ] After a successful source collection, persist its returned/updated cursor before proceeding to the next source.
-- [ ] Ensure cursor persistence uses the project’s existing atomic JSON-write behavior.
-- [ ] Keep cursor state scoped by source name so GitHub, Hacker News, and Stack Exchange do not overwrite one another.
+- [x] Extend `internal/memory/memory.go` persisted memory schema with a per-source cursor map of type `map[string]string`.
+- [x] Initialize the cursor map safely when loading older `memory.json` files that do not contain cursor state.
+- [x] Add memory accessors to read, update, and persist a cursor for a named source.
+- [x] When `--resume` is enabled, load each source's stored cursor and set it on that source's `CollectRequest`.
+- [x] After a successful source collection, persist its returned/updated cursor before proceeding to the next source.
+- [x] Ensure cursor persistence uses the project's existing atomic JSON-write behavior.
+- [x] Keep cursor state scoped by source name so GitHub, Hacker News, and Stack Exchange do not overwrite one another.
 
 ### Task 4: Implement deterministic source orchestration and force behavior
 
