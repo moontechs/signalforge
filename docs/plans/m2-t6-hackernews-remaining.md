@@ -206,8 +206,8 @@ Before any collector/CLI work, the `configValues` struct must be exported so the
 - Modify: `internal/cli/collect.go`
 - Create: `internal/cli/collect_test.go`
 
-- [ ] Add import for `"github.com/moontechs/signalforge/internal/sources/hackernews"`
-- [ ] Add `case "hackernews"` to `buildCollector` switch:
+- [x] Add import for `"github.com/moontechs/signalforge/internal/sources/hackernews"`
+- [x] Add `case "hackernews"` to `buildCollector` switch:
   ```go
   case "hackernews":
       if !cfg.Sources.HackerNews.Enabled {
@@ -228,7 +228,7 @@ Before any collector/CLI work, the `configValues` struct must be exported so the
       collector.WithCache(store)
       return collector, nil
   ```
-- [ ] Update `collectStatsDelta` to add HN fields:
+- [x] Update `collectStatsDelta` to add HN fields:
   ```go
   type collectStatsDelta struct {
       collected   int
@@ -238,7 +238,7 @@ Before any collector/CLI work, the `configValues` struct must be exported so the
       hnCacheHits int
   }
   ```
-- [ ] Update `statsDelta`:
+- [x] Update `statsDelta`:
   ```go
   return collectStatsDelta{
       collected:   after.RawSignalsCollected - before.RawSignalsCollected,
@@ -248,7 +248,7 @@ Before any collector/CLI work, the `configValues` struct must be exported so the
       hnCacheHits: after.HackerNewsCacheHits - before.HackerNewsCacheHits,
   }
   ```
-- [ ] After each HN collector run in `executeCollect`, type-assert and track memory:
+- [x] After each HN collector run in `executeCollect`, type-assert and track memory:
   ```go
   if hnCol, ok := collector.(*hackernews.Collector); ok {
       stats := hnCol.Stats()
@@ -256,16 +256,16 @@ Before any collector/CLI work, the `configValues` struct must be exported so the
       env.mem.AddHNCacheHits(stats.CacheHits)
   }
   ```
-- [ ] Update `reportCollectSummary` to include HN stats when `delta.hnRequests > 0`
-- [ ] Create `internal/cli/collect_test.go`:
+- [x] Update `reportCollectSummary` to include HN stats when `delta.hnRequests > 0`
+- [x] Create `internal/cli/collect_test.go`:
   - HN source resolution (`hn` alias → `hackernews`)
   - `buildCollector` with valid HN config
   - Disabled HN → error
   - No token check for HN (unlike GitHub which requires `GITHUB_TOKEN`)
   - Stats delta computation with HN fields
   - Summary formatting includes HN requests when present
-- [ ] Run `go test -v -count=1 -race ./internal/cli/...` and fix failures before Task 6
-- [ ] Commit and push after Task 5
+- [x] Run `go test -v -count=1 -race ./internal/cli/...` and fix failures before Task 6
+- [x] Commit and push after Task 5
 
 ### Task 6: Final validation — tests, vet, lint, coverage, docs
 
