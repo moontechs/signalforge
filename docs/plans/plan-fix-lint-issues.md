@@ -117,10 +117,10 @@ flag (ensure parallel tests don't race)
 **Files:**
   - Modify: All 15 Go files with godot issues (client.go,
 all test files, parser.go, issues.go, types.go, etc.)
-  - [ ] Attempt `golangci-lint run --fix ./...` first —
+  - [x] Attempt `golangci-lint run --fix ./...` first —
 with exclude-rules in place, auto-fix may succeed on
-remaining files
-  - [ ] If auto-fix still has conflicts, fix per-file:
+remaining files (no godot issues remaining)
+  - [x] If auto-fix still has conflicts, fix per-file:
   - Strategy: set `godot.capital: false` in config
 temporarily to only add periods, OR
   - Manually process files with most issues first:
@@ -129,7 +129,7 @@ client.go (~60 comments), parser_test.go, client_test.go
 with capital letter (per existing `capital: true` setting)
   - Focus on doc comments (`// Package...`), standalone
 comments, and struct field comments
-  - [ ] Run `go test ./...` — must pass
+  - [x] Run `go test ./...` — must pass
 ### Task 4: Fix revive (15 issues) — unhandled-error,
 unused-parameter, confusing-results, deep-exit
 **Files:**
