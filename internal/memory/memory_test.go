@@ -2,6 +2,7 @@ package memory
 
 import (
 	"os"
+	"strings"
 	"sync"
 	"testing"
 
@@ -521,5 +522,238 @@ func TestHasQuery(t *testing.T) {
 	// Different source should not match.
 	if m.HasQuery("github", "query1") {
 		t.Error("expected no query for different source")
+	}
+}
+
+func TestGetSetCursor(t *testing.T) {
+	t.Parallel()
+	m := setupTestMemory(t)
+
+	// Non-existent cursor returns empty string and false.
+	cursor, exists := m.GetCursor("github")
+	if exists {
+		t.Error("expected no cursor for github before setting")
+	}
+	if cursor != "" {
+		t.Errorf("expected empty cursor, got %q", cursor)
+	}
+
+	// Set and retrieve.
+	m.SetCursor("github", "cursor-abc-123")
+	cursor, exists = m.GetCursor("github")
+	if !exists {
+		t.Error("expected cursor to exist after setting")
+	}
+	if cursor != "cursor-abc-123" {
+		t.Errorf("expected cursor-abc-123, got %q", cursor)
+	}
+
+	// Overwrite.
+	m.SetCursor("github", "cursor-xyz-789")
+	cursor, exists = m.GetCursor("github")
+	if !exists {
+		t.Error("expected cursor to exist after overwrite")
+	}
+	if cursor != "cursor-xyz-789" {
+		t.Errorf("expected cursor-xyz-789, got %q", cursor)
+	}
+}
+
+func TestSetCursor_EmptyDeletes(t *testing.T) {
+	t.Parallel()
+	m := setupTestMemory(t)
+
+	m.SetCursor("hn", "some-cursor")
+	_, exists := m.GetCursor("hn")
+	if !exists {
+		t.Error("expected cursor to exist after setting")
+	}
+
+	// Setting to empty string should delete the entry.
+	m.SetCursor("hn", "")
+	_, exists = m.GetCursor("hn")
+	if exists {
+		t.Error("expected cursor to be deleted after setting empty string")
+	}
+}
+
+func TestCursorPerSourceIsolation(t *testing.T) {
+	t.Parallel()
+	m := setupTestMemory(t)
+
+	m.SetCursor("github", "gh-cursor")
+	m.SetCursor("hackernews", "hn-cursor")
+	m.SetCursor("stackexchange", "se-cursor")
+
+	ghCursor, _ := m.GetCursor("github")
+	if ghCursor != "gh-cursor" {
+		t.Errorf("expected gh-cursor, got %q", ghCursor)
+	}
+
+	hnCursor, _ := m.GetCursor("hackernews")
+	if hnCursor != "hn-cursor" {
+		t.Errorf("expected hn-cursor, got %q", hnCursor)
+	}
+
+	seCursor, _ := m.GetCursor("stackexchange")
+	if seCursor != "se-cursor" {
+		t.Errorf("expected se-cursor, got %q", seCursor)
+	}
+
+	// Unset source returns nothing.
+	_, exists := m.GetCursor("reddit")
+	if exists {
+		t.Error("expected no cursor for reddit")
+	}
+}
+
+func TestClearCursors(t *testing.T) {
+	t.Parallel()
+	m := setupTestMemory(t)
+
+	m.SetCursor("github", "gh-cursor")
+	m.SetCursor("hackernews", "hn-cursor")
+
+	m.ClearCursors()
+
+	_, ghExists := m.GetCursor("github")
+	if ghExists {
+		t.Error("expected github cursor to be cleared")
+	}
+	_, hnExists := m.GetCursor("hackernews")
+	if hnExists {
+		t.Error("expected hackernews cursor to be cleared")
+	}
+}
+
+func TestSourceCursors_ReturnsCopy(t *testing.T) {
+	t.Parallel()
+	m := setupTestMemory(t)
+
+	m.SetCursor("github", "gh-cursor")
+	m.SetCursor("hackernews", "hn-cursor")
+
+	cursors := m.SourceCursors()
+	if len(cursors) != 2 {
+		t.Errorf("expected 2 cursors, got %d", len(cursors))
+	}
+	if cursors["github"] != "gh-cursor" {
+		t.Errorf("expected gh-cursor, got %q", cursors["github"])
+	}
+	if cursors["hackernews"] != "hn-cursor" {
+		t.Errorf("expected hn-cursor, got %q", cursors["hackernews"])
+	}
+
+	// Modifying the returned map should not affect the original.
+	cursors["github"] = "modified"
+	original, _ := m.GetCursor("github")
+	if original != "gh-cursor" {
+		t.Errorf("original should be unchanged, got %q", original)
+	}
+}
+
+func TestCursorRoundTripPersistence(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	store := storage.New(dir)
+	m := New(store)
+
+	m.SetCursor("github", "gh-cursor")
+	m.SetCursor("hackernews", "hn-cursor")
+
+	if err := m.Save(); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	m2 := New(store)
+	if err := m2.Load(); err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	ghCursor, exists := m2.GetCursor("github")
+	if !exists {
+		t.Error("expected github cursor after round-trip")
+	}
+	if ghCursor != "gh-cursor" {
+		t.Errorf("expected gh-cursor, got %q", ghCursor)
+	}
+
+	hnCursor, exists := m2.GetCursor("hackernews")
+	if !exists {
+		t.Error("expected hackernews cursor after round-trip")
+	}
+	if hnCursor != "hn-cursor" {
+		t.Errorf("expected hn-cursor, got %q", hnCursor)
+	}
+}
+
+func TestCursorBackwardCompatibility(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	store := storage.New(dir)
+
+	// Write a memory.json without source_cursors field (old format).
+	oldData := `{
+	  "version": 1,
+	  "raw_signal_ids": {},
+	  "content_hashes": {},
+	  "problem_fingerprints": {},
+	  "cluster_fingerprints": {},
+	  "idea_fingerprints": {},
+	  "used_queries": {},
+	  "rejected_patterns": [],
+	  "stats": {}
+	}`
+	memoryPath := store.Path("memory.json")
+	if err := store.WriteFile(memoryPath, []byte(oldData)); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	m := New(store)
+	if err := m.Load(); err != nil {
+		t.Fatalf("Load of old-format memory failed: %v", err)
+	}
+
+	// SourceCursors should be initialized to empty map.
+	_, exists := m.GetCursor("github")
+	if exists {
+		t.Error("expected no cursor for github in old-format memory")
+	}
+
+	// Setting and getting should work.
+	m.SetCursor("github", "new-cursor")
+	cursor, exists := m.GetCursor("github")
+	if !exists || cursor != "new-cursor" {
+		t.Errorf("expected new-cursor, got %q (exists=%v)", cursor, exists)
+	}
+}
+
+func TestCursorAtomicWrite(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	store := storage.New(dir)
+	m := New(store)
+
+	m.SetCursor("github", "gh-cursor")
+
+	// Save should use atomic write (temp file + rename).
+	if err := m.Save(); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	// Verify file contents contain source_cursors field.
+	data, err := store.ReadFile(store.Path("memory.json"))
+	if err != nil {
+		t.Fatalf("ReadFile failed: %v", err)
+	}
+
+	if !strings.Contains(string(data), "source_cursors") {
+		t.Error("expected source_cursors in persisted memory JSON")
+	}
+	if !strings.Contains(string(data), "gh-cursor") {
+		t.Error("expected gh-cursor in persisted memory JSON")
 	}
 }

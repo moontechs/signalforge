@@ -432,6 +432,7 @@ type Memory struct {
 	IdeaFingerprints    map[string]string      `json:"idea_fingerprints"`
 	UsedQueries         map[string]QueryMemory `json:"used_queries"`
 	RejectedPatterns    []RejectedPattern      `json:"rejected_patterns"`
+	SourceCursors       map[string]string      `json:"source_cursors"`
 	Stats               ResearchStats          `json:"stats"`
 }
 
