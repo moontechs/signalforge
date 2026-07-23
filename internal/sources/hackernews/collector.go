@@ -107,7 +107,7 @@ func (c *Collector) Collect(ctx context.Context, req domain.CollectRequest) ([]d
 	beforeStats := c.client.Stats()
 
 	// Dedup set for item IDs across feeds.
-	seen := make(map[int]bool)
+	seen := make(map[int]struct{})
 	var candidateIDs []int
 	var feedErrs []error
 
@@ -119,8 +119,8 @@ func (c *Collector) Collect(ctx context.Context, req domain.CollectRequest) ([]d
 			continue
 		}
 		for _, id := range ids {
-			if !seen[id] {
-				seen[id] = true
+			if _, ok := seen[id]; !ok {
+				seen[id] = struct{}{}
 				candidateIDs = append(candidateIDs, id)
 			}
 		}
