@@ -54,15 +54,15 @@
 
 ### Task 7: Add and update tests
 
-- [ ] Add CLI tests covering parsing and forwarding of `--until`, `--max-items`, `--language`, `--force`, `--dry-run`, and `--resume`.
-- [ ] Add tests for valid ISO-date and duration-style `--until` inputs, invalid values, and invalid since/until ranges.
-- [ ] Add orchestration tests proving source execution order is GitHub, Hacker News, Stack Exchange.
-- [ ] Add dry-run tests proving planned output is produced and collectors are not invoked.
-- [ ] Add force tests proving duplicate source IDs and content hashes are collected when `--force` is enabled.
-- [ ] Add non-force regression tests proving existing deduplication behavior remains intact.
-- [ ] Add memory tests for cursor-map initialization, round-trip persistence, per-source isolation, and backward compatibility with existing memory files.
-- [ ] Add resume tests proving saved cursors are supplied to matching sources only.
-- [ ] Update existing summary/statistics tests for new counters and dry-run behavior.
+- [x] Add CLI tests covering parsing and forwarding of `--until`, `--max-items`, `--language`, `--force`, `--dry-run`, and `--resume`.
+- [x] Add tests for valid ISO-date and duration-style `--until` inputs, invalid values, and invalid since/until ranges.
+- [x] Add orchestration tests proving source execution order is GitHub, Hacker News, Stack Exchange.
+- [x] Add dry-run tests proving planned output is produced and collectors are not invoked.
+- [x] Add force tests proving duplicate source IDs and content hashes are collected when `--force` is enabled.
+- [x] Add non-force regression tests proving existing deduplication behavior remains intact.
+- [x] Add memory tests for cursor-map initialization, round-trip persistence, per-source isolation, and backward compatibility with existing memory files.
+- [x] Add resume tests proving saved cursors are supplied to matching sources only.
+- [x] Update existing summary/statistics tests for new counters and dry-run behavior.
 
 ## Validation Commands
 

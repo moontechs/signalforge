@@ -727,6 +727,550 @@ func TestExecuteCollect_NonForcePreservesDedup(t *testing.T) {
 	}
 }
 
+func TestParseUntilWindow_Empty(t *testing.T) {
+	t.Parallel()
+
+	d, err := parseUntilWindow("")
+	if err != nil {
+		t.Fatalf("expected no error for empty string, got %v", err)
+	}
+	if d != 0 {
+		t.Errorf("expected 0 duration for empty string, got %v", d)
+	}
+}
+
+func TestParseUntilWindow_TrimmedEmpty(t *testing.T) {
+	t.Parallel()
+
+	d, err := parseUntilWindow("  ")
+	if err != nil {
+		t.Fatalf("expected no error for whitespace-only string, got %v", err)
+	}
+	if d != 0 {
+		t.Errorf("expected 0 duration for whitespace, got %v", d)
+	}
+}
+
+func TestParseUntilWindow_FutureISODate(t *testing.T) {
+	t.Parallel()
+
+	d, err := parseUntilWindow("2099-12-31")
+	if err != nil {
+		t.Fatalf("expected no error for future ISO date, got %v", err)
+	}
+	if d <= 0 {
+		t.Errorf("expected positive duration for future date, got %v", d)
+	}
+}
+
+func TestParseUntilWindow_PastISODate(t *testing.T) {
+	t.Parallel()
+
+	d, err := parseUntilWindow("2020-01-01")
+	if err != nil {
+		t.Fatalf("expected no error for past ISO date, got %v", err)
+	}
+	if d >= 0 {
+		t.Errorf("expected negative duration for past date, got %v", d)
+	}
+}
+
+func TestParseUntilWindow_DurationDays(t *testing.T) {
+	t.Parallel()
+
+	d, err := parseUntilWindow("7d")
+	if err != nil {
+		t.Fatalf("expected no error for 7d, got %v", err)
+	}
+	expected := -7 * 24 * time.Hour
+	if d != expected {
+		t.Errorf("expected %v, got %v", expected, d)
+	}
+}
+
+func TestParseUntilWindow_DurationHours(t *testing.T) {
+	t.Parallel()
+
+	d, err := parseUntilWindow("24h")
+	if err != nil {
+		t.Fatalf("expected no error for 24h, got %v", err)
+	}
+	expected := -24 * time.Hour
+	if d != expected {
+		t.Errorf("expected %v, got %v", expected, d)
+	}
+}
+
+func TestParseUntilWindow_Invalid(t *testing.T) {
+	t.Parallel()
+
+	_, err := parseUntilWindow("not-a-date")
+	if err == nil {
+		t.Fatal("expected error for invalid until value")
+	}
+}
+
+func TestParseUntilWindow_InvalidNumber(t *testing.T) {
+	t.Parallel()
+
+	_, err := parseUntilWindow("abc")
+	if err == nil {
+		t.Fatal("expected error for non-numeric string")
+	}
+}
+
+func TestCollectCmd_FlagsRegistered(t *testing.T) {
+	t.Parallel()
+
+	cmd := newCollectCmd()
+	f := cmd.Flags()
+
+	flagNames := []string{"sources", "since", "until", "max-items", "language", "force", "dry-run", "resume"}
+	for _, name := range flagNames {
+		flag := f.Lookup(name)
+		if flag == nil {
+			t.Errorf("flag %q is not registered", name)
+		}
+	}
+}
+
+func TestCollectCmd_FlagDefaults(t *testing.T) {
+	t.Parallel()
+
+	cmd := newCollectCmd()
+	f := cmd.Flags()
+
+	tests := []struct {
+		name     string
+		expected string
+	}{
+		{"sources", "github"},
+		{"since", "30d"},
+		{"until", ""},
+		{"language", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			flag := f.Lookup(tt.name)
+			if flag == nil {
+				t.Fatalf("flag %q not found", tt.name)
+			}
+			if flag.DefValue != tt.expected {
+				t.Errorf("flag %q default: expected %q, got %q", tt.name, tt.expected, flag.DefValue)
+			}
+		})
+	}
+}
+
+func TestCollectCmd_ForceDefaultFalse(t *testing.T) {
+	t.Parallel()
+
+	cmd := newCollectCmd()
+	flag := cmd.Flags().Lookup("force")
+	if flag == nil {
+		t.Fatal("force flag not found")
+	}
+	if flag.DefValue != "false" {
+		t.Errorf("expected default false, got %q", flag.DefValue)
+	}
+}
+
+func TestCollectCmd_DryRunDefaultFalse(t *testing.T) {
+	t.Parallel()
+
+	cmd := newCollectCmd()
+	flag := cmd.Flags().Lookup("dry-run")
+	if flag == nil {
+		t.Fatal("dry-run flag not found")
+	}
+	if flag.DefValue != "false" {
+		t.Errorf("expected default false, got %q", flag.DefValue)
+	}
+}
+
+func TestCollectCmd_ResumeDefaultFalse(t *testing.T) {
+	t.Parallel()
+
+	cmd := newCollectCmd()
+	flag := cmd.Flags().Lookup("resume")
+	if flag == nil {
+		t.Fatal("resume flag not found")
+	}
+	if flag.DefValue != "false" {
+		t.Errorf("expected default false, got %q", flag.DefValue)
+	}
+}
+
+func TestCollectCmd_MaxItemsDefaultZero(t *testing.T) {
+	t.Parallel()
+
+	cmd := newCollectCmd()
+	flag := cmd.Flags().Lookup("max-items")
+	if flag == nil {
+		t.Fatal("max-items flag not found")
+	}
+	if flag.DefValue != "0" {
+		t.Errorf("expected default 0, got %q", flag.DefValue)
+	}
+}
+
+func TestCollectCmd_MaxItemsRejectsNegative(t *testing.T) {
+	t.Parallel()
+
+	cmd := newCollectCmd()
+	cmd.SetArgs([]string{"--max-items=-1"})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for negative max-items")
+	}
+}
+
+func TestBuildCollectRequest_ForwardsFlags(t *testing.T) {
+	t.Parallel()
+
+	store := storage.New(t.TempDir())
+	mem := memory.New(store)
+	cfg := newTestConfig()
+
+	mockColl := &mockCollector{name: "test-source"}
+
+	sinceWindow := 7 * 24 * time.Hour
+	untilWindow := -24 * time.Hour
+
+	beforeStats := mem.GetStats()
+
+	env := &collectEnv{
+		store:           store,
+		mem:             mem,
+		cfg:             cfg,
+		collectors:      []domain.SourceCollector{mockColl},
+		selectedSources: []string{"test-source"},
+		before:          &beforeStats,
+		sinceWindow:     sinceWindow,
+		untilWindow:     untilWindow,
+		maxItems:        42,
+		language:        "go",
+		force:           true,
+		dryRun:          false,
+		resume:          true,
+	}
+
+	// Set cursor to test resume forwarding.
+	env.mem.SetCursor("test-source", "test-cursor")
+
+	req := buildCollectRequest(env, mockColl)
+
+	// Verify window calculations.
+	expectedSince := time.Now().Add(-sinceWindow)
+	if req.Since.Before(expectedSince.Add(-time.Second)) || req.Since.After(expectedSince.Add(time.Second)) {
+		t.Errorf("Since should be near %v, got %v", expectedSince, req.Since)
+	}
+
+	expectedUntil := time.Now().Add(untilWindow)
+	if req.Until.Before(expectedUntil.Add(-time.Second)) || req.Until.After(expectedUntil.Add(time.Second)) {
+		t.Errorf("Until should be near %v, got %v", expectedUntil, req.Until)
+	}
+
+	if req.MaxItems != 42 {
+		t.Errorf("expected MaxItems=42, got %d", req.MaxItems)
+	}
+
+	if len(req.Languages) != 1 || req.Languages[0] != "go" {
+		t.Errorf("expected Languages=[go], got %v", req.Languages)
+	}
+
+	if !req.Force {
+		t.Errorf("expected Force=true")
+	}
+
+	if req.DryRun {
+		t.Errorf("expected DryRun=false")
+	}
+
+	// Verify resume cursor.
+	if len(req.Cursor) != 1 || req.Cursor["test-source"] != "test-cursor" {
+		t.Errorf("expected cursor map with test-cursor, got %v", req.Cursor)
+	}
+}
+
+func TestBuildCollectRequest_NoResumeNoCursor(t *testing.T) {
+	t.Parallel()
+
+	store := storage.New(t.TempDir())
+	mem := memory.New(store)
+	cfg := newTestConfig()
+
+	mockColl := &mockCollector{name: "test-source"}
+	mem.SetCursor("test-source", "stale-cursor")
+
+	beforeStats := mem.GetStats()
+
+	env := &collectEnv{
+		store:           store,
+		mem:             mem,
+		cfg:             cfg,
+		collectors:      []domain.SourceCollector{mockColl},
+		selectedSources: []string{"test-source"},
+		before:          &beforeStats,
+		sinceWindow:     30 * 24 * time.Hour,
+		resume:          false,
+	}
+
+	req := buildCollectRequest(env, mockColl)
+
+	if req.Cursor != nil {
+		t.Errorf("expected nil cursor when resume is disabled, got %v", req.Cursor)
+	}
+}
+
+func TestBuildCollectRequest_Defaults(t *testing.T) {
+	t.Parallel()
+
+	store := storage.New(t.TempDir())
+	mem := memory.New(store)
+	cfg := newTestConfig()
+
+	mockColl := &mockCollector{name: "test-source"}
+	beforeStats := mem.GetStats()
+
+	env := &collectEnv{
+		store:           store,
+		mem:             mem,
+		cfg:             cfg,
+		collectors:      []domain.SourceCollector{mockColl},
+		selectedSources: []string{"test-source"},
+		before:          &beforeStats,
+		sinceWindow:     30 * 24 * time.Hour,
+	}
+
+	req := buildCollectRequest(env, mockColl)
+
+	if req.MaxItems != 0 {
+		t.Errorf("expected MaxItems=0, got %d", req.MaxItems)
+	}
+	if req.Force {
+		t.Errorf("expected Force=false")
+	}
+	if req.DryRun {
+		t.Errorf("expected DryRun=false")
+	}
+	if req.Cursor != nil {
+		t.Errorf("expected nil cursor when resume is disabled and no cursor set")
+	}
+	if req.Languages != nil {
+		t.Errorf("expected nil Languages when not set, got %v", req.Languages)
+	}
+}
+
+func TestBuildCollectRequest_NoLanguage(t *testing.T) {
+	t.Parallel()
+
+	store := storage.New(t.TempDir())
+	mem := memory.New(store)
+	cfg := newTestConfig()
+
+	mockColl := &mockCollector{name: "test-source"}
+	beforeStats := mem.GetStats()
+
+	env := &collectEnv{
+		store:           store,
+		mem:             mem,
+		cfg:             cfg,
+		collectors:      []domain.SourceCollector{mockColl},
+		selectedSources: []string{"test-source"},
+		before:          &beforeStats,
+		sinceWindow:     30 * 24 * time.Hour,
+		language:        "",
+	}
+
+	req := buildCollectRequest(env, mockColl)
+
+	if req.Languages != nil {
+		t.Errorf("expected nil Languages when language is empty, got %v", req.Languages)
+	}
+}
+
+func TestBuildCollectRequest_LanguageForwarded(t *testing.T) {
+	t.Parallel()
+
+	store := storage.New(t.TempDir())
+	mem := memory.New(store)
+	cfg := newTestConfig()
+
+	mockColl := &mockCollector{name: "test-source"}
+	beforeStats := mem.GetStats()
+
+	env := &collectEnv{
+		store:           store,
+		mem:             mem,
+		cfg:             cfg,
+		collectors:      []domain.SourceCollector{mockColl},
+		selectedSources: []string{"test-source"},
+		before:          &beforeStats,
+		sinceWindow:     30 * 24 * time.Hour,
+		language:        "python",
+	}
+
+	req := buildCollectRequest(env, mockColl)
+
+	if len(req.Languages) != 1 || req.Languages[0] != "python" {
+		t.Errorf("expected Languages=[python], got %v", req.Languages)
+	}
+}
+
+func TestReportCollectSummary_ForceMode(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+	buf := new(strings.Builder)
+	cmd.SetOut(buf)
+
+	delta := collectStatsDelta{
+		collected: 5,
+		skipped:   0,
+		force:     true,
+		sources: []sourceCollectionResult{
+			{name: "github", attempted: 5, collected: 5, skipped: 0},
+		},
+	}
+
+	err := reportCollectSummary(cmd, 5, &delta)
+	if err != nil {
+		t.Fatalf("reportCollectSummary failed: %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "Mode: force") {
+		t.Errorf("expected force mode in summary output, got: %s", output)
+	}
+	if !strings.Contains(output, "deduplication disabled") {
+		t.Errorf("expected deduplication disabled message, got: %s", output)
+	}
+}
+
+func TestReportCollectSummary_ResumeMode(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+	buf := new(strings.Builder)
+	cmd.SetOut(buf)
+
+	delta := collectStatsDelta{
+		collected: 10,
+		skipped:   2,
+		resume:    true,
+		sources: []sourceCollectionResult{
+			{name: "github", attempted: 12, collected: 10, skipped: 2},
+		},
+	}
+
+	err := reportCollectSummary(cmd, 12, &delta)
+	if err != nil {
+		t.Fatalf("reportCollectSummary failed: %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "Mode: resume") {
+		t.Errorf("expected resume mode in summary output, got: %s", output)
+	}
+	if !strings.Contains(output, "cursor-based") {
+		t.Errorf("expected cursor-based description, got: %s", output)
+	}
+}
+
+func TestReportCollectSummary_ForceAndResumeMode(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+	buf := new(strings.Builder)
+	cmd.SetOut(buf)
+
+	delta := collectStatsDelta{
+		collected: 15,
+		skipped:   0,
+		force:     true,
+		resume:    true,
+		sources: []sourceCollectionResult{
+			{name: "hackernews", attempted: 15, collected: 15, skipped: 0},
+		},
+	}
+
+	err := reportCollectSummary(cmd, 15, &delta)
+	if err != nil {
+		t.Fatalf("reportCollectSummary failed: %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "Mode: force") {
+		t.Errorf("expected force mode, got: %s", output)
+	}
+	if !strings.Contains(output, "Mode: resume") {
+		t.Errorf("expected resume mode, got: %s", output)
+	}
+}
+
+func TestStatsDelta_WithSources(t *testing.T) {
+	t.Parallel()
+
+	before := &domain.ResearchStats{}
+	after := &domain.ResearchStats{
+		RawSignalsCollected: 10,
+		RawSignalsSkipped:   2,
+		GitHubRequests:      50,
+	}
+
+	delta := statsDelta(before, after)
+	delta.force = true
+	delta.resume = false
+	delta.sources = []sourceCollectionResult{
+		{name: "github", attempted: 12, collected: 10, skipped: 2},
+	}
+
+	if delta.collected != 10 {
+		t.Errorf("expected collected=10, got %d", delta.collected)
+	}
+	if delta.skipped != 2 {
+		t.Errorf("expected skipped=2, got %d", delta.skipped)
+	}
+	if !delta.force {
+		t.Errorf("expected force=true")
+	}
+	if delta.resume {
+		t.Errorf("expected resume=false")
+	}
+	if len(delta.sources) != 1 || delta.sources[0].name != "github" {
+		t.Errorf("expected sources with github, got %v", delta.sources)
+	}
+}
+
+func TestStatsDelta_ForceResumeMode(t *testing.T) {
+	t.Parallel()
+
+	before := &domain.ResearchStats{}
+	after := &domain.ResearchStats{HackerNewsRequests: 15, HackerNewsCacheHits: 7}
+
+	delta := statsDelta(before, after)
+	delta.force = true
+	delta.resume = true
+	delta.sources = []sourceCollectionResult{
+		{name: "hackernews", attempted: 10, collected: 8, skipped: 2},
+	}
+
+	if delta.hnRequests != 15 {
+		t.Errorf("expected hnRequests=15, got %d", delta.hnRequests)
+	}
+	if delta.hnCacheHits != 7 {
+		t.Errorf("expected hnCacheHits=7, got %d", delta.hnCacheHits)
+	}
+	if !delta.force {
+		t.Errorf("expected force=true")
+	}
+	if !delta.resume {
+		t.Errorf("expected resume=true")
+	}
+}
+
 func TestDeduplicateSignals_EmptyInput(t *testing.T) {
 	t.Parallel()
 
