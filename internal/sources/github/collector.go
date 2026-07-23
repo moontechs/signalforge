@@ -69,6 +69,7 @@ func New(cfg *CollectorConfig) (*Collector, error) {
 		},
 		transport: transport,
 		now:       time.Now,
+		client:    nil,
 	}
 
 	c.client = newClient(transport, cfg.MaxRequests)

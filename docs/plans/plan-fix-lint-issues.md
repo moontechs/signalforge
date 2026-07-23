@@ -226,25 +226,25 @@ fields in initialization
 `internal/sources/github/collector.go`,
 `internal/sources/github/parser.go`,
 `internal/sources/github/types.go`
-  - [ ] `cache.go:34` — Add `mu: sync.RWMutex{}` to
+  - [x] `cache.go:34` — Add `mu: sync.RWMutex{}` to
 `&responseCache{store: store, ttl: DefaultCacheTTL}`
-  - [ ] `client.go:91` — Add zero-value missing fields
+  - [x] `client.go:91` — Add zero-value missing fields
 to `&githubClient{...}`: `requestCount: 0, restReset:
 time.Time{}, gqlReset: time.Time{}, etagMutex:
 sync.RWMutex{}, statsMutex: sync.Mutex{}, cache: nil`
-  - [ ] `client.go:118,127` — Add `IsSecondary: false,
+  - [x] `client.go:118,127` — Add `IsSecondary: false,
 RetryAfter: 0` to both `&RateLimitError{...}`
 initializations
-  - [ ] `collector.go:56` — Add `client: nil` to
+  - [x] `collector.go:56` — Add `client: nil` to
 `&Collector{...}` initialization
-  - [ ] `parser.go:29,70` — Add zero-value fields to
+  - [x] `parser.go:29,70` — Add zero-value fields to
 `domain.RawSignal{...}`: `Comments: nil, ContentHash: "",
 Metadata: nil` (or add exclude-rule if preferred)
-  - [ ] `parser.go:162,192` — Add `Score: 0` to
+  - [x] `parser.go:162,192` — Add `Score: 0` to
 `domain.Comment{...}` initialization
-  - [ ] `types.go:32` — Add `strategy: 0, repos: nil` to
+  - [x] `types.go:32` — Add `strategy: 0, repos: nil` to
 `collectionScope{...}` initialization
-  - [ ] Run tests — must pass
+  - [x] Run tests — must pass
 ### Task 8: Fix bodyclose (4 issues) — Unclosed response
 bodies
 **Files:**

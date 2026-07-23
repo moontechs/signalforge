@@ -97,6 +97,12 @@ func newClient(transport transport, maxRequests int) *githubClient {
 		restRemaining: restRateLimitMax,
 		gqlRemaining:  gqlRateLimitMax,
 		etags:         make(map[string]etagEntry),
+		etagMutex:     sync.RWMutex{},
+		requestCount:  0,
+		restReset:     time.Time{},
+		gqlReset:      time.Time{},
+		statsMutex:    sync.Mutex{},
+		cache:         nil,
 	}
 }
 
@@ -116,19 +122,23 @@ func (c *githubClient) checkRateLimit(isGraphQL bool) error {
 	if isGraphQL {
 		if c.gqlRemaining <= 0 && time.Now().Before(c.gqlReset) {
 			return &RateLimitError{
-				IsPrimary: true,
-				Remaining: c.gqlRemaining,
-				Limit:     gqlRateLimitMax,
-				Reset:     c.gqlReset,
+				IsPrimary:   true,
+				IsSecondary: false,
+				RetryAfter:  0,
+				Remaining:   c.gqlRemaining,
+				Limit:       gqlRateLimitMax,
+				Reset:       c.gqlReset,
 			}
 		}
 	} else {
 		if c.restRemaining <= 0 && time.Now().Before(c.restReset) {
 			return &RateLimitError{
-				IsPrimary: true,
-				Remaining: c.restRemaining,
-				Limit:     restRateLimitMax,
-				Reset:     c.restReset,
+				IsPrimary:   true,
+				IsSecondary: false,
+				RetryAfter:  0,
+				Remaining:   c.restRemaining,
+				Limit:       restRateLimitMax,
+				Reset:       c.restReset,
 			}
 		}
 	}

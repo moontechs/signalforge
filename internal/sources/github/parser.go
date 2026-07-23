@@ -34,15 +34,21 @@ func parseIssueToSignal(issue *ghIssue, owner, repo string, comments []ghIssueCo
 		URL:          issue.HTMLURL,
 		Title:        issue.Title,
 		Body:         issue.Body,
+		Comments:     nil,
 		Community:    "github",
 		Repository:   repoFull,
+		Category:     "",
 		Labels:       labelNames,
 		Tags:         labelNames,
 		CommentCount: issue.Comments,
 		ReactionCnt:  issue.Reactions.Total(),
+		ViewCount:    0,
+		AnswerCount:  0,
 		CreatedAt:    issue.CreatedAt,
 		UpdatedAt:    issue.UpdatedAt,
 		CollectedAt:  collectedAt,
+		ContentHash:  "",
+		Metadata:     nil,
 		Score:        int(issue.Reactions.Total()),
 	}
 
@@ -75,6 +81,7 @@ func parseDiscussionToSignal(disc *graphQLDiscussionNode, owner, repo string, ma
 		URL:          disc.URL,
 		Title:        disc.Title,
 		Body:         disc.Body,
+		Comments:     nil,
 		Community:    "github",
 		Repository:   repoFull,
 		Category:     catName,
@@ -82,9 +89,13 @@ func parseDiscussionToSignal(disc *graphQLDiscussionNode, owner, repo string, ma
 		Tags:         appendTags(labelNames, catName),
 		CommentCount: commentCount,
 		ReactionCnt:  disc.UpvoteCount,
+		ViewCount:    0,
+		AnswerCount:  0,
 		CreatedAt:    disc.CreatedAt,
 		UpdatedAt:    disc.UpdatedAt,
 		CollectedAt:  collectedAt,
+		ContentHash:  "",
+		Metadata:     nil,
 		Score:        disc.UpvoteCount,
 	}
 
@@ -162,6 +173,7 @@ func mapIssueComments(comments []ghIssueComment, maxComments int) []domain.Comme
 		result[i] = domain.Comment{
 			ID:        strconv.FormatInt(c.ID, 10),
 			Body:      c.Body,
+			Score:     0,
 			CreatedAt: c.CreatedAt,
 		}
 	}
@@ -192,6 +204,7 @@ func mapDiscussionComments(comments []graphQLDiscussionComment, maxComments int)
 		result[i] = domain.Comment{
 			ID:        c.ID,
 			Body:      c.Body,
+			Score:     0,
 			CreatedAt: c.CreatedAt,
 		}
 	}

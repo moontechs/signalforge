@@ -30,6 +30,8 @@ type collectionScope struct {
 // deriveScope maps GitHubConfig + CollectRequest into a collectionScope.
 func deriveScope(cfg *configValues, repos, labels, languages []string, maxItems, maxComments int, since string) collectionScope {
 	scope := collectionScope{
+		strategy:          0,
+		repos:             nil,
 		labels:            labels,
 		languages:         languages,
 		maxItems:          maxItems,

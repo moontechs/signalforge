@@ -34,6 +34,7 @@ func newResponseCache(store *storage.Storage) *responseCache {
 	return &responseCache{
 		store: store,
 		ttl:   DefaultCacheTTL,
+		mu:    sync.RWMutex{},
 	}
 }
 
