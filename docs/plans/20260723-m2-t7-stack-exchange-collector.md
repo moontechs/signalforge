@@ -25,20 +25,20 @@
 
 ### Task 2: Extend existing config (config.go)
 
-- [ ] Add fields to existing `StackExchangeConfig`:
+- [x] Add fields to existing `StackExchangeConfig`:
   - `APIKey string \`json:"api_key"\`` — read from STACKEXCHANGE_API_KEY env var, never serialized to JSON
   - `MaxPagesPerSite int` and `PageSize int` defaulting to 25 (API max is 100)
   - `Enabled bool` — already exists, keep as-is
-- [ ] Add `Validate() error` to StackExchangeConfig (mirror HackerNewsConfig.Validate):
+- [x] Add `Validate() error` to StackExchangeConfig (mirror HackerNewsConfig.Validate):
   - validate MaxItemsPerSite, MinimumScore, MinimumViews >= 0
   - validate Sites is non-empty and each is a valid SE site
   - validate PageSize in range [1, 100]
   - validate MaxPagesPerSite > 0
-- [ ] Add SE default section in `DefaultConfig()`:
+- [x] Add SE default section in `DefaultConfig()`:
   - `Enabled: true`
   - `Sites: []string{"stackoverflow", "serverfault", "superuser"}`
   - `MaxItemsPerSite: 300`, `MinimumScore: 0`, `MinimumViews: 0`, `PageSize: 25`, `MaxPagesPerSite: 10`
-- [ ] Add `c.Sources.StackExchange.Validate()` call in `config.Validate()` after HackerNews validation
+- [x] Add `c.Sources.StackExchange.Validate()` call in `config.Validate()` after HackerNews validation
 
 ### Task 3: Add ResearchStats fields + stats plumbing
 

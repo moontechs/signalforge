@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -164,6 +165,63 @@ func TestDefaultConfigHackerNewsDefaults(t *testing.T) {
 	}
 	if cfg.Limits.MaxHNRequests != 1000 {
 		t.Fatalf("expected MaxHNRequests 1000, got %d", cfg.Limits.MaxHNRequests)
+	}
+}
+
+func TestDefaultConfigStackExchangeDefaults(t *testing.T) {
+	t.Parallel()
+	cfg := DefaultConfig().Sources.StackExchange
+	if !cfg.Enabled || cfg.MaxItemsPerSite != 300 || cfg.PageSize != 25 || cfg.MaxPagesPerSite != 10 {
+		t.Fatalf("unexpected Stack Exchange defaults: %+v", cfg)
+	}
+	want := []string{"stackoverflow", "serverfault", "superuser"}
+	if strings.Join(cfg.Sites, ",") != strings.Join(want, ",") {
+		t.Fatalf("sites = %v, want %v", cfg.Sites, want)
+	}
+}
+
+func TestStackExchangeConfigValidate(t *testing.T) {
+	t.Parallel()
+	valid := DefaultConfig().Sources.StackExchange
+	tests := []struct {
+		name   string
+		mutate func(*StackExchangeConfig)
+		want   string
+	}{
+		{"empty sites", func(c *StackExchangeConfig) { c.Sites = nil }, "at least one"},
+		{"invalid site", func(c *StackExchangeConfig) { c.Sites = []string{"not-a-site"} }, "unsupported"},
+		{"invalid page size", func(c *StackExchangeConfig) { c.PageSize = 101 }, "page_size"},
+		{"invalid pages", func(c *StackExchangeConfig) { c.MaxPagesPerSite = 0 }, "max_pages_per_site"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := valid
+			tt.mutate(&cfg)
+			if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("Validate() error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestStackExchangeAPIKeyIsLoadedFromEnvironmentAndNotSerialized(t *testing.T) {
+	t.Setenv("STACKEXCHANGE_API_KEY", " secret ")
+	cfg := DefaultConfig()
+	// DefaultConfig is intentionally side-effect free; LoadConfig applies environment overrides.
+	dir := t.TempDir()
+	loaded, err := LoadConfig(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Sources.StackExchange.APIKey != "secret" {
+		t.Fatalf("API key = %q, want trimmed environment value", loaded.Sources.StackExchange.APIKey)
+	}
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "api_key") {
+		t.Fatal("serialized config contains API key field")
 	}
 }
 
