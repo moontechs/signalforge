@@ -3,6 +3,7 @@ package github
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,7 +18,7 @@ const (
 	sourceName         = "github"
 )
 
-// ---- Mapping functions ----
+// ---- Mapping functions ----.
 
 // parseIssueToSignal converts a GitHub issue into a domain.RawSignal.
 // It expects the issue's comments to be pre-fetched and passed separately.
@@ -28,27 +29,33 @@ func parseIssueToSignal(issue *ghIssue, owner, repo string, comments []ghIssueCo
 	signal := domain.RawSignal{
 		ID:           issueSourceID(issue.ID),
 		Source:       sourceName,
-		SourceID:     fmt.Sprintf("%d", issue.ID),
+		SourceID:     strconv.FormatInt(issue.ID, 10),
 		SourceType:   sourceIDIssue,
 		URL:          issue.HTMLURL,
 		Title:        issue.Title,
 		Body:         issue.Body,
+		Comments:     nil,
 		Community:    "github",
 		Repository:   repoFull,
+		Category:     "",
 		Labels:       labelNames,
 		Tags:         labelNames,
 		CommentCount: issue.Comments,
 		ReactionCnt:  issue.Reactions.Total(),
+		ViewCount:    0,
+		AnswerCount:  0,
 		CreatedAt:    issue.CreatedAt,
 		UpdatedAt:    issue.UpdatedAt,
 		CollectedAt:  collectedAt,
-		Score:        int(issue.Reactions.Total()),
+		ContentHash:  "",
+		Metadata:     nil,
+		Score:        issue.Reactions.Total(),
 	}
 
-	// Map and cap comments
+	// Map and cap comments.
 	signal.Comments = mapIssueComments(comments, maxComments)
 
-	// Generate content hash from title, body, and comment bodies
+	// Generate content hash from title, body, and comment bodies.
 	signal.ContentHash = generateContentHash(signal.Title, signal.Body, signal.Comments)
 
 	return signal
@@ -74,6 +81,7 @@ func parseDiscussionToSignal(disc *graphQLDiscussionNode, owner, repo string, ma
 		URL:          disc.URL,
 		Title:        disc.Title,
 		Body:         disc.Body,
+		Comments:     nil,
 		Community:    "github",
 		Repository:   repoFull,
 		Category:     catName,
@@ -81,24 +89,28 @@ func parseDiscussionToSignal(disc *graphQLDiscussionNode, owner, repo string, ma
 		Tags:         appendTags(labelNames, catName),
 		CommentCount: commentCount,
 		ReactionCnt:  disc.UpvoteCount,
+		ViewCount:    0,
+		AnswerCount:  0,
 		CreatedAt:    disc.CreatedAt,
 		UpdatedAt:    disc.UpdatedAt,
 		CollectedAt:  collectedAt,
+		ContentHash:  "",
+		Metadata:     nil,
 		Score:        disc.UpvoteCount,
 	}
 
-	// Map and cap comments
+	// Map and cap comments.
 	if hasComments {
 		signal.Comments = mapDiscussionComments(disc.Comments.Nodes, maxComments)
 	}
 
-	// Generate content hash
+	// Generate content hash.
 	signal.ContentHash = generateContentHash(signal.Title, signal.Body, signal.Comments)
 
 	return signal
 }
 
-// ---- Source ID normalization ----
+// ---- Source ID normalization ----.
 
 // issueSourceID generates a normalized unique ID for a GitHub issue signal.
 func issueSourceID(issueID int64) string {
@@ -107,10 +119,10 @@ func issueSourceID(issueID int64) string {
 
 // discussionSourceID generates a normalized unique ID for a GitHub discussion signal.
 func discussionSourceID(discID string) string {
-	return fmt.Sprintf("github_discussion:%s", discID)
+	return "github_discussion:" + discID
 }
 
-// ---- Content hash generation ----
+// ---- Content hash generation ----.
 
 // generateContentHash creates a deterministic SHA-256 hash from the signal's
 // title, body, and comment bodies. This is used for deduplication.
@@ -122,7 +134,7 @@ func generateContentHash(title, body string, comments []domain.Comment) string {
 	return storage.ContentHash(parts...)
 }
 
-// ---- Label helpers ----
+// ---- Label helpers ----.
 
 // extractLabelNames extracts label name strings from a slice of ghLabel.
 func extractLabelNames(labels []ghLabel) []string {
@@ -136,7 +148,7 @@ func extractLabelNames(labels []ghLabel) []string {
 	return names
 }
 
-// ---- Comment mapping ----
+// ---- Comment mapping ----.
 
 // mapIssueComments converts ghIssueComment slice to domain.Comment slice,
 // capped at maxComments and sorted by CreatedAt ascending.
@@ -145,7 +157,7 @@ func mapIssueComments(comments []ghIssueComment, maxComments int) []domain.Comme
 		return nil
 	}
 
-	// Sort by CreatedAt ascending for deterministic ordering
+	// Sort by CreatedAt ascending for deterministic ordering.
 	sorted := make([]ghIssueComment, len(comments))
 	copy(sorted, comments)
 	sort.Slice(sorted, func(i, j int) bool {
@@ -159,8 +171,9 @@ func mapIssueComments(comments []ghIssueComment, maxComments int) []domain.Comme
 	result := make([]domain.Comment, len(sorted))
 	for i, c := range sorted {
 		result[i] = domain.Comment{
-			ID:        fmt.Sprintf("%d", c.ID),
+			ID:        strconv.FormatInt(c.ID, 10),
 			Body:      c.Body,
+			Score:     0,
 			CreatedAt: c.CreatedAt,
 		}
 	}
@@ -175,7 +188,7 @@ func mapDiscussionComments(comments []graphQLDiscussionComment, maxComments int)
 		return nil
 	}
 
-	// Sort by CreatedAt ascending for deterministic ordering
+	// Sort by CreatedAt ascending for deterministic ordering.
 	sorted := make([]graphQLDiscussionComment, len(comments))
 	copy(sorted, comments)
 	sort.Slice(sorted, func(i, j int) bool {
@@ -191,6 +204,7 @@ func mapDiscussionComments(comments []graphQLDiscussionComment, maxComments int)
 		result[i] = domain.Comment{
 			ID:        c.ID,
 			Body:      c.Body,
+			Score:     0,
 			CreatedAt: c.CreatedAt,
 		}
 	}
@@ -198,15 +212,15 @@ func mapDiscussionComments(comments []graphQLDiscussionComment, maxComments int)
 	return result
 }
 
-// ---- Helpers ----
+// ---- Helpers ----.
 
 // extractOwnerRepo extracts owner and repo name from a GitHub repository API URL.
 // URL format: https://api.github.com/repos/owner/repo
-func extractOwnerRepo(repoURL string) (string, string) {
+func extractOwnerRepo(repoURL string) (owner, repo string) {
 	if repoURL == "" {
 		return "", ""
 	}
-	// Trim the base URL prefix
+	// Trim the base URL prefix.
 	trimmed := strings.TrimPrefix(repoURL, "https://api.github.com/repos/")
 	trimmed = strings.TrimPrefix(trimmed, "/repos/")
 	parts := strings.SplitN(trimmed, "/", 2)
@@ -220,14 +234,14 @@ func extractOwnerRepo(repoURL string) (string, string) {
 // Handles formats like:
 //   - https://github.com/owner/repo/issues/1
 //   - https://github.com/owner/repo/discussions/1
-func extractOwnerRepoFromHTML(url string) (string, string) {
+func extractOwnerRepoFromHTML(url string) (owner, repo string) {
 	if url == "" {
 		return "", ""
 	}
-	// Trim the https://github.com/ prefix
+	// Trim the https://github.com/ prefix.
 	trimmed := strings.TrimPrefix(url, "https://github.com/")
 	trimmed = strings.TrimPrefix(trimmed, "http://github.com/")
-	// Split by / to get [owner, repo, ...]
+	// Split by / to get [owner, repo, ...].
 	parts := strings.SplitN(trimmed, "/", 3)
 	if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
 		return "", ""
@@ -235,14 +249,10 @@ func extractOwnerRepoFromHTML(url string) (string, string) {
 	return parts[0], parts[1]
 }
 
-// tagSliceIfPrefix adds prefix to each element in the slice, filtering empties.
-// Used to create tag lists from labels and categories.
-// appendTags appends category to labels only if category is non-empty.
+// AppendTags appends category to labels only if category is non-empty.
 func appendTags(labels []string, category string) []string {
 	if category != "" {
 		return append(labels, category)
 	}
 	return labels
 }
-
-

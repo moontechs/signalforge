@@ -8,8 +8,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/moontechs/signalforge/internal/cli"
 	"github.com/spf13/cobra"
+
+	"github.com/moontechs/signalforge/internal/cli"
 )
 
 const version = "0.1.0"
@@ -20,8 +21,8 @@ var rootCmd = &cobra.Command{
 	Long: `SignalForge collects public signals from GitHub, Hacker News, and Stack Exchange,
 classifies them, clusters recurring problems, and generates evidence-backed product hypotheses.`,
 	Version: version,
-	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		// Set up signal handling for graceful shutdown
+	PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
+		// Set up signal handling for graceful shutdown.
 		ctx, cancel := context.WithCancel(context.Background())
 		c := make(chan os.Signal, 1)
 		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
@@ -31,7 +32,7 @@ classifies them, clusters recurring problems, and generates evidence-backed prod
 			fmt.Fprintln(os.Stderr, "\nShutting down...")
 			os.Exit(0)
 		}()
-		// Store context for commands that need it
+		// Store context for commands that need it.
 		cmd.SetContext(ctx)
 		return nil
 	},

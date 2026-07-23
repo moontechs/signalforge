@@ -3,6 +3,7 @@ package storage
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -21,7 +22,7 @@ type Storage struct {
 
 // New creates a new Storage instance.
 func New(baseDir string) *Storage {
-	return &Storage{baseDir: baseDir}
+	return &Storage{baseDir: baseDir, mu: sync.RWMutex{}}
 }
 
 // BaseDir returns the base directory.
@@ -31,7 +32,10 @@ func (s *Storage) BaseDir() string {
 
 // ensureDir ensures a directory exists.
 func (s *Storage) ensureDir(path string) error {
-	return os.MkdirAll(path, 0755)
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		return fmt.Errorf("create directory %s: %w", path, err)
+	}
+	return nil
 }
 
 // SaveJSON atomically writes a JSON file.
@@ -53,29 +57,33 @@ func (s *Storage) SaveJSON(path string, v any) error {
 	encoder := json.NewEncoder(tmpFile)
 	encoder.SetIndent("", "  ")
 	if err := encoder.Encode(v); err != nil {
-		tmpFile.Close()
-		os.Remove(tmpPath)
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("encode: %w", err)
 	}
 
 	if err := tmpFile.Sync(); err != nil {
-		tmpFile.Close()
-		os.Remove(tmpPath)
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("sync: %w", err)
 	}
 	if err := tmpFile.Close(); err != nil {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("close: %w", err)
 	}
 	if err := os.Rename(tmpPath, path); err != nil {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("rename: %w", err)
 	}
 
-	// Sync directory
+	// Sync directory.
 	if f, err := os.Open(dir); err == nil {
-		f.Sync()
-		f.Close()
+		if err := f.Sync(); err != nil {
+			return fmt.Errorf("sync directory: %w", err)
+		}
+		if err := f.Close(); err != nil {
+			return fmt.Errorf("close directory: %w", err)
+		}
 	}
 
 	return nil
@@ -112,22 +120,22 @@ func (s *Storage) SaveJSONL(path string, v any) error {
 		return fmt.Errorf("marshal: %w", err)
 	}
 
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("open: %w", err)
 	}
 
 	if _, err := f.Write(line); err != nil {
-		f.Close()
+		_ = f.Close()
 		return fmt.Errorf("write: %w", err)
 	}
-	if _, err := f.Write([]byte("\n")); err != nil {
-		f.Close()
+	if _, err := f.WriteString("\n"); err != nil {
+		_ = f.Close()
 		return fmt.Errorf("write newline: %w", err)
 	}
 
 	if err := f.Sync(); err != nil {
-		f.Close()
+		_ = f.Close()
 		return fmt.Errorf("sync: %w", err)
 	}
 	if err := f.Close(); err != nil {
@@ -150,7 +158,7 @@ func (s *Storage) ReadJSONL(path string) ([][]byte, error) {
 	}
 
 	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
-	var results [][]byte
+	results := make([][]byte, 0, len(lines))
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -165,10 +173,10 @@ func (s *Storage) ReadJSONL(path string) ([][]byte, error) {
 func (s *Storage) ReadJSONLInto(path string, into any) error {
 	lines, err := s.ReadJSONL(path)
 	if err != nil {
-		return err
+		return fmt.Errorf("read %s: %w", path, err)
 	}
 
-	// Ensure into is a pointer to slice
+	// Ensure into is a pointer to slice.
 	for _, line := range lines {
 		if err := json.Unmarshal(line, into); err != nil {
 			return fmt.Errorf("unmarshal line: %w", err)
@@ -184,7 +192,7 @@ func (s *Storage) CheckLastJSONLLine(path string) error {
 		if os.IsNotExist(err) {
 			return nil
 		}
-		return err
+		return fmt.Errorf("read %s: %w", path, err)
 	}
 
 	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
@@ -226,16 +234,23 @@ func (s *Storage) Exists(path string) bool {
 
 // ReadFile reads a file's contents.
 func (s *Storage) ReadFile(path string) ([]byte, error) {
-	return os.ReadFile(path)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	return data, nil
 }
 
 // WriteFile writes data to a file.
 func (s *Storage) WriteFile(path string, data []byte) error {
 	dir := filepath.Dir(path)
 	if err := s.ensureDir(dir); err != nil {
-		return err
+		return fmt.Errorf("ensure directory: %w", err)
 	}
-	return os.WriteFile(path, data, 0644)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		return fmt.Errorf("write %s: %w", path, err)
+	}
+	return nil
 }
 
 // Path returns the full path for a relative path under the base directory.
@@ -246,7 +261,7 @@ func (s *Storage) Path(rel string) string {
 // GenerateID generates a unique ID based on content and timestamp.
 func GenerateID(prefix string) string {
 	h := sha256.New()
-	io.WriteString(h, fmt.Sprintf("%s-%d", prefix, time.Now().UnixNano()))
+	_, _ = fmt.Fprintf(h, "%s-%d", prefix, time.Now().UnixNano())
 	return fmt.Sprintf("%s_%x", prefix, h.Sum(nil)[:16])
 }
 
@@ -254,9 +269,9 @@ func GenerateID(prefix string) string {
 func ContentHash(parts ...string) string {
 	h := sha256.New()
 	for _, p := range parts {
-		io.WriteString(h, p)
+		_, _ = io.WriteString(h, p)
 	}
-	return fmt.Sprintf("%x", h.Sum(nil))
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 // BackupJSON creates a backup of a JSON file before modification.
@@ -266,17 +281,20 @@ func (s *Storage) BackupJSON(path string) error {
 		if os.IsNotExist(err) {
 			return nil
 		}
-		return err
+		return fmt.Errorf("read backup source: %w", err)
 	}
 
 	backupDir := filepath.Join(s.baseDir, "backups")
 	if err := s.ensureDir(backupDir); err != nil {
-		return err
+		return fmt.Errorf("create backup directory: %w", err)
 	}
 
 	ts := time.Now().Format("20060102_150405")
 	backupPath := filepath.Join(backupDir, fmt.Sprintf("%s.%s.bak", filepath.Base(path), ts))
-	return os.WriteFile(backupPath, data, 0644)
+	if err := os.WriteFile(backupPath, data, 0o600); err != nil {
+		return fmt.Errorf("write backup: %w", err)
+	}
+	return nil
 }
 
 // JSONLRecovery checks and repairs the last line of a JSONL file.
@@ -286,7 +304,7 @@ func (s *Storage) JSONLRecovery(path string) error {
 		if os.IsNotExist(err) {
 			return nil
 		}
-		return err
+		return fmt.Errorf("read recovery source: %w", err)
 	}
 
 	lines := strings.Split(string(data), "\n")
@@ -300,9 +318,9 @@ func (s *Storage) JSONLRecovery(path string) error {
 	}
 
 	if !json.Valid([]byte(lastLine)) {
-		// Remove the last line
+		// Remove the last line.
 		content := strings.Join(lines[:len(lines)-2], "\n") + "\n"
-		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 			return fmt.Errorf("repair: %w", err)
 		}
 	}

@@ -42,7 +42,7 @@ type requestLimits struct {
 
 // New creates a new GitHub Collector with the given configuration.
 // It returns an error if the collector would have no usable configuration.
-func New(cfg CollectorConfig) (*Collector, error) {
+func New(cfg *CollectorConfig) (*Collector, error) {
 	if !cfg.Enabled {
 		return nil, ErrNotEnabled
 	}
@@ -55,20 +55,21 @@ func New(cfg CollectorConfig) (*Collector, error) {
 
 	c := &Collector{
 		config: configValues{
-			Enabled:           cfg.Enabled,
-			SearchIssues:      cfg.SearchIssues,
-			SearchDiscussions: cfg.SearchDiscussions,
-			MaxItemsPerRun:    cfg.MaxItemsPerRun,
+			Enabled:            cfg.Enabled,
+			SearchIssues:       cfg.SearchIssues,
+			SearchDiscussions:  cfg.SearchDiscussions,
+			MaxItemsPerRun:     cfg.MaxItemsPerRun,
 			MaxCommentsPerItem: cfg.MaxCommentsPerItem,
-			Repositories:      cfg.Repositories,
-			Languages:         cfg.Languages,
-			Labels:            cfg.Labels,
+			Repositories:       cfg.Repositories,
+			Languages:          cfg.Languages,
+			Labels:             cfg.Labels,
 		},
 		limits: requestLimits{
 			maxRequests: cfg.MaxRequests,
 		},
 		transport: transport,
 		now:       time.Now,
+		client:    nil,
 	}
 
 	c.client = newClient(transport, cfg.MaxRequests)
@@ -78,15 +79,15 @@ func New(cfg CollectorConfig) (*Collector, error) {
 // domainCollectorConfig is the public configuration type accepted by New.
 // It mirrors config.GitHubConfig + config.LimitsConfig.MaxGitHubRequests.
 type CollectorConfig struct {
-	Enabled           bool
-	SearchIssues      bool
-	SearchDiscussions bool
-	MaxItemsPerRun    int
+	Enabled            bool
+	SearchIssues       bool
+	SearchDiscussions  bool
+	MaxItemsPerRun     int
 	MaxCommentsPerItem int
-	Repositories      []string
-	Languages         []string
-	Labels            []string
-	MaxRequests       int
+	Repositories       []string
+	Languages          []string
+	Labels             []string
+	MaxRequests        int
 }
 
 // Name returns the collector name.
@@ -125,17 +126,17 @@ func (c *Collector) WithCache(store *storage.Storage) *Collector {
 //  7. Return combined results with partial errors wrapped
 func (c *Collector) Collect(ctx context.Context, req domain.CollectRequest) ([]domain.RawSignal, error) {
 	if ctx == nil {
-		return nil, fmt.Errorf("context must not be nil")
+		return nil, errors.New("context must not be nil")
 	}
 
-	// Format since as RFC3339 string for the scope
+	// Format since as RFC3339 string for the scope.
 	var sinceStr string
 	if !req.Since.IsZero() {
 		sinceStr = req.Since.Format(time.RFC3339)
 	}
 
 	scope := deriveScope(
-		c.config,
+		&c.config,
 		c.config.Repositories,
 		c.config.Labels,
 		c.config.Languages,
@@ -148,45 +149,45 @@ func (c *Collector) Collect(ctx context.Context, req domain.CollectRequest) ([]d
 	var errs []error
 	collectedAt := c.now()
 
-	// 1. Fetch issues (REST)
+	// 1. Fetch issues (REST).
 	if scope.searchIssues {
-		issues, err := fetchIssues(ctx, c.client, scope)
+		issues, err := fetchIssues(ctx, c.client, &scope)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("github issues: %w", err))
 		} else {
-			parsed := parseIssues(ctx, c.client, issues, scope, collectedAt)
+			parsed := parseIssues(ctx, c.client, issues, &scope, collectedAt)
 			signals = append(signals, parsed...)
 		}
 	}
 
-	// 2. Fetch discussions (GraphQL)
+	// 2. Fetch discussions (GraphQL).
 	if scope.searchDiscussions {
-		discussions, err := fetchDiscussions(ctx, c.client, nil, scope)
+		discussions, err := fetchDiscussions(ctx, c.client, nil, &scope)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("github discussions: %w", err))
 		} else {
-			parsed := parseDiscussions(discussions, scope, collectedAt)
+			parsed := parseDiscussions(discussions, &scope, collectedAt)
 			signals = append(signals, parsed...)
 		}
 	}
 
-	// 3. Dedup within this run (by signal ID)
+	// 3. Dedup within this run (by signal ID).
 	seen := make(map[string]bool, len(signals))
 	deduped := make([]domain.RawSignal, 0, len(signals))
-	for _, s := range signals {
-		if !seen[s.ID] {
-			seen[s.ID] = true
-			deduped = append(deduped, s)
+	for i := range signals {
+		if !seen[signals[i].ID] {
+			seen[signals[i].ID] = true
+			deduped = append(deduped, signals[i])
 		}
 	}
 	signals = deduped
 
-	// 4. Enforce max-item limit
+	// 4. Enforce max-item limit.
 	if scope.maxItems > 0 && len(signals) > scope.maxItems {
 		signals = signals[:scope.maxItems]
 	}
 
-	// 5. Return combined results with partial errors
+	// 5. Return combined results with partial errors.
 	if len(errs) > 0 {
 		return signals, fmt.Errorf("github collector: %w", errors.Join(errs...))
 	}
@@ -196,13 +197,13 @@ func (c *Collector) Collect(ctx context.Context, req domain.CollectRequest) ([]d
 
 // parseIssues parses a slice of ghIssue into domain.RawSignal, fetching comments
 // for each issue. Issues where owner/repo cannot be determined are skipped.
-func parseIssues(ctx context.Context, c *githubClient, issues []ghIssue, scope collectionScope, collectedAt time.Time) []domain.RawSignal {
+func parseIssues(ctx context.Context, c *githubClient, issues []ghIssue, scope *collectionScope, collectedAt time.Time) []domain.RawSignal {
 	signals := make([]domain.RawSignal, 0, len(issues))
 
 	for i := range issues {
 		issue := &issues[i]
 
-		// Extract owner/repo from repository_url or fall back to HTML URL
+		// Extract owner/repo from repository_url or fall back to HTML URL.
 		owner, repo := extractOwnerRepo(issue.RepoURL)
 		if owner == "" || repo == "" {
 			owner, repo = extractOwnerRepoFromHTML(issue.HTMLURL)
@@ -211,7 +212,7 @@ func parseIssues(ctx context.Context, c *githubClient, issues []ghIssue, scope c
 			continue
 		}
 
-		// Fetch comments if maxComments is set
+		// Fetch comments if maxComments is set.
 		var fetchErr error
 		var comments []ghIssueComment
 		if scope.maxComments > 0 {
@@ -230,13 +231,13 @@ func parseIssues(ctx context.Context, c *githubClient, issues []ghIssue, scope c
 
 // parseDiscussions parses a slice of graphQLDiscussionNode into domain.RawSignal.
 // Discussions where owner/repo cannot be determined from the URL are skipped.
-func parseDiscussions(discussions []graphQLDiscussionNode, scope collectionScope, collectedAt time.Time) []domain.RawSignal {
+func parseDiscussions(discussions []graphQLDiscussionNode, scope *collectionScope, collectedAt time.Time) []domain.RawSignal {
 	signals := make([]domain.RawSignal, 0, len(discussions))
 
 	for i := range discussions {
 		disc := &discussions[i]
 
-		// Extract owner/repo from HTML URL
+		// Extract owner/repo from HTML URL.
 		owner, repo := extractOwnerRepoFromHTML(disc.URL)
 		if owner == "" || repo == "" {
 			continue
@@ -249,5 +250,5 @@ func parseDiscussions(discussions []graphQLDiscussionNode, scope collectionScope
 	return signals
 }
 
-// ensure interface compliance
+// ensure interface compliance.
 var _ domain.SourceCollector = (*Collector)(nil)

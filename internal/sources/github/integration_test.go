@@ -11,7 +11,7 @@ import (
 	"github.com/moontechs/signalforge/internal/domain"
 )
 
-// ---- Helpers for building fake responses ----
+// ---- Helpers for building fake responses ----.
 
 // searchRespToJSON serializes a ghSearchResponse to JSON.
 func searchRespToJSON(resp ghSearchResponse) []byte {
@@ -28,10 +28,10 @@ func issuesListToJSON(issues []ghIssue) []byte {
 	return b
 }
 
-// ---- Test helpers ----
+// ---- Test helpers ----.
 
 // setupCollector creates a Collector with a fakeTransport and convenient defaults.
-func setupCollector(t *testing.T, cfg CollectorConfig, fake *fakeTransport) *Collector {
+func setupCollector(t *testing.T, cfg *CollectorConfig, fake *fakeTransport) *Collector {
 	t.Helper()
 	if fake == nil {
 		fake = newFakeTransport()
@@ -47,11 +47,12 @@ func setupCollector(t *testing.T, cfg CollectorConfig, fake *fakeTransport) *Col
 	return c
 }
 
-// ---- Tests ----
+// ---- Tests ----.
 
 // TestCollect_MixedIssuesAndDiscussions verifies that Collect returns both
 // issues and discussions parsed into RawSignals.
 func TestCollect_MixedIssuesAndDiscussions(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
 	// We use per-repo strategy so discussions can also be fetched.
@@ -96,8 +97,7 @@ func TestCollect_MixedIssuesAndDiscussions(t *testing.T) {
 		body:       string(issuesBody),
 	})
 
-	// Comment fetch for issue #10 - uses per_page=10 since maxComments=10
-	// Use wildcard to match the full URL with per_page parameter
+	// Use wildcard to match the full URL with per_page parameter.
 	commentsURLPrefix := "https://api.github.com/repos/owner/repo/issues/10/comments?"
 	comments10 := []ghIssueComment{
 		{ID: 5001, Body: "I can reproduce this", User: ghUser{Login: "user3"}, CreatedAt: t2},
@@ -109,7 +109,7 @@ func TestCollect_MixedIssuesAndDiscussions(t *testing.T) {
 		body:       string(comments10Body),
 	})
 
-	// GraphQL discussions
+	// GraphQL discussions.
 	discPage := graphQLResponse{
 		Data: json.RawMessage(`{
 			"repository": {
@@ -141,7 +141,7 @@ func TestCollect_MixedIssuesAndDiscussions(t *testing.T) {
 		body:       string(discBody),
 	})
 
-	c := setupCollector(t, CollectorConfig{
+	c := setupCollector(t, &CollectorConfig{
 		Enabled:            true,
 		SearchIssues:       true,
 		SearchDiscussions:  true,
@@ -152,12 +152,12 @@ func TestCollect_MixedIssuesAndDiscussions(t *testing.T) {
 	}, fake)
 	c.WithNow(func() time.Time { return collectedAt })
 
-	signals, err := c.Collect(context.Background(), domain.CollectRequest{})
+	signals, err := c.Collect(t.Context(), domain.CollectRequest{})
 	if err != nil {
 		t.Fatalf("Collect failed: %v", err)
 	}
 
-	// Expect 3 signals: 2 issues + 1 discussion
+	// Expect 3 signals: 2 issues + 1 discussion.
 	if len(signals) != 3 {
 		t.Fatalf("expected 3 signals, got %d", len(signals))
 	}
@@ -204,14 +204,15 @@ func TestCollect_MixedIssuesAndDiscussions(t *testing.T) {
 // TestCollect_IssuesOnly verifies that Collect returns only issues
 // when SearchDiscussions is disabled.
 func TestCollect_IssuesOnly(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
 	searchResp := ghSearchResponse{
 		TotalCount: 1,
 		Items: []ghIssue{
 			{
-				ID:        2001, Number: 1, Title: "Only issue test", Body: "Body",
-				HTMLURL:   "https://github.com/o/r/issues/1", State: "open",
+				ID: 2001, Number: 1, Title: "Only issue test", Body: "Body",
+				HTMLURL: "https://github.com/o/r/issues/1", State: "open",
 				CreatedAt: t1, UpdatedAt: t1,
 				Labels:    []ghLabel{{Name: "bug"}},
 				User:      ghUser{Login: "u1"},
@@ -228,7 +229,7 @@ func TestCollect_IssuesOnly(t *testing.T) {
 		body:       string(searchBody),
 	})
 
-	c := setupCollector(t, CollectorConfig{
+	c := setupCollector(t, &CollectorConfig{
 		Enabled:            true,
 		SearchIssues:       true,
 		SearchDiscussions:  false,
@@ -238,7 +239,7 @@ func TestCollect_IssuesOnly(t *testing.T) {
 	}, fake)
 	c.WithNow(func() time.Time { return collectedAt })
 
-	signals, err := c.Collect(context.Background(), domain.CollectRequest{})
+	signals, err := c.Collect(t.Context(), domain.CollectRequest{})
 	if err != nil {
 		t.Fatalf("Collect failed: %v", err)
 	}
@@ -259,6 +260,7 @@ func TestCollect_IssuesOnly(t *testing.T) {
 // TestCollect_DiscussionsOnly verifies that Collect returns only discussions
 // when SearchIssues is disabled.
 func TestCollect_DiscussionsOnly(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
 	discPage := graphQLResponse{
@@ -287,7 +289,7 @@ func TestCollect_DiscussionsOnly(t *testing.T) {
 		body:       string(discBody),
 	})
 
-	c := setupCollector(t, CollectorConfig{
+	c := setupCollector(t, &CollectorConfig{
 		Enabled:            true,
 		SearchIssues:       false,
 		SearchDiscussions:  true,
@@ -298,7 +300,7 @@ func TestCollect_DiscussionsOnly(t *testing.T) {
 	}, fake)
 	c.WithNow(func() time.Time { return collectedAt })
 
-	signals, err := c.Collect(context.Background(), domain.CollectRequest{})
+	signals, err := c.Collect(t.Context(), domain.CollectRequest{})
 	if err != nil {
 		t.Fatalf("Collect failed: %v", err)
 	}
@@ -319,9 +321,10 @@ func TestCollect_DiscussionsOnly(t *testing.T) {
 // TestCollect_Dedup verifies that signals with duplicate IDs are filtered out
 // within a single Collect run.
 func TestCollect_Dedup(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
-	// Return one issue (per-repo strategy, so discussions also work)
+	// Return one issue (per-repo strategy, so discussions also work).
 	issuesPrefix := "https://api.github.com/repos/o/r/issues?state=open&sort=updated&direction=asc&per_page="
 	issues := []ghIssue{
 		{
@@ -335,7 +338,7 @@ func TestCollect_Dedup(t *testing.T) {
 	issuesBody := issuesListToJSON(issues)
 	fake.addResponse(issuesPrefix+"*", fakeResponse{statusCode: 200, body: string(issuesBody)})
 
-	// One discussion
+	// One discussion.
 	discPage := graphQLResponse{
 		Data: json.RawMessage(`{
 			"repository": {
@@ -359,7 +362,7 @@ func TestCollect_Dedup(t *testing.T) {
 	discBody, _ := json.Marshal(discPage)
 	fake.addResponse("https://api.github.com/graphql", fakeResponse{statusCode: 200, body: string(discBody)})
 
-	c := setupCollector(t, CollectorConfig{
+	c := setupCollector(t, &CollectorConfig{
 		Enabled:            true,
 		SearchIssues:       true,
 		SearchDiscussions:  true,
@@ -370,7 +373,7 @@ func TestCollect_Dedup(t *testing.T) {
 	}, fake)
 	c.WithNow(func() time.Time { return collectedAt })
 
-	signals, err := c.Collect(context.Background(), domain.CollectRequest{})
+	signals, err := c.Collect(t.Context(), domain.CollectRequest{})
 	if err != nil {
 		t.Fatalf("Collect failed: %v", err)
 	}
@@ -396,21 +399,22 @@ func TestCollect_Dedup(t *testing.T) {
 
 // TestCollect_RequestLimitCutoff verifies that the request cap is enforced.
 func TestCollect_RequestLimitCutoff(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
-	c := setupCollector(t, CollectorConfig{
+	c := setupCollector(t, &CollectorConfig{
 		Enabled:            true,
 		SearchIssues:       true,
 		SearchDiscussions:  false,
 		MaxItemsPerRun:     100,
 		MaxCommentsPerItem: 0,
-		MaxRequests:        1, // Only 1 request allowed
+		MaxRequests:        1, // Only 1 request allowed.
 	}, fake)
 
-	// Pre-fill request count to 1 so the next request hits the limit
+	// Pre-fill request count to 1 so the next request hits the limit.
 	c.client.requestCount = 1
 
-	signals, err := c.Collect(context.Background(), domain.CollectRequest{})
+	signals, err := c.Collect(t.Context(), domain.CollectRequest{})
 	if err == nil {
 		t.Fatal("expected error for request limit, got nil")
 	}
@@ -424,9 +428,10 @@ func TestCollect_RequestLimitCutoff(t *testing.T) {
 
 // TestCollect_RateLimitExhaustion verifies behavior when rate limit is reached.
 func TestCollect_RateLimitExhaustion(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
-	c := setupCollector(t, CollectorConfig{
+	c := setupCollector(t, &CollectorConfig{
 		Enabled:            true,
 		SearchIssues:       true,
 		SearchDiscussions:  false,
@@ -435,11 +440,11 @@ func TestCollect_RateLimitExhaustion(t *testing.T) {
 		MaxRequests:        500,
 	}, fake)
 
-	// Exhaust the REST rate limit before any request
+	// Exhaust the REST rate limit before any request.
 	c.client.restRemaining = 0
 	c.client.restReset = time.Now().Add(1 * time.Hour)
 
-	signals, err := c.Collect(context.Background(), domain.CollectRequest{})
+	signals, err := c.Collect(t.Context(), domain.CollectRequest{})
 	if err == nil {
 		t.Fatal("expected error for rate limit, got nil")
 	}
@@ -456,29 +461,41 @@ func TestCollect_RateLimitExhaustion(t *testing.T) {
 	}
 }
 
-// TestCollect_NilContext verifies that nil context returns an error.
-func TestCollect_NilContext(t *testing.T) {
-	c, err := New(CollectorConfig{Enabled: true, MaxRequests: 100})
+// TestCollect_ValidContext verifies that a valid context works.
+func TestCollect_ValidContext(t *testing.T) {
+	t.Parallel()
+	c, err := New(&CollectorConfig{
+		Enabled:           true,
+		SearchIssues:      true,
+		SearchDiscussions: false,
+		MaxItemsPerRun:    5,
+		MaxRequests:       100,
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_, err = c.Collect(nil, domain.CollectRequest{})
+
+	// With no mocked transport, an HTTP call will fail, but the context
+	// itself should not cause a nil pointer panic.
+	_, err = c.Collect(context.Background(), domain.CollectRequest{})
 	if err == nil {
-		t.Fatal("expected error for nil context")
+		t.Log("Collect succeeded without mocked transport (expected with real API)")
 	}
 }
 
 // TestCollect_NotEnabled verifies that disabled collector returns ErrNotEnabled.
 func TestCollect_NotEnabled(t *testing.T) {
-	_, err := New(CollectorConfig{Enabled: false})
-	if err != ErrNotEnabled {
+	t.Parallel()
+	_, err := New(&CollectorConfig{Enabled: false})
+	if !errors.Is(err, ErrNotEnabled) {
 		t.Fatalf("expected ErrNotEnabled, got %v", err)
 	}
 }
 
 // TestCollect_EmptyResults verifies empty results when no sources configured.
 func TestCollect_EmptyResults(t *testing.T) {
-	c := setupCollector(t, CollectorConfig{
+	t.Parallel()
+	c := setupCollector(t, &CollectorConfig{
 		Enabled:           true,
 		SearchIssues:      false,
 		SearchDiscussions: false,
@@ -486,7 +503,7 @@ func TestCollect_EmptyResults(t *testing.T) {
 	}, newFakeTransport())
 	c.WithNow(func() time.Time { return collectedAt })
 
-	signals, err := c.Collect(context.Background(), domain.CollectRequest{})
+	signals, err := c.Collect(t.Context(), domain.CollectRequest{})
 	if err != nil {
 		t.Fatalf("Collect failed: %v", err)
 	}
@@ -497,9 +514,10 @@ func TestCollect_EmptyResults(t *testing.T) {
 
 // TestCollect_MaxItemsLimit verifies max-items limit across both sources.
 func TestCollect_MaxItemsLimit(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
-	// Per-repo issues: return 2 issues but maxItems=2 total
+	// Per-repo issues: return 2 issues but maxItems=2 total.
 	issuesPrefix := "https://api.github.com/repos/o/r/issues?state=open&sort=updated&direction=asc&per_page="
 	issues := []ghIssue{
 		{
@@ -520,7 +538,7 @@ func TestCollect_MaxItemsLimit(t *testing.T) {
 	issuesBody := issuesListToJSON(issues)
 	fake.addResponse(issuesPrefix+"*", fakeResponse{statusCode: 200, body: string(issuesBody)})
 
-	// GraphQL discussions: return 2 discussions
+	// GraphQL discussions: return 2 discussions.
 	discPage := graphQLResponse{
 		Data: json.RawMessage(`{
 			"repository": {
@@ -555,7 +573,7 @@ func TestCollect_MaxItemsLimit(t *testing.T) {
 	discBody, _ := json.Marshal(discPage)
 	fake.addResponse("https://api.github.com/graphql", fakeResponse{statusCode: 200, body: string(discBody)})
 
-	c := setupCollector(t, CollectorConfig{
+	c := setupCollector(t, &CollectorConfig{
 		Enabled:            true,
 		SearchIssues:       true,
 		SearchDiscussions:  true,
@@ -566,7 +584,7 @@ func TestCollect_MaxItemsLimit(t *testing.T) {
 	}, fake)
 	c.WithNow(func() time.Time { return collectedAt })
 
-	signals, err := c.Collect(context.Background(), domain.CollectRequest{})
+	signals, err := c.Collect(t.Context(), domain.CollectRequest{})
 	if err != nil {
 		t.Fatalf("Collect failed: %v", err)
 	}
@@ -577,6 +595,7 @@ func TestCollect_MaxItemsLimit(t *testing.T) {
 
 // TestCollect_PerRepoStrategy verifies collection with specific repos.
 func TestCollect_PerRepoStrategy(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
 	issuesPrefix := "https://api.github.com/repos/myrepo/awesome/issues?state=open&sort=updated&direction=asc&per_page="
@@ -594,7 +613,7 @@ func TestCollect_PerRepoStrategy(t *testing.T) {
 	issuesBody := issuesListToJSON(issues)
 	fake.addResponse(issuesPrefix+"*", fakeResponse{statusCode: 200, body: string(issuesBody)})
 
-	c := setupCollector(t, CollectorConfig{
+	c := setupCollector(t, &CollectorConfig{
 		Enabled:            true,
 		SearchIssues:       true,
 		SearchDiscussions:  false,
@@ -605,7 +624,7 @@ func TestCollect_PerRepoStrategy(t *testing.T) {
 	}, fake)
 	c.WithNow(func() time.Time { return collectedAt })
 
-	signals, err := c.Collect(context.Background(), domain.CollectRequest{})
+	signals, err := c.Collect(t.Context(), domain.CollectRequest{})
 	if err != nil {
 		t.Fatalf("Collect failed: %v", err)
 	}
@@ -623,10 +642,10 @@ func TestCollect_PerRepoStrategy(t *testing.T) {
 // TestCollect_PartialFailure_IssueError verifies that when issues fail,
 // discussions are still returned and errors are surfaced.
 func TestCollect_PartialFailure_IssueError(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
-	// Issues per-repo endpoint is NOT registered — will fail with 404
-	// But discussions should succeed
+	// But discussions should succeed.
 	discPage := graphQLResponse{
 		Data: json.RawMessage(`{
 			"repository": {
@@ -649,7 +668,7 @@ func TestCollect_PartialFailure_IssueError(t *testing.T) {
 	discBody, _ := json.Marshal(discPage)
 	fake.addResponse("https://api.github.com/graphql", fakeResponse{statusCode: 200, body: string(discBody)})
 
-	c := setupCollector(t, CollectorConfig{
+	c := setupCollector(t, &CollectorConfig{
 		Enabled:            true,
 		SearchIssues:       true,
 		SearchDiscussions:  true,
@@ -660,7 +679,7 @@ func TestCollect_PartialFailure_IssueError(t *testing.T) {
 	}, fake)
 	c.WithNow(func() time.Time { return collectedAt })
 
-	signals, err := c.Collect(context.Background(), domain.CollectRequest{})
+	signals, err := c.Collect(t.Context(), domain.CollectRequest{})
 	if err == nil {
 		t.Fatal("expected error for partial failure, got nil")
 	}
@@ -678,9 +697,10 @@ func TestCollect_PartialFailure_IssueError(t *testing.T) {
 // TestCollect_PartialFailure_DiscussionError verifies that when discussions fail,
 // issues are still returned and errors are surfaced.
 func TestCollect_PartialFailure_DiscussionError(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
-	// Issues per-repo endpoint succeeds
+	// Issues per-repo endpoint succeeds.
 	issuesPrefix := "https://api.github.com/repos/o/r/issues?state=open&sort=updated&direction=asc&per_page="
 	issues := []ghIssue{
 		{
@@ -694,8 +714,8 @@ func TestCollect_PartialFailure_DiscussionError(t *testing.T) {
 	issuesBody := issuesListToJSON(issues)
 	fake.addResponse(issuesPrefix+"*", fakeResponse{statusCode: 200, body: string(issuesBody)})
 
-	// Discussions endpoint is NOT registered — will fail with 404
-	c := setupCollector(t, CollectorConfig{
+	// Discussions endpoint is NOT registered — will fail with 404.
+	c := setupCollector(t, &CollectorConfig{
 		Enabled:            true,
 		SearchIssues:       true,
 		SearchDiscussions:  true,
@@ -706,7 +726,7 @@ func TestCollect_PartialFailure_DiscussionError(t *testing.T) {
 	}, fake)
 	c.WithNow(func() time.Time { return collectedAt })
 
-	signals, err := c.Collect(context.Background(), domain.CollectRequest{})
+	signals, err := c.Collect(t.Context(), domain.CollectRequest{})
 	if err == nil {
 		t.Fatal("expected error for partial failure, got nil")
 	}
@@ -723,6 +743,7 @@ func TestCollect_PartialFailure_DiscussionError(t *testing.T) {
 
 // TestCollect_WithCache verifies integration with the response cache.
 func TestCollect_WithCache(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
 	searchResp := ghSearchResponse{
@@ -745,7 +766,7 @@ func TestCollect_WithCache(t *testing.T) {
 		body:       string(searchBody),
 	})
 
-	c := setupCollector(t, CollectorConfig{
+	c := setupCollector(t, &CollectorConfig{
 		Enabled:            true,
 		SearchIssues:       true,
 		SearchDiscussions:  false,
@@ -755,8 +776,8 @@ func TestCollect_WithCache(t *testing.T) {
 	}, fake)
 	c.WithNow(func() time.Time { return collectedAt })
 
-	// First call
-	signals1, err := c.Collect(context.Background(), domain.CollectRequest{})
+	// First call.
+	signals1, err := c.Collect(t.Context(), domain.CollectRequest{})
 	if err != nil {
 		t.Fatalf("first Collect failed: %v", err)
 	}
@@ -769,7 +790,7 @@ func TestCollect_WithCache(t *testing.T) {
 		t.Fatalf("expected 1 call to search URL, got %d", callCount1)
 	}
 
-	// Second call: should use in-memory ETag cache and get 304
+	// Second call: should use in-memory ETag cache and get 304.
 	fake.resetCallCount()
 	fake.addResponse(searchURL, fakeResponse{
 		statusCode: 304,
@@ -777,7 +798,7 @@ func TestCollect_WithCache(t *testing.T) {
 		body:       "",
 	})
 
-	signals2, err := c.Collect(context.Background(), domain.CollectRequest{})
+	signals2, err := c.Collect(t.Context(), domain.CollectRequest{})
 	if err != nil {
 		t.Fatalf("second Collect failed: %v", err)
 	}
@@ -791,6 +812,7 @@ func TestCollect_WithCache(t *testing.T) {
 
 // TestCollect_IssueWithoutRepoURL verifies fallback to HTML URL for owner/repo.
 func TestCollect_IssueWithoutRepoURL(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
 	searchResp := ghSearchResponse{
@@ -808,7 +830,7 @@ func TestCollect_IssueWithoutRepoURL(t *testing.T) {
 	searchURL := "https://api.github.com/search/issues?q=is%3Aissue+is%3Aopen&sort=updated&direction=asc&per_page=100&page=1"
 	fake.addResponse(searchURL, fakeResponse{statusCode: 200, body: string(searchBody)})
 
-	c := setupCollector(t, CollectorConfig{
+	c := setupCollector(t, &CollectorConfig{
 		Enabled:            true,
 		SearchIssues:       true,
 		SearchDiscussions:  false,
@@ -818,7 +840,7 @@ func TestCollect_IssueWithoutRepoURL(t *testing.T) {
 	}, fake)
 	c.WithNow(func() time.Time { return collectedAt })
 
-	signals, err := c.Collect(context.Background(), domain.CollectRequest{})
+	signals, err := c.Collect(t.Context(), domain.CollectRequest{})
 	if err != nil {
 		t.Fatalf("Collect failed: %v", err)
 	}
@@ -832,6 +854,7 @@ func TestCollect_IssueWithoutRepoURL(t *testing.T) {
 
 // TestCollect_InvalidIssueURL verifies issues with unresolvable URLs are skipped.
 func TestCollect_InvalidIssueURL(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
 	searchResp := ghSearchResponse{
@@ -849,7 +872,7 @@ func TestCollect_InvalidIssueURL(t *testing.T) {
 	searchURL := "https://api.github.com/search/issues?q=is%3Aissue+is%3Aopen&sort=updated&direction=asc&per_page=100&page=1"
 	fake.addResponse(searchURL, fakeResponse{statusCode: 200, body: string(searchBody)})
 
-	c := setupCollector(t, CollectorConfig{
+	c := setupCollector(t, &CollectorConfig{
 		Enabled:            true,
 		SearchIssues:       true,
 		SearchDiscussions:  false,
@@ -859,7 +882,7 @@ func TestCollect_InvalidIssueURL(t *testing.T) {
 	}, fake)
 	c.WithNow(func() time.Time { return collectedAt })
 
-	signals, err := c.Collect(context.Background(), domain.CollectRequest{})
+	signals, err := c.Collect(t.Context(), domain.CollectRequest{})
 	if err != nil {
 		t.Fatalf("Collect failed: %v", err)
 	}

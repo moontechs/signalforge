@@ -66,6 +66,16 @@ go test ./internal/storage/...
 go vet ./...
 ```
 
+### Linting
+
+This project uses **golangci-lint v1.64+** with strict rules.
+
+- Config: `.golangci.yml` at repo root
+- **Pre-push hook:** `.githooks/pre-push` runs `golangci-lint run ./...` automatically on every `git push` and blocks if lint fails. Enable with `git config core.hooksPath .githooks` (one-time setup after clone).
+- **Run locally:** `golangci-lint run ./...` before every commit
+- **Auto-fix:** `golangci-lint run --fix ./...` for formatting, imports, and simple fixes
+- **Install:** `go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest`
+
 ## Project structure rules
 
 - `internal/` — not importable from outside the module

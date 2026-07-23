@@ -1,0 +1,323 @@
+# golangci-lint configuration for SignalForge
+# See https://golangci-lint.run/usage/configuration/
+# Config format: v1 (golangci-lint v1.64.8)
+
+run:
+  concurrency: 4
+  timeout: 5m
+  issues-exit-code: 1
+
+linters:
+  disable-all: true
+  enable:
+    # Core linters
+    - govet
+    - errcheck
+    - staticcheck
+    - gosimple
+    - ineffassign
+    - unused
+
+    # Formatting & style
+    - gofmt
+    - gofumpt
+    - goimports
+    - revive
+    - gci
+    - whitespace
+    - decorder
+    - godot
+    - misspell
+    - stylecheck
+
+    # Correctness
+    - bodyclose
+    - noctx
+    - unconvert
+    - nilerr
+    - nilnil
+    - usestdlibvars
+    - musttag
+    - sloglint
+    - perfsprint
+    - mirror
+    - reassign
+    - forcetypeassert
+    - durationcheck
+    - containedctx
+    - contextcheck
+    - makezero
+    - gosec
+    - errname
+    - errorlint
+    - exhaustive
+    - tenv
+    - prealloc
+    - predeclared
+    - dupword
+    - errchkjson
+    - nestif
+    - nakedret
+    - dogsled
+    - asasalint
+    - asciicheck
+    - bidichk
+    - gocheckcompilerdirectives
+
+    # Complexity
+    - gocyclo
+    - gocognit
+    - goconst
+    - gocritic
+    - dupl
+    - funlen
+    - cyclop
+    - interfacebloat
+
+    # Best practices
+    - wrapcheck
+    # - wsl  # disabled — 700+ whitespace noise, its strict cuddle policy produces pervasive non-functional changes
+    - nolintlint
+    - ireturn
+    - inamedparam
+    - loggercheck
+    - unparam
+    - thelper
+    - testifylint
+    - grouper
+    - importas
+
+linters-settings:
+  gci:
+    sections:
+      - standard
+      - default
+      - prefix(github.com/moontechs/signalforge)
+  gocognit:
+    min-complexity: 30
+  goconst:
+    min-len: 3
+    min-occurrences: 3
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - experimental
+      - opinionated
+      - performance
+      - style
+    disabled-checks:
+      - ifElseChain
+      - whyNoLint
+  gocyclo:
+    min-complexity: 20
+  godot:
+    scope: all
+  gofumpt:
+    extra-rules: true
+  ireturn:
+    allow:
+      - empty
+      - error
+      - stdlib
+      - anon
+      - generic
+  nolintlint:
+    require-explanation: true
+    require-specific: true
+  revive:
+    rules:
+      - name: blank-imports
+      - name: context-as-argument
+      - name: context-keys-type
+      - name: dot-imports
+      - name: error-return
+      - name: error-strings
+      - name: error-naming
+      - name: exported
+      - name: if-return
+      - name: increment-decrement
+      - name: var-naming
+      - name: var-declaration
+      - name: package-comments
+      - name: range
+      - name: receiver-naming
+      - name: time-naming
+      - name: unexported-return
+      - name: indent-error-flow
+      - name: errorf
+      - name: empty-block
+      - name: superfluous-else
+      - name: unused-parameter
+      - name: unreachable-code
+      - name: redefines-builtin-id
+  sloglint:
+    args-on-sep-lines: true
+    no-global: "all"
+    context: "all"
+  unparam:
+    check-exported: true
+  wrapcheck:
+    ignoreSigs:
+      - .Errorf(
+      - errors.New(
+      - errors.Unwrap(
+      - .Wrap(
+      - .Wrapf(
+      - .WithMessage(
+      - .WithMessagef(
+      - status.Errorf(
+      - context.Context).Err(
+      - net/http.Client).Do(
+    ignoreSigRegexps:
+      - \.New.*Error\(
+  wsl:
+    strict-append: true
+    allow-assign-and-anything: false
+    allow-cuddle-declarations: false
+    allow-trailing-comment: false
+    force-case-trailing-whitespace: 0
+    force-err-cuddling: true
+    force-short-decl-cuddling: true
+  dupl:
+    threshold: 100
+  funlen:
+    lines: 80
+    statements: 50
+  cyclop:
+    max-complexity: 20
+    package-average: 10.0
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - bodyclose
+        - dupl
+        - errcheck
+        - goconst
+        - gosec
+        - noctx
+        - wrapcheck
+        - funlen
+        - gocyclo
+    - path: cmd/
+      linters:
+        - gochecknoglobals
+        - gochecknoinits
+    - linters:
+        - revive
+      text: "package-comments: should have a package comment"
+    - linters:
+        - gocritic
+      text: "ifElseChain: consider to rewrite"
+    - linters:
+        - gocritic
+      text: "unnamedResult: consider to give name"
+    # tagliatelle: GitHub API uses snake_case JSON tags (issues.go, types.go)
+    - linters:
+        - tagliatelle
+      path: internal/sources/github/issues\.go
+    - linters:
+        - tagliatelle
+      path: internal/sources/github/types\.go
+    # gochecknoglobals: shared test timestamps in parser_test.go
+    - linters:
+        - gochecknoglobals
+      path: internal/sources/github/parser_test\.go
+    # revive/deep-exit: intentional os.Exit in CLI main.go
+    - linters:
+        - revive
+      text: "deep-exit"
+      path: cmd/signalforge/main\.go
+    # revive/unhandled-error: best-effort resp.Body.Close() cleanup
+    - linters:
+        - revive
+      text: "unhandled-error"
+      path: internal/sources/github/client\.go
+    # gosec/G404: weak RNG for jitter is intentional
+    - linters:
+        - gosec
+      text: "G404"
+      path: internal/sources/github/client\.go
+    # bodyclose: test helper consumes response in client_test.go
+    - linters:
+        - bodyclose
+      path: internal/sources/github/client_test\.go
+    # goconst: returning "github" in Name() is intentional (self-ref)
+    - linters:
+        - goconst
+      path: internal/sources/github/collector\.go
+    # unused: rateLimitCounters reserved for future rate-limit tracking
+    - linters:
+        - unused
+      text: "rateLimitCounters"
+    # errcheck: test error injection ignores errors in cache_test.go
+    - linters:
+        - errcheck
+      path: internal/sources/github/cache_test\.go
+    # gocyclo: high complexity in doRequest is inherent to retry/rate-limit logic
+    - linters:
+        - gocyclo
+      text: "doRequest"
+      path: internal/sources/github/client\.go
+    # nestif: complex nested blocks are proper error-handling chains in client.go
+    - linters:
+        - nestif
+      path: internal/sources/github/client\.go
+    # gocritic/hugeParam: req is part of the SourceCollector interface, cannot change
+    - linters:
+        - gocritic
+      text: "hugeParam: req is heavy"
+      path: internal/sources/github/collector\.go
+    # gocognit: doRequest complexity is inherent to retry/rate-limit logic (84 > 30)
+    - linters:
+        - gocognit
+      text: "doRequest"
+      path: internal/sources/github/client\.go
+    # gocognit: listRepoDiscussions complexity from GraphQL query building (32 > 30)
+    - linters:
+        - gocognit
+      text: "listRepoDiscussions"
+      path: internal/sources/github/discussions\.go
+    # gocognit: test functions with high cognitive complexity from integration test setup
+    - linters:
+        - gocognit
+      path: _test\.go
+    # cyclop: doRequest high complexity is inherent to retry/rate-limit logic
+    - linters:
+        - cyclop
+      text: "doRequest"
+      path: internal/sources/github/client\.go
+    # funlen: doRequest has many statements (96 > 50) inherent to retry/rate-limit logic
+    - linters:
+        - funlen
+      text: "doRequest"
+      path: internal/sources/github/client\.go
+    # gocritic/hugeParam: opts is heavy (80 bytes) in doRequest, but internal function
+    - linters:
+        - gocritic
+      text: "hugeParam: opts is heavy"
+      path: internal/sources/github/client\.go
+    # cyclop: test functions with high cyclomatic complexity from table-driven tests
+    - linters:
+        - cyclop
+      path: _test\.go
+    # errchkjson: test data setup intentionally ignores Marshal errors
+    - linters:
+        - errchkjson
+      path: _test\.go
+    # errchkjson: display helpers in CLI intentionally ignore Marshal errors
+    - linters:
+        - errchkjson
+      path: internal/cli/show\.go
+    # unparam: WithTransport/WithNow return *Collector for builder pattern chaining
+    - linters:
+        - unparam
+      text: "WithTransport|WithNow"
+      path: internal/sources/github/collector\.go
+  exclude:
+    - "comment on exported"
+    - "should have a package comment"
+  exclude-case-sensitive: false

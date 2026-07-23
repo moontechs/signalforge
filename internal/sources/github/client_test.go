@@ -1,7 +1,6 @@
 package github
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,7 +12,7 @@ import (
 	"time"
 )
 
-// ---- Fake transport implementation ----
+// ---- Fake transport implementation ----.
 
 // fakeResponse describes a single response to return.
 type fakeResponse struct {
@@ -26,10 +25,9 @@ type fakeResponse struct {
 // It supports multiple calls per URL, recording all requests made.
 type fakeTransport struct {
 	mu        sync.Mutex
-	responses map[string][]fakeResponse // URL -> ordered responses (consumed in order)
+	responses map[string][]fakeResponse // URL -> ordered responses (consumed in order).
 	callCount map[string]int
 	calls     []*http.Request
-	nextSeq   int // for auto-generating sequence keys
 }
 
 // newFakeTransport creates a fakeTransport ready for use.
@@ -57,13 +55,13 @@ func (f *fakeTransport) addSequentialResponses(url string, resp ...fakeResponse)
 
 // findResponse finds a matching response for a URL.
 func (f *fakeTransport) findResponse(urlStr string) (fakeResponse, bool) {
-	// Exact match first
+	// Exact match first.
 	if resp, ok := f.nextResponse(urlStr); ok {
 		return resp, true
 	}
 
-	// Prefix match (for wildcard patterns)
-	for pattern, _ := range f.responses {
+	// Prefix match (for wildcard patterns).
+	for pattern := range f.responses {
 		if strings.HasSuffix(pattern, "*") {
 			prefix := strings.TrimSuffix(pattern, "*")
 			if strings.HasPrefix(urlStr, prefix) {
@@ -87,7 +85,7 @@ func (f *fakeTransport) nextResponse(key string) (fakeResponse, bool) {
 	count := f.callCount[key]
 	f.callCount[key]++
 
-	// Return the last response if we've exhausted the list
+	// Return the last response if we've exhausted the list.
 	if count >= len(responses) {
 		return responses[len(responses)-1], true
 	}
@@ -114,7 +112,7 @@ func (f *fakeTransport) Do(req *http.Request) (*http.Response, error) {
 		header.Set(k, v)
 	}
 
-	// Add rate-limit headers by default if not specified
+	// Add rate-limit headers by default if not specified.
 	if header.Get("X-RateLimit-Remaining") == "" {
 		header.Set("X-RateLimit-Remaining", "4999")
 		header.Set("X-RateLimit-Reset", "0")
@@ -150,20 +148,21 @@ func testClient(fake *fakeTransport) *githubClient {
 	return newClient(fake, 500)
 }
 
-// ---- Tests ----
+// ---- Tests ----.
 
-// TestClient_RESTPagination verifies that paginated search results
+// TestClient_RESTPagination verifies that paginated search results.
 // are collected across multiple pages.
 func TestClient_RESTPagination(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
-	// Use maxItems >= 100 so per_page=100 (the default)
+	// Use maxItems >= 100 so per_page=100 (the default).
 	perPage := 100
 
-	// Build 100 items for page 1 — this fills the page completely,
+	// Build 100 items for page 1 — this fills the page completely,.
 	// so the code fetches page 2 to check for more items.
 	page1Items := make([]ghIssue, 100)
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		page1Items[i] = ghIssue{ID: int64(i + 1), Number: i + 1, Title: fmt.Sprintf("Issue %d", i+1)}
 	}
 	page1 := ghSearchResponse{
@@ -182,7 +181,7 @@ func TestClient_RESTPagination(t *testing.T) {
 		body: string(page1Body),
 	})
 
-	// Page 2: 2 items (fewer than per_page=100, signals last page)
+	// Page 2: 2 items (fewer than per_page=100, signals last page).
 	page2Items := []ghIssue{
 		{ID: 101, Number: 101, Title: "Issue 101"},
 		{ID: 102, Number: 102, Title: "Issue 102"},
@@ -208,7 +207,7 @@ func TestClient_RESTPagination(t *testing.T) {
 		searchIssues: true,
 	}
 
-	issues, err := fetchIssuesSearchStrategy(context.Background(), c, scope)
+	issues, err := fetchIssuesSearchStrategy(t.Context(), c, &scope)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -225,13 +224,14 @@ func TestClient_RESTPagination(t *testing.T) {
 
 // TestClient_GraphQLPagination verifies cursor-based pagination for discussions.
 func TestClient_GraphQLPagination(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
-	// GraphQL responses need to match the POST to /graphql
-	// Since the body changes between calls (different cursor), we use a
+	// GraphQL responses need to match the POST to /graphql.
+	// Since the body changes between calls (different cursor), we use a.
 	// prefix match on the URL only and return sequential responses.
 
-	// Page 1: returns 1 discussion + hasNextPage + cursor
+	// Page 1: returns 1 discussion + hasNextPage + cursor.
 	page1Resp := graphQLResponse{
 		Data: json.RawMessage(`{
 			"repository": {
@@ -258,7 +258,7 @@ func TestClient_GraphQLPagination(t *testing.T) {
 		body:       string(page1Body),
 	})
 
-	// Page 2: returns 1 discussion, no next page
+	// Page 2: returns 1 discussion, no next page.
 	page2Resp := graphQLResponse{
 		Data: json.RawMessage(`{
 			"repository": {
@@ -287,12 +287,12 @@ func TestClient_GraphQLPagination(t *testing.T) {
 
 	c := testClient(fake)
 	scope := collectionScope{
-		maxItems:           10,
-		searchDiscussions:  true,
-		repos:              []string{"owner/repo"},
+		maxItems:          10,
+		searchDiscussions: true,
+		repos:             []string{"owner/repo"},
 	}
 
-	discussions, err := fetchDiscussions(context.Background(), c, nil, scope)
+	discussions, err := fetchDiscussions(t.Context(), c, nil, &scope)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -307,16 +307,17 @@ func TestClient_GraphQLPagination(t *testing.T) {
 	}
 }
 
-// TestClient_TransientRetrySuccess verifies that a transient 500 error
+// TestClient_TransientRetrySuccess verifies that a transient 500 error.
 // is retried and the client recovers.
 func TestClient_TransientRetrySuccess(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
-	// per_page will be 10 since maxItems=10 and len(allIssues)=0
+	// per_page will be 10 since maxItems=10 and len(allIssues)=0.
 	perPage := 10
 	searchURL := fmt.Sprintf("https://api.github.com/search/issues?q=is%%3Aissue+is%%3Aopen&sort=updated&direction=asc&per_page=%d&page=1", perPage)
 
-	// First call returns 500, second returns 200
+	// First call returns 500, second returns 200.
 	searchResp := ghSearchResponse{
 		TotalCount: 1,
 		Items: []ghIssue{
@@ -337,7 +338,7 @@ func TestClient_TransientRetrySuccess(t *testing.T) {
 		searchIssues: true,
 	}
 
-	issues, err := fetchIssuesSearchStrategy(context.Background(), c, scope)
+	issues, err := fetchIssuesSearchStrategy(t.Context(), c, &scope)
 	if err != nil {
 		t.Fatalf("unexpected error after retry: %v", err)
 	}
@@ -353,9 +354,10 @@ func TestClient_TransientRetrySuccess(t *testing.T) {
 
 // TestClient_RetryExhaustion verifies that repeated errors eventually fail.
 func TestClient_RetryExhaustion(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
-	// per_page will be 10 since maxItems=10 and len(allIssues)=0
+	// per_page will be 10 since maxItems=10 and len(allIssues)=0.
 	perPage := 10
 	searchURL := fmt.Sprintf("https://api.github.com/search/issues?q=is%%3Aissue+is%%3Aopen&sort=updated&direction=asc&per_page=%d&page=1", perPage)
 	fake.addResponse(searchURL, fakeResponse{
@@ -364,7 +366,7 @@ func TestClient_RetryExhaustion(t *testing.T) {
 	})
 
 	c := testClient(fake)
-	c.retryMax = 2 // 1 initial + 2 retries = 3 total attempts
+	c.retryMax = 2 // 1 initial + 2 retries = 3 total attempts.
 
 	scope := collectionScope{
 		strategy:     strategySearch,
@@ -372,18 +374,18 @@ func TestClient_RetryExhaustion(t *testing.T) {
 		searchIssues: true,
 	}
 
-	_, err := fetchIssuesSearchStrategy(context.Background(), c, scope)
+	_, err := fetchIssuesSearchStrategy(t.Context(), c, &scope)
 	if err == nil {
 		t.Fatal("expected error but got nil")
 	}
 
-	// Should be a RetryExhaustionError
+	// Should be a RetryExhaustionError.
 	var retryErr *RetryExhaustionError
 	if !errors.As(err, &retryErr) {
 		t.Fatalf("expected RetryExhaustionError, got %T: %v", err, err)
 	}
 
-	// Should have called 3 times (1 initial + 2 retries)
+	// Should have called 3 times (1 initial + 2 retries).
 	if fake.callCountFor(searchURL) != 3 {
 		t.Fatalf("expected 3 calls, got %d", fake.callCountFor(searchURL))
 	}
@@ -391,6 +393,7 @@ func TestClient_RetryExhaustion(t *testing.T) {
 
 // TestClient_PrimaryRateLimit verifies handling of 429 Too Many Requests.
 func TestClient_PrimaryRateLimit(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
 	perPage := 10
@@ -404,7 +407,7 @@ func TestClient_PrimaryRateLimit(t *testing.T) {
 	}
 	searchBody, _ := json.Marshal(searchResp)
 
-	// First call: 429 rate limited, second: success
+	// First call: 429 rate limited, second: success.
 	fake.addSequentialResponses(searchURL,
 		fakeResponse{
 			statusCode: 429,
@@ -422,7 +425,7 @@ func TestClient_PrimaryRateLimit(t *testing.T) {
 		searchIssues: true,
 	}
 
-	issues, err := fetchIssuesSearchStrategy(context.Background(), c, scope)
+	issues, err := fetchIssuesSearchStrategy(t.Context(), c, &scope)
 	if err != nil {
 		t.Fatalf("unexpected error after rate limit recovery: %v", err)
 	}
@@ -438,6 +441,7 @@ func TestClient_PrimaryRateLimit(t *testing.T) {
 
 // TestClient_SecondaryRateLimit verifies handling of 403 + Retry-After.
 func TestClient_SecondaryRateLimit(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
 	perPage := 10
@@ -451,7 +455,7 @@ func TestClient_SecondaryRateLimit(t *testing.T) {
 	}
 	searchBody, _ := json.Marshal(searchResp)
 
-	// First: 403 with Retry-After, then success
+	// First: 403 with Retry-After, then success.
 	fake.addSequentialResponses(searchURL,
 		fakeResponse{
 			statusCode: 403,
@@ -469,7 +473,7 @@ func TestClient_SecondaryRateLimit(t *testing.T) {
 		searchIssues: true,
 	}
 
-	issues, err := fetchIssuesSearchStrategy(context.Background(), c, scope)
+	issues, err := fetchIssuesSearchStrategy(t.Context(), c, &scope)
 	if err != nil {
 		t.Fatalf("unexpected error after secondary rate limit recovery: %v", err)
 	}
@@ -481,6 +485,7 @@ func TestClient_SecondaryRateLimit(t *testing.T) {
 
 // TestClient_304ConditionalResponse verifies ETag/If-None-Match handling.
 func TestClient_304ConditionalResponse(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
 	// Simulate two requests to the same endpoint.
@@ -497,7 +502,7 @@ func TestClient_304ConditionalResponse(t *testing.T) {
 	}
 	searchBody, _ := json.Marshal(searchResp)
 
-	// First request: returns 200 with ETag
+	// First request: returns 200 with ETag.
 	fake.addResponse(searchURL, fakeResponse{
 		statusCode: 200,
 		headers:    map[string]string{"ETag": `W/"abc123"`},
@@ -506,14 +511,14 @@ func TestClient_304ConditionalResponse(t *testing.T) {
 
 	c := testClient(fake)
 
-	// Execute first request — will cache ETag and body
+	// Execute first request — will cache ETag and body.
 	scope := collectionScope{
 		strategy:     strategySearch,
 		maxItems:     10,
 		searchIssues: true,
 	}
 
-	issues1, err := fetchIssuesSearchStrategy(context.Background(), c, scope)
+	issues1, err := fetchIssuesSearchStrategy(t.Context(), c, &scope)
 	if err != nil {
 		t.Fatalf("first request failed: %v", err)
 	}
@@ -522,28 +527,28 @@ func TestClient_304ConditionalResponse(t *testing.T) {
 		t.Fatalf("expected 1 issue, got %d", len(issues1))
 	}
 
-	// Verify the transport was called once
+	// Verify the transport was called once.
 	firstCalls := fake.callCountFor(searchURL)
 	if firstCalls != 1 {
 		t.Fatalf("expected 1 call, got %d", firstCalls)
 	}
 
-	// Reset call count and add a 304 response for the second call
+	// Reset call count and add a 304 response for the second call.
 	fake.resetCallCount()
 
-	// Second call: 304
+	// Second call: 304.
 	fake.addResponse(searchURL, fakeResponse{
 		statusCode: 304,
 		headers: map[string]string{
-			"ETag":                   `W/"abc123"`,
-			"X-RateLimit-Remaining":  "4998",
-			"X-RateLimit-Reset":      "0",
+			"ETag":                  `W/"abc123"`,
+			"X-RateLimit-Remaining": "4998",
+			"X-RateLimit-Reset":     "0",
 		},
 		body: "",
 	})
 
-	// Execute second request — should use ETag and get 304
-	issues2, err := fetchIssuesSearchStrategy(context.Background(), c, scope)
+	// Execute second request — should use ETag and get 304.
+	issues2, err := fetchIssuesSearchStrategy(t.Context(), c, &scope)
 	if err != nil {
 		t.Fatalf("second request failed: %v", err)
 	}
@@ -559,9 +564,10 @@ func TestClient_304ConditionalResponse(t *testing.T) {
 
 // TestClient_RequestLimitCutoff verifies that the request cap is enforced.
 func TestClient_RequestLimitCutoff(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 
-	// Create a client with only 1 request allowed
+	// Create a client with only 1 request allowed.
 	c := testClient(fake)
 	c.requestLimit = 1
 
@@ -571,10 +577,10 @@ func TestClient_RequestLimitCutoff(t *testing.T) {
 		searchIssues: true,
 	}
 
-	// Pre-fill request count to reach limit
+	// Pre-fill request count to reach limit.
 	c.requestCount = 1
 
-	_, err := fetchIssuesSearchStrategy(context.Background(), c, scope)
+	_, err := fetchIssuesSearchStrategy(t.Context(), c, &scope)
 	if err == nil {
 		t.Fatal("expected request limit error, got nil")
 	}
@@ -591,6 +597,7 @@ func TestClient_RequestLimitCutoff(t *testing.T) {
 
 // TestClient_ParseLinkHeader verifies Link header parsing.
 func TestClient_ParseLinkHeader(t *testing.T) {
+	t.Parallel()
 	header := `<https://api.github.com/search/issues?page=2>; rel="next", <https://api.github.com/search/issues?page=5>; rel="last"`
 	links := parseLinkHeader(header)
 
@@ -602,7 +609,7 @@ func TestClient_ParseLinkHeader(t *testing.T) {
 		t.Fatalf("unexpected last link: %q", links["last"])
 	}
 
-	// Empty header
+	// Empty header.
 	empty := parseLinkHeader("")
 	if len(empty) != 0 {
 		t.Fatalf("expected empty map for empty header, got %v", empty)
@@ -611,6 +618,7 @@ func TestClient_ParseLinkHeader(t *testing.T) {
 
 // TestClient_ParseRepo verifies repository string parsing.
 func TestClient_ParseRepo(t *testing.T) {
+	t.Parallel()
 	owner, repo, err := parseRepo("owner/repo")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -619,13 +627,13 @@ func TestClient_ParseRepo(t *testing.T) {
 		t.Fatalf("expected owner/repo, got %s/%s", owner, repo)
 	}
 
-	// Invalid format
+	// Invalid format.
 	_, _, err = parseRepo("invalid")
 	if err == nil {
 		t.Fatal("expected error for invalid repo format")
 	}
 
-	// Empty parts
+	// Empty parts.
 	_, _, err = parseRepo("/repo")
 	if err == nil {
 		t.Fatal("expected error for empty owner")
@@ -639,6 +647,7 @@ func TestClient_ParseRepo(t *testing.T) {
 
 // TestClient_BuildSearchQuery verifies search query construction.
 func TestClient_BuildSearchQuery(t *testing.T) {
+	t.Parallel()
 	scope := collectionScope{
 		labels:    []string{"bug", "enhancement"},
 		languages: []string{"go", "python"},
@@ -647,7 +656,7 @@ func TestClient_BuildSearchQuery(t *testing.T) {
 		since:     "2025-01-01T00:00:00Z",
 	}
 
-	query := buildSearchQuery(scope)
+	query := buildSearchQuery(&scope)
 
 	if !strings.Contains(query, "is:issue") {
 		t.Fatal("expected is:issue in query")
@@ -674,9 +683,9 @@ func TestClient_BuildSearchQuery(t *testing.T) {
 		t.Fatal("expected updated:>=2025-01-01 in query")
 	}
 
-	// Empty scope
+	// Empty scope.
 	empty := collectionScope{}
-	q := buildSearchQuery(empty)
+	q := buildSearchQuery(&empty)
 	if q != "is:issue is:open" {
 		t.Fatalf("unexpected empty query: %q", q)
 	}
@@ -684,9 +693,10 @@ func TestClient_BuildSearchQuery(t *testing.T) {
 
 // TestClient_RateLimitCheck verifies rate-limit checking.
 func TestClient_RateLimitCheck(t *testing.T) {
+	t.Parallel()
 	c := testClient(newFakeTransport())
 
-	// Initially should be fine
+	// Initially should be fine.
 	if err := c.checkRateLimit(false); err != nil {
 		t.Fatalf("expected no rate limit error, got %v", err)
 	}
@@ -695,7 +705,7 @@ func TestClient_RateLimitCheck(t *testing.T) {
 		t.Fatalf("expected no rate limit error, got %v", err)
 	}
 
-	// Exhaust REST rate limit
+	// Exhaust REST rate limit.
 	c.restRemaining = 0
 	c.restReset = time.Now().Add(1 * time.Hour)
 
@@ -711,12 +721,12 @@ func TestClient_RateLimitCheck(t *testing.T) {
 		t.Fatal("expected primary rate limit error")
 	}
 
-	// GraphQL should still be fine
+	// GraphQL should still be fine.
 	if err := c.checkRateLimit(true); err != nil {
 		t.Fatalf("expected no rate limit error for graphql, got %v", err)
 	}
 
-	// Exhaust GraphQL rate limit
+	// Exhaust GraphQL rate limit.
 	c.gqlRemaining = 0
 	c.gqlReset = time.Now().Add(1 * time.Hour)
 
@@ -728,6 +738,7 @@ func TestClient_RateLimitCheck(t *testing.T) {
 
 // TestClient_RequestCountValue verifies that request counts are tracked.
 func TestClient_RequestCountValue(t *testing.T) {
+	t.Parallel()
 	c := testClient(newFakeTransport())
 
 	if c.requestCountValue() != 0 {
@@ -743,6 +754,7 @@ func TestClient_RequestCountValue(t *testing.T) {
 
 // TestClient_ParseRetryAfter verifies Retry-After header parsing.
 func TestClient_ParseRetryAfter(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 
 	d := parseRetryAfter("30", now)
@@ -758,6 +770,7 @@ func TestClient_ParseRetryAfter(t *testing.T) {
 
 // TestClient_doJSONRequest_non200 tests error handling for non-2xx responses.
 func TestClient_doJSONRequest_non200(t *testing.T) {
+	t.Parallel()
 	fake := newFakeTransport()
 	fake.addResponse("https://api.github.com/some/path", fakeResponse{
 		statusCode: 404,
@@ -767,7 +780,7 @@ func TestClient_doJSONRequest_non200(t *testing.T) {
 	c := testClient(fake)
 
 	var target struct{}
-	_, err := c.doJSONRequest(context.Background(), requestOptions{
+	_, err := c.doJSONRequest(t.Context(), &requestOptions{
 		Method: "GET",
 		Path:   "/some/path",
 	}, &target)
@@ -783,16 +796,17 @@ func TestClient_doJSONRequest_non200(t *testing.T) {
 
 // TestClient_RateLimitUpdate verifies rate-limit header parsing.
 func TestClient_RateLimitUpdate(t *testing.T) {
+	t.Parallel()
 	c := testClient(newFakeTransport())
 
-	// Default values
+	// Default values.
 	if c.restRemaining != 5000 {
 		t.Fatalf("expected 5000, got %d", c.restRemaining)
 	}
 
-	// Simulate response with headers
+	// Simulate response with headers.
 	resp := &http.Response{
-		StatusCode: 200,
+		StatusCode: http.StatusOK,
 		Header: http.Header{
 			"X-Ratelimit-Remaining": []string{"4242"},
 			"X-Ratelimit-Reset":     []string{"1735689600"},
@@ -810,5 +824,3 @@ func TestClient_RateLimitUpdate(t *testing.T) {
 		t.Fatalf("expected reset %v, got %v", expectedReset, c.restReset)
 	}
 }
-
-

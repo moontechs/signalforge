@@ -13,8 +13,11 @@ var BrainstormCmd = &cobra.Command{
 	Long: `Brainstorms product ideas based on collected signals and clusters.
 
 This command is not yet implemented in the MVP. It will be available in a future milestone.`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Fprintln(cmd.OutOrStdout(), "Not implemented in MVP. The brainstorm command will be available in a future milestone.")
+	RunE: func(cmd *cobra.Command, _ []string) error {
+		_, err := fmt.Fprintln(cmd.OutOrStdout(), "Not implemented in MVP. The brainstorm command will be available in a future milestone.")
+		if err != nil {
+			return fmt.Errorf("write output: %w", err)
+		}
 		return nil
 	},
 }

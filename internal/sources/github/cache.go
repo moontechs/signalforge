@@ -14,7 +14,7 @@ const (
 	// DefaultCacheTTL is the default time-to-live for cached responses.
 	DefaultCacheTTL = 30 * time.Minute
 
-	// cacheDir is the relative directory under the storage base for GitHub cache.
+	// CacheDir is the relative directory under the storage base for GitHub cache.
 	cacheDir = "cache/github"
 )
 
@@ -34,6 +34,7 @@ func newResponseCache(store *storage.Storage) *responseCache {
 	return &responseCache{
 		store: store,
 		ttl:   DefaultCacheTTL,
+		mu:    sync.RWMutex{},
 	}
 }
 
@@ -64,12 +65,12 @@ func (rc *responseCache) get(key string) (*cachedResponse, bool) {
 		return nil, false
 	}
 
-	// Check TTL
+	// Check TTL.
 	if time.Since(entry.CollectedAt) <= rc.ttl {
 		return &entry, true
 	}
 
-	// Expired but return the entry so callers can use ETag/LM for conditional requests
+	// Expired but return the entry so callers can use ETag/LM for conditional requests.
 	return &entry, false
 }
 
@@ -88,7 +89,7 @@ func (rc *responseCache) set(key string, body []byte, etag, lastModified string)
 
 	path := rc.cacheFilePath(key)
 	if err := rc.store.SaveJSON(path, &entry); err != nil {
-		// Cache write failures are non-fatal
+		// Cache write failures are non-fatal.
 		return
 	}
 }
@@ -115,5 +116,3 @@ func (rc *responseCache) touch(key string) {
 		return
 	}
 }
-
-

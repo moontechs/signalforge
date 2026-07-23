@@ -37,7 +37,7 @@ type etagEntry struct {
 }
 
 // githubClient handles HTTP communication with the GitHub API.
-// It provides retry, rate-limit tracking, conditional request support,
+// It provides retry, rate-limit tracking, conditional request support,.
 // and optional on-disk response caching.
 type githubClient struct {
 	transport    transport
@@ -47,13 +47,13 @@ type githubClient struct {
 	requestCount int
 	requestLimit int
 
-	restRemaining  int
-	restReset      time.Time
-	gqlRemaining   int
-	gqlReset       time.Time
+	restRemaining int
+	restReset     time.Time
+	gqlRemaining  int
+	gqlReset      time.Time
 
-	etags map[string]etagEntry
-	etagMutex sync.RWMutex
+	etags      map[string]etagEntry
+	etagMutex  sync.RWMutex
 	statsMutex sync.Mutex
 
 	cache *responseCache
@@ -62,10 +62,10 @@ type githubClient struct {
 // requestOptions describes an HTTP request to the GitHub API.
 type requestOptions struct {
 	Method    string
-	Path      string // path relative to api.github.com, e.g. /search/issues
+	Path      string // path relative to api.github.com, e.g. /search/issues.
 	Body      []byte
-	IsGraphQL bool // selects which rate-limit counter to use
-	CacheKey  string // key for ETag cache; empty to skip caching
+	IsGraphQL bool   // selects which rate-limit counter to use.
+	CacheKey  string // key for ETag cache; empty to skip caching.
 }
 
 // graphQLRequest is the standard GraphQL request envelope.
@@ -97,11 +97,17 @@ func newClient(transport transport, maxRequests int) *githubClient {
 		restRemaining: restRateLimitMax,
 		gqlRemaining:  gqlRateLimitMax,
 		etags:         make(map[string]etagEntry),
+		etagMutex:     sync.RWMutex{},
+		requestCount:  0,
+		restReset:     time.Time{},
+		gqlReset:      time.Time{},
+		statsMutex:    sync.Mutex{},
+		cache:         nil,
 	}
 }
 
 // WithCache attaches an on-disk response cache to the client.
-// All subsequent requests will check the cache before making HTTP calls
+// All subsequent requests will check the cache before making HTTP calls.
 // and will store successful responses in the cache.
 func (c *githubClient) WithCache(store *storage.Storage) *githubClient {
 	c.cache = newResponseCache(store)
@@ -116,19 +122,23 @@ func (c *githubClient) checkRateLimit(isGraphQL bool) error {
 	if isGraphQL {
 		if c.gqlRemaining <= 0 && time.Now().Before(c.gqlReset) {
 			return &RateLimitError{
-				IsPrimary: true,
-				Remaining: c.gqlRemaining,
-				Limit:     gqlRateLimitMax,
-				Reset:     c.gqlReset,
+				IsPrimary:   true,
+				IsSecondary: false,
+				RetryAfter:  0,
+				Remaining:   c.gqlRemaining,
+				Limit:       gqlRateLimitMax,
+				Reset:       c.gqlReset,
 			}
 		}
 	} else {
 		if c.restRemaining <= 0 && time.Now().Before(c.restReset) {
 			return &RateLimitError{
-				IsPrimary: true,
-				Remaining: c.restRemaining,
-				Limit:     restRateLimitMax,
-				Reset:     c.restReset,
+				IsPrimary:   true,
+				IsSecondary: false,
+				RetryAfter:  0,
+				Remaining:   c.restRemaining,
+				Limit:       restRateLimitMax,
+				Reset:       c.restReset,
 			}
 		}
 	}
@@ -167,12 +177,11 @@ func (c *githubClient) updateRateLimits(resp *http.Response, isGraphQL bool) {
 	}
 }
 
-// incrementRequestCount increases the request counter and returns the new count.
-func (c *githubClient) incrementRequestCount() int {
+// incrementRequestCount increases the request counter.
+func (c *githubClient) incrementRequestCount() {
 	c.statsMutex.Lock()
 	defer c.statsMutex.Unlock()
 	c.requestCount++
-	return c.requestCount
 }
 
 // requestCountValue returns the current request count (thread-safe).
@@ -197,10 +206,10 @@ func parseRetryAfter(val string, now time.Time) time.Duration {
 	return 60 * time.Second
 }
 
-// doRequest performs an HTTP request with retries, rate-limit checking,
+// doRequest performs an HTTP request with retries, rate-limit checking,.
 // and conditional request support.
 func (c *githubClient) doRequest(ctx context.Context, opts requestOptions) (*http.Response, error) {
-	// 1. Check request cap
+	// 1. Check request cap.
 	c.statsMutex.Lock()
 	if c.requestLimit > 0 && c.requestCount >= c.requestLimit {
 		c.statsMutex.Unlock()
@@ -208,22 +217,22 @@ func (c *githubClient) doRequest(ctx context.Context, opts requestOptions) (*htt
 	}
 	c.statsMutex.Unlock()
 
-	// 2. Check rate limit
+	// 2. Check rate limit.
 	if err := c.checkRateLimit(opts.IsGraphQL); err != nil {
 		return nil, err
 	}
 
-	// 2a. Check disk cache for fresh entry
+	// 2a. Check disk cache for fresh entry.
 	if opts.CacheKey != "" && c.cache != nil {
 		if entry, fresh := c.cache.get(opts.CacheKey); fresh {
-			// Cache hit — return cached response without making HTTP request
+			// Cache hit — return cached response without making HTTP request.
 			return &http.Response{
 				StatusCode: http.StatusOK,
 				Header:     make(http.Header),
 				Body:       io.NopCloser(bytes.NewReader(entry.Body)),
 			}, nil
 		} else if entry != nil {
-			// Expired but has ETag/LM — preload into in-memory cache for conditional request
+			// Expired but has ETag/LM — preload into in-memory cache for conditional request.
 			if entry.ETag != "" || entry.LastModified != "" {
 				c.etagMutex.Lock()
 				c.etags[opts.CacheKey] = etagEntry{
@@ -236,7 +245,7 @@ func (c *githubClient) doRequest(ctx context.Context, opts requestOptions) (*htt
 		}
 	}
 
-	// 3. Build URL
+	// 3. Build URL.
 	reqURL := opts.Path
 	if !strings.HasPrefix(reqURL, "http") && !strings.HasPrefix(reqURL, "https://") {
 		reqURL = githubAPIBase + opts.Path
@@ -245,7 +254,7 @@ func (c *githubClient) doRequest(ctx context.Context, opts requestOptions) (*htt
 	var lastErr error
 	for attempt := 0; attempt <= c.retryMax; attempt++ {
 		if attempt > 0 {
-			// Exponential backoff with jitter
+			// Exponential backoff with jitter.
 			backoff := time.Duration(math.Pow(2, float64(attempt))) * time.Second
 			backoff += time.Duration(rand.Intn(1000)) * time.Millisecond
 
@@ -266,7 +275,7 @@ func (c *githubClient) doRequest(ctx context.Context, opts requestOptions) (*htt
 			return nil, fmt.Errorf("create request: %w", err)
 		}
 
-		// Set standard headers
+		// Set standard headers.
 		req.Header.Set("User-Agent", c.userAgent)
 		req.Header.Set("Accept", "application/vnd.github.v3+json")
 		req.Header.Set("X-GitHub-Api-Version", githubAPIVersion)
@@ -274,12 +283,12 @@ func (c *githubClient) doRequest(ctx context.Context, opts requestOptions) (*htt
 			req.Header.Set("Authorization", "Bearer "+c.token)
 		}
 
-		// If GraphQL POST, set content type
+		// If GraphQL POST, set content type.
 		if opts.IsGraphQL {
 			req.Header.Set("Content-Type", "application/json")
 		}
 
-		// Add conditional request headers
+		// Add conditional request headers.
 		if opts.CacheKey != "" {
 			c.etagMutex.RLock()
 			entry, ok := c.etags[opts.CacheKey]
@@ -300,7 +309,7 @@ func (c *githubClient) doRequest(ctx context.Context, opts requestOptions) (*htt
 			continue
 		}
 
-		// Handle secondary rate limit (403 + Retry-After)
+		// Handle secondary rate limit (403 + Retry-After).
 		if resp.StatusCode == http.StatusForbidden {
 			retryAfter := resp.Header.Get("Retry-After")
 			if retryAfter != "" {
@@ -315,7 +324,7 @@ func (c *githubClient) doRequest(ctx context.Context, opts requestOptions) (*htt
 			}
 		}
 
-		// Handle primary rate limit (429)
+		// Handle primary rate limit (429).
 		if resp.StatusCode == http.StatusTooManyRequests {
 			retryAfter := resp.Header.Get("Retry-After")
 			delay := parseRetryAfter(retryAfter, time.Now())
@@ -328,19 +337,19 @@ func (c *githubClient) doRequest(ctx context.Context, opts requestOptions) (*htt
 			continue
 		}
 
-		// Update rate-limit counters if headers present
+		// Update rate-limit counters if headers present.
 		c.updateRateLimits(resp, opts.IsGraphQL)
 
-		// Increment request count for non-304 responses
+		// Increment request count for non-304 responses.
 		if resp.StatusCode != http.StatusNotModified {
 			c.incrementRequestCount()
 		}
 
-		// Handle 304 Not Modified — return cached body
+		// Handle 304 Not Modified — return cached body.
 		if resp.StatusCode == http.StatusNotModified {
 			resp.Body.Close()
 
-			// Extend TTL for disk cache entry on 304
+			// Extend TTL for disk cache entry on 304.
 			if c.cache != nil && opts.CacheKey != "" {
 				c.cache.touch(opts.CacheKey)
 			}
@@ -357,7 +366,7 @@ func (c *githubClient) doRequest(ctx context.Context, opts requestOptions) (*htt
 				}, nil
 			}
 
-			// No cached body, treat as empty
+			// No cached body, treat as empty.
 			return &http.Response{
 				StatusCode: http.StatusNotModified,
 				Header:     make(http.Header),
@@ -365,7 +374,7 @@ func (c *githubClient) doRequest(ctx context.Context, opts requestOptions) (*htt
 			}, nil
 		}
 
-		// For 2xx or non-retryable status, read body and cache headers
+		// For 2xx or non-retryable status, read body and cache headers.
 		if resp.StatusCode < 500 || resp.StatusCode == http.StatusNotModified {
 			body, err := io.ReadAll(resp.Body)
 			resp.Body.Close()
@@ -373,7 +382,7 @@ func (c *githubClient) doRequest(ctx context.Context, opts requestOptions) (*htt
 				return nil, fmt.Errorf("read response body: %w", err)
 			}
 
-			// Store ETag/Last-Modified for conditional requests and disk cache
+			// Store ETag/Last-Modified for conditional requests and disk cache.
 			etag := resp.Header.Get("ETag")
 			lm := resp.Header.Get("Last-Modified")
 			if (etag != "" || lm != "") && opts.CacheKey != "" {
@@ -386,7 +395,7 @@ func (c *githubClient) doRequest(ctx context.Context, opts requestOptions) (*htt
 				c.etagMutex.Unlock()
 			}
 
-			// Save to disk cache if configured
+			// Save to disk cache if configured.
 			if c.cache != nil && opts.CacheKey != "" {
 				c.cache.set(opts.CacheKey, body, etag, lm)
 			}
@@ -398,12 +407,12 @@ func (c *githubClient) doRequest(ctx context.Context, opts requestOptions) (*htt
 			}, nil
 		}
 
-		// 5xx server error — retry
+		// 5xx server error — retry.
 		resp.Body.Close()
 		lastErr = fmt.Errorf("server error: status %d", resp.StatusCode)
 	}
 
-	// Exhausted retries
+	// Exhausted retries.
 	if lastErr != nil {
 		return nil, &RetryExhaustionError{Wrapped: lastErr, Attempts: c.retryMax + 1}
 	}
@@ -415,14 +424,14 @@ func (c *githubClient) doRequest(ctx context.Context, opts requestOptions) (*htt
 }
 
 // doJSONRequest performs an HTTP request and unmarshals the JSON response.
-func (c *githubClient) doJSONRequest(ctx context.Context, opts requestOptions, target any) (*http.Response, error) {
-	resp, err := c.doRequest(ctx, opts)
+func (c *githubClient) doJSONRequest(ctx context.Context, opts *requestOptions, target any) (*http.Response, error) {
+	resp, err := c.doRequest(ctx, *opts)
 	if err != nil {
 		return nil, err
 	}
 
 	if resp.StatusCode == http.StatusNotModified {
-		// 304 means no change; unmarshal from cached body already in resp.Body
+		// 304 means no change; unmarshal from cached body already in resp.Body.
 		body, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil {
@@ -473,7 +482,7 @@ func (c *githubClient) doGraphQL(ctx context.Context, query string, variables ma
 		return nil, fmt.Errorf("marshal graphql request: %w", err)
 	}
 
-	// Build cache key from query + variables (deterministic)
+	// Build cache key from query + variables (deterministic).
 	cacheKey := cacheKeyForGraphQL(query, variables)
 
 	opts := requestOptions{
@@ -504,7 +513,7 @@ func (c *githubClient) doGraphQL(ctx context.Context, query string, variables ma
 	}
 
 	if len(gqlResp.Errors) > 0 {
-		// Return partial data + errors
+		// Return partial data + errors.
 		return &gqlResp, fmt.Errorf("graphql errors: %v", gqlResp.Errors)
 	}
 
@@ -513,17 +522,20 @@ func (c *githubClient) doGraphQL(ctx context.Context, query string, variables ma
 
 // cacheKeyForGraphQL generates a deterministic cache key from a GraphQL query and variables.
 func cacheKeyForGraphQL(query string, variables map[string]any) string {
-	// Use query + sorted variable values as cache key
+	// Use query + sorted variable values as cache key.
 	varsStr := ""
 	if variables != nil {
-		vb, _ := json.Marshal(variables)
+		vb, err := json.Marshal(variables)
+		if err != nil {
+			return fmt.Sprintf("gql:%s:err", query)
+		}
 		varsStr = string(vb)
 	}
 	return fmt.Sprintf("gql:%s:%s", query, varsStr)
 }
 
 // parseRepo splits "owner/repo" into (owner, repo).
-func parseRepo(full string) (string, string, error) {
+func parseRepo(full string) (owner, repo string, err error) {
 	parts := strings.SplitN(strings.TrimPrefix(full, "/"), "/", 2)
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 		return "", "", fmt.Errorf("invalid repo format %q, expected owner/repo", full)

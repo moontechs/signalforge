@@ -6,15 +6,16 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/spf13/cobra"
+
 	"github.com/moontechs/signalforge/internal/config"
 	"github.com/moontechs/signalforge/internal/storage"
-	"github.com/spf13/cobra"
 )
 
 // checkResult represents the result of a single doctor check.
 type checkResult struct {
 	Name   string
-	Status string // ✅, ❌, ⚠️
+	Status string // ✅, ❌, ⚠️.
 	Detail string
 }
 
@@ -27,7 +28,7 @@ var DoctorCmd = &cobra.Command{
 - Config file validity
 - Required environment variables
 - Storage integrity`,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, _ []string) error {
 		verbose, _ := cmd.Flags().GetBool("verbose")
 		results := runChecks(verbose)
 
@@ -62,11 +63,8 @@ func runChecks(verbose bool) []checkResult {
 	var results []checkResult
 	var cfg *config.Config
 
-	// 1. Check signalforge directory
-	results = append(results, checkSignalForgeDir())
-
-	// 2. Check config.json
-	results = append(results, checkConfig())
+	// Check signalforge directory + config.
+	results = append(results, checkSignalForgeDir(), checkConfig())
 	if dir, err := config.GetSignalForgeDir(); err == nil {
 		loadedCfg, loadErr := config.LoadConfig(dir)
 		if loadErr == nil {
@@ -74,17 +72,17 @@ func runChecks(verbose bool) []checkResult {
 		}
 	}
 
-	// 3. Check directory structure
+	// 3. Check directory structure.
 	results = append(results, checkDirectoryStructure())
 
-	// 4. Check environment variables
+	// 4. Check environment variables.
 	results = append(results, checkEnvVars(cfg)...)
 
-	// 5. Check memory.json
+	// 5. Check memory.json.
 	results = append(results, checkMemory())
 
 	if verbose {
-		// Add storage path details
+		// Add storage path details.
 		dir, err := config.GetSignalForgeDir()
 		if err == nil {
 			results = append(results, checkResult{
@@ -113,7 +111,7 @@ func checkSignalForgeDir() checkResult {
 			return checkResult{
 				Name:   "signalforge data directory",
 				Status: "⚠️",
-				Detail: fmt.Sprintf("Not initialized yet (run 'signalforge init'): %s", dir),
+				Detail: "Not initialized yet (run 'signalforge init'): " + dir,
 			}
 		}
 		return checkResult{
@@ -126,19 +124,19 @@ func checkSignalForgeDir() checkResult {
 		return checkResult{
 			Name:   "signalforge data directory",
 			Status: "❌",
-			Detail: fmt.Sprintf("Not a directory: %s", dir),
+			Detail: "Not a directory: " + dir,
 		}
 	}
-	// Check writability
+	// Check writability.
 	testFile := filepath.Join(dir, ".write-test")
-	if err := os.WriteFile(testFile, []byte{}, 0644); err != nil {
+	if err := os.WriteFile(testFile, []byte{}, 0o600); err != nil {
 		return checkResult{
 			Name:   "signalforge data directory",
 			Status: "❌",
 			Detail: fmt.Sprintf("Not writable: %v", err),
 		}
 	}
-	os.Remove(testFile)
+	_ = os.Remove(testFile)
 	return checkResult{
 		Name:   "signalforge data directory",
 		Status: "✅",
@@ -198,7 +196,7 @@ func checkDirectoryStructure() checkResult {
 		return checkResult{
 			Name:   "directory structure",
 			Status: "⚠️",
-			Detail: fmt.Sprintf("Missing directories: %s", strings.Join(missing, ", ")),
+			Detail: "Missing directories: " + strings.Join(missing, ", "),
 		}
 	}
 	return checkResult{
@@ -237,7 +235,7 @@ func checkEnvVars(cfg *config.Config) []checkResult {
 		})
 	}
 
-	// Optional
+	// Optional.
 	if os.Getenv("OPENROUTER_API_KEY") != "" {
 		results = append(results, checkResult{
 			Name:   "OPENROUTER_API_KEY",

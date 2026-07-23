@@ -3,6 +3,7 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -222,7 +223,7 @@ func LoadConfig(dir string) (*Config, error) {
 // Validate checks the loaded configuration for invalid values.
 func (c *Config) Validate() error {
 	if c == nil {
-		return fmt.Errorf("config is nil")
+		return errors.New("config is nil")
 	}
 	if err := c.Sources.GitHub.Validate(); err != nil {
 		return fmt.Errorf("validate github config: %w", err)
@@ -231,20 +232,20 @@ func (c *Config) Validate() error {
 }
 
 // Validate checks the GitHub collector configuration for invalid values.
-func (c GitHubConfig) Validate() error {
+func (c *GitHubConfig) Validate() error {
 	if c.MaxItemsPerRun <= 0 {
-		return fmt.Errorf("max_items_per_run must be greater than zero")
+		return errors.New("max_items_per_run must be greater than zero")
 	}
 	if c.MaxCommentsPerItem < 0 {
-		return fmt.Errorf("max_comments_per_item must be zero or greater")
+		return errors.New("max_comments_per_item must be zero or greater")
 	}
 	if !c.SearchIssues && !c.SearchDiscussions {
-		return fmt.Errorf("at least one of search_issues or search_discussions must be enabled")
+		return errors.New("at least one of search_issues or search_discussions must be enabled")
 	}
 	for _, repo := range c.Repositories {
 		repo = strings.TrimSpace(repo)
 		if repo == "" {
-			return fmt.Errorf("repositories must not contain empty values")
+			return errors.New("repositories must not contain empty values")
 		}
 		parts := strings.Split(repo, "/")
 		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
@@ -253,12 +254,12 @@ func (c GitHubConfig) Validate() error {
 	}
 	for _, language := range c.Languages {
 		if strings.TrimSpace(language) == "" {
-			return fmt.Errorf("languages must not contain empty values")
+			return errors.New("languages must not contain empty values")
 		}
 	}
 	for _, label := range c.Labels {
 		if strings.TrimSpace(label) == "" {
-			return fmt.Errorf("labels must not contain empty values")
+			return errors.New("labels must not contain empty values")
 		}
 	}
 	return nil
@@ -271,7 +272,7 @@ func SaveConfig(dir string, cfg *Config) error {
 	if err != nil {
 		return fmt.Errorf("marshal config: %w", err)
 	}
-	if err := os.WriteFile(path, data, 0644); err != nil {
+	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return fmt.Errorf("write config: %w", err)
 	}
 	return nil

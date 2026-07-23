@@ -5,5 +5,8 @@ signalforge
 # Coverage
 coverage.out
 
+# golangci-lint cache
+.golangci-lint-cache/
+
 # OS
 .DS_Store

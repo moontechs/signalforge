@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+
 	"github.com/moontechs/signalforge/internal/config"
 	"github.com/moontechs/signalforge/internal/storage"
 )
@@ -92,20 +93,27 @@ func listType(cmd *cobra.Command, store *storage.Storage, typeName, subDir strin
 		fmt.Fprintf(cmd.OutOrStdout(), "No %s found.\n", typeName)
 		return nil
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "%s:\n", strings.Title(typeName))
+	fmt.Fprintf(cmd.OutOrStdout(), "%s:\n", titleCase(typeName))
 	for _, item := range items {
 		fmt.Fprintf(cmd.OutOrStdout(), "  %s\n", item)
 	}
 	return nil
 }
 
+func titleCase(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
+}
+
 func listItems(store *storage.Storage, subDir string, limit, offset int) ([]string, error) {
 	files, err := store.ListFiles(subDir, ".json")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list files: %w", err)
 	}
 
-	// Apply offset and limit
+	// Apply offset and limit.
 	start := offset
 	if start > len(files) {
 		start = len(files)
@@ -116,13 +124,13 @@ func listItems(store *storage.Storage, subDir string, limit, offset int) ([]stri
 	}
 	files = files[start:end]
 
-	var items []string
+	items := make([]string, 0, len(files))
 	for _, f := range files {
 		name := filepath.Base(f)
-		// Try to read basic info from the file
+		// Try to read basic info from the file.
 		info, err := os.Stat(f)
 		if err != nil {
-			items = append(items, fmt.Sprintf("%s (unreadable)", name))
+			items = append(items, name+" (unreadable)")
 			continue
 		}
 		items = append(items, fmt.Sprintf("%s  (modified: %s, size: %d bytes)",
