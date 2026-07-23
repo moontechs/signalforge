@@ -512,3 +512,230 @@ func TestExecuteCollect_ResumePersistsCursor(t *testing.T) {
 		t.Errorf("expected updated-cursor, got %q", cursor)
 	}
 }
+
+func TestOrderSourcesDeterministically_GitHubFirst(t *testing.T) {
+	t.Parallel()
+
+	input := []string{"hackernews", "stackexchange", "github"}
+	result := orderSourcesDeterministically(input)
+	expected := []string{"github", "hackernews", "stackexchange"}
+	if len(result) != len(expected) {
+		t.Fatalf("expected %v, got %v", expected, result)
+	}
+	for i := range expected {
+		if result[i] != expected[i] {
+			t.Fatalf("expected %v at index %d, got %v", expected, i, result)
+		}
+	}
+}
+
+func TestOrderSourcesDeterministically_PartialSet(t *testing.T) {
+	t.Parallel()
+
+	input := []string{"stackexchange", "hackernews"}
+	result := orderSourcesDeterministically(input)
+	// Should keep existing order within the deterministic subset: hn then se.
+	if len(result) != 2 || result[0] != "hackernews" || result[1] != "stackexchange" {
+		t.Fatalf("expected [hackernews stackexchange], got %v", result)
+	}
+}
+
+func TestOrderSourcesDeterministically_SingleSource(t *testing.T) {
+	t.Parallel()
+
+	result := orderSourcesDeterministically([]string{"hackernews"})
+	if len(result) != 1 || result[0] != "hackernews" {
+		t.Fatalf("expected [hackernews], got %v", result)
+	}
+}
+
+func TestOrderSourcesDeterministically_UnknownSourceAppended(t *testing.T) {
+	t.Parallel()
+
+	input := []string{"stackexchange", "unknown-source", "hackernews"}
+	result := orderSourcesDeterministically(input)
+	// Known sources ordered: hackernews, stackexchange. Unknown source appended.
+	if len(result) != 3 {
+		t.Fatalf("expected 3 elements, got %d: %v", len(result), result)
+	}
+	if result[0] != "hackernews" || result[1] != "stackexchange" || result[2] != "unknown-source" {
+		t.Fatalf("expected [hackernews stackexchange unknown-source], got %v", result)
+	}
+}
+
+func TestOrderSourcesDeterministically_OnlyUnknown(t *testing.T) {
+	t.Parallel()
+
+	input := []string{"unknown-a", "unknown-b"}
+	result := orderSourcesDeterministically(input)
+	if len(result) != 2 || result[0] != "unknown-a" || result[1] != "unknown-b" {
+		t.Fatalf("expected original order preserved, got %v", result)
+	}
+}
+
+func TestOrderSourcesDeterministically_EmptyInput(t *testing.T) {
+	t.Parallel()
+
+	result := orderSourcesDeterministically(nil)
+	if len(result) != 0 {
+		t.Fatalf("expected empty, got %v", result)
+	}
+	result = orderSourcesDeterministically([]string{})
+	if len(result) != 0 {
+		t.Fatalf("expected empty, got %v", result)
+	}
+}
+
+func TestExecuteCollect_ForceBypassesDedup(t *testing.T) {
+	t.Parallel()
+
+	store := storage.New(t.TempDir())
+	mem := memory.New(store)
+
+	// Pre-populate memory with a signal that would normally be deduplicated.
+	mem.AddRawSignal("test-source", "existing-id-1")
+	mem.AddRawSignal("test-source", "existing-id-2")
+
+	collector := &mockCollector{
+		name: "test-source",
+		collectFn: func(_ domain.CollectRequest) ([]domain.RawSignal, error) {
+			return []domain.RawSignal{
+				{Source: "test-source", SourceID: "existing-id-1", ContentHash: "hash-1", ID: "sig-1"},
+				{Source: "test-source", SourceID: "existing-id-2", ContentHash: "hash-2", ID: "sig-2"},
+				{Source: "test-source", SourceID: "new-id-3", ContentHash: "hash-3", ID: "sig-3"},
+			}, nil
+		},
+	}
+
+	beforeStats := mem.GetStats()
+
+	env := &collectEnv{
+		mem:             mem,
+		collectors:      []domain.SourceCollector{collector},
+		selectedSources: []string{"test-source"},
+		before:          &beforeStats,
+		force:           true,
+		sinceWindow:     30 * 24 * time.Hour,
+	}
+
+	cmd := &cobra.Command{}
+	buf := new(strings.Builder)
+	cmd.SetOut(buf)
+
+	if err := executeCollect(cmd, env); err != nil {
+		t.Fatalf("executeCollect failed: %v", err)
+	}
+
+	// All 3 signals should have been recorded (no dedup filtering).
+	if !mem.HasRawSignal("test-source", "existing-id-1") {
+		t.Error("expected signal 1 to exist in memory (recorded twice)")
+	}
+	if !mem.HasRawSignal("test-source", "existing-id-2") {
+		t.Error("expected signal 2 to exist in memory (recorded twice)")
+	}
+	if !mem.HasRawSignal("test-source", "new-id-3") {
+		t.Error("expected signal 3 to exist in memory")
+	}
+}
+
+func TestExecuteCollect_NonForcePreservesDedup(t *testing.T) {
+	t.Parallel()
+
+	store := storage.New(t.TempDir())
+	mem := memory.New(store)
+
+	// Pre-populate memory with a signal that should be deduplicated.
+	mem.AddRawSignal("test-source", "existing-id-1")
+
+	// Also pre-populate a content hash that should be deduplicated.
+	mem.AddRawSignal("test-source", "existing-id-2")
+	// We add the content hash directly via the memory's internal map test trick:
+	// AddRawSignal only records SourceID, not ContentHash, so we use AddContentHash.
+
+	collector := &mockCollector{
+		name: "test-source",
+		collectFn: func(_ domain.CollectRequest) ([]domain.RawSignal, error) {
+			// existing-id-1 has a matching source+sourceID in memory
+			// new-id-4 has a matching content hash
+			return []domain.RawSignal{
+				{Source: "test-source", SourceID: "existing-id-1", ContentHash: "hash-1", ID: "sig-1"},
+				{Source: "test-source", SourceID: "new-id-3", ContentHash: "hash-3", ID: "sig-3"},
+				{Source: "test-source", SourceID: "new-id-4", ContentHash: "hash-duplicate", ID: "sig-4"},
+			}, nil
+		},
+	}
+
+	// Add content hash that matches new-id-4 before collection.
+	mem.AddContentHash("hash-duplicate", "sig-0")
+
+	beforeStats := mem.GetStats()
+
+	env := &collectEnv{
+		mem:             mem,
+		collectors:      []domain.SourceCollector{collector},
+		selectedSources: []string{"test-source"},
+		before:          &beforeStats,
+		force:           false, // dedup should filter
+		sinceWindow:     30 * 24 * time.Hour,
+	}
+
+	cmd := &cobra.Command{}
+	buf := new(strings.Builder)
+	cmd.SetOut(buf)
+
+	if err := executeCollect(cmd, env); err != nil {
+		t.Fatalf("executeCollect failed: %v", err)
+	}
+
+	// existing-id-1 was filtered out by sourceID dedup
+	// new-id-3 should have been recorded
+	// new-id-4 was filtered out by content hash dedup
+
+	if mem.HasRawSignal("test-source", "existing-id-1") != true {
+		t.Error("existing-id-1 should still exist (pre-populated)")
+	}
+	// Check that new-id-3 was recorded.
+	if !mem.HasRawSignal("test-source", "new-id-3") {
+		t.Error("new-id-3 should have been recorded (no conflict)")
+	}
+	// new-id-4 should NOT have been recorded because its content hash matched.
+	if mem.HasRawSignal("test-source", "new-id-4") {
+		t.Error("new-id-4 should NOT have been recorded (content hash duplicate)")
+	}
+}
+
+func TestDeduplicateSignals_EmptyInput(t *testing.T) {
+	t.Parallel()
+
+	store := storage.New(t.TempDir())
+	mem := memory.New(store)
+	env := &collectEnv{mem: mem}
+
+	result := deduplicateSignals(nil, env)
+	if result != nil {
+		t.Errorf("expected nil, got %v", result)
+	}
+
+	result = deduplicateSignals([]domain.RawSignal{}, env)
+	if len(result) != 0 {
+		t.Errorf("expected empty, got %v", result)
+	}
+}
+
+func TestDeduplicateSignals_ForceReturnsAll(t *testing.T) {
+	t.Parallel()
+
+	store := storage.New(t.TempDir())
+	mem := memory.New(store)
+	mem.AddRawSignal("src", "existing")
+	env := &collectEnv{mem: mem, force: true}
+
+	signals := []domain.RawSignal{
+		{Source: "src", SourceID: "existing"},
+		{Source: "src", SourceID: "new"},
+	}
+	result := deduplicateSignals(signals, env)
+	if len(result) != 2 {
+		t.Fatalf("expected 2 signals, got %d", len(result))
+	}
+}

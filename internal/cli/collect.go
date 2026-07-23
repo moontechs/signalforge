@@ -125,6 +125,9 @@ func setupCollectEnv(sourceFlag, sinceFlag, untilFlag string, maxItems int, lang
 		return nil, err
 	}
 
+	// Order sources deterministically regardless of input order.
+	selectedSources = orderSourcesDeterministically(selectedSources)
+
 	store := storage.New(dir)
 	mem := memory.New(store)
 	memoryPath := filepath.Join(dir, "memory.json")
@@ -161,6 +164,33 @@ func setupCollectEnv(sourceFlag, sinceFlag, untilFlag string, maxItems int, lang
 	}, nil
 }
 
+// sourceOrder defines the deterministic execution order for collectors.
+var sourceOrder = []string{"github", "hackernews", "stackexchange"}
+
+// orderSourcesDeterministically reorders the given source names to the fixed
+// order: GitHub, Hacker News, Stack Exchange. Sources not in the known set
+// are appended at the end in their original relative order.
+func orderSourcesDeterministically(sources []string) []string {
+	requested := make(map[string]bool, len(sources))
+	for _, s := range sources {
+		requested[s] = true
+	}
+	result := make([]string, 0, len(sources))
+	for _, s := range sourceOrder {
+		if requested[s] {
+			result = append(result, s)
+			delete(requested, s)
+		}
+	}
+	// Append any remaining sources not in the preferred order.
+	for _, s := range sources {
+		if requested[s] {
+			result = append(result, s)
+		}
+	}
+	return result
+}
+
 // cursorAware is an optional interface collectors can implement to report
 // their cursor state after a collection run.
 type cursorAware interface {
@@ -170,48 +200,11 @@ type cursorAware interface {
 func executeCollect(cmd *cobra.Command, env *collectEnv) error {
 	var totalSignals int
 	for _, collector := range env.collectors {
-		since := time.Now().Add(-env.sinceWindow)
-		var until time.Time
-		if env.untilWindow != 0 {
-			until = time.Now().Add(env.untilWindow)
-		}
-		var languages []string
-		if env.language != "" {
-			languages = []string{env.language}
-		}
-
-		// Load cursor state for resume support.
-		var cursor map[string]string
-		if env.resume {
-			if c, exists := env.mem.GetCursor(collector.Name()); exists {
-				cursor = map[string]string{collector.Name(): c}
-			}
-		}
-
-		req := domain.CollectRequest{
-			Since:     since,
-			Until:     until,
-			MaxItems:  env.maxItems,
-			Force:     env.force,
-			DryRun:    env.dryRun,
-			Sources:   env.selectedSources,
-			Languages: languages,
-			Cursor:    cursor,
-		}
+		req := buildCollectRequest(env, collector)
 		signals, err := collector.Collect(cmd.Context(), req)
+		signals = deduplicateSignals(signals, env)
 		totalSignals += len(signals)
-
-		// Track HN request/cache-hit stats.
-		if hnCol, ok := collector.(*hackernews.Collector); ok {
-			stats := hnCol.Stats()
-			env.mem.AddHNRequests(stats.Requests)
-			env.mem.AddHNCacheHits(stats.CacheHits)
-		}
-		if seCol, ok := collector.(*stackexchange.Collector); ok {
-			stats := seCol.Stats()
-			env.mem.AddStackExchangeRequests(stats.Requests)
-			env.mem.AddStackExchangeCacheHits(stats.CacheHits)
-		}
+		trackCollectorStats(env, collector)
 
 		if err != nil {
 			afterStats := env.mem.GetStats()
@@ -221,17 +214,8 @@ func executeCollect(cmd *cobra.Command, env *collectEnv) error {
 			return fmt.Errorf("%s collection completed with errors: %w", collector.Name(), err)
 		}
 
-		// Persist cursor state after successful collection.
-		if ca, ok := collector.(cursorAware); ok {
-			cursors := ca.Cursor()
-			for src, cur := range cursors {
-				env.mem.SetCursor(src, cur)
-			}
-		}
-
-		for i := range signals {
-			env.mem.AddRawSignal(signals[i].Source, signals[i].SourceID)
-		}
+		persistCursor(env, collector)
+		recordSignals(env, signals)
 	}
 
 	if err := env.mem.Save(); err != nil {
@@ -240,6 +224,82 @@ func executeCollect(cmd *cobra.Command, env *collectEnv) error {
 
 	afterStats := env.mem.GetStats()
 	return reportCollectSummary(cmd, strings.Join(env.selectedSources, ","), totalSignals, statsDelta(env.before, &afterStats))
+}
+
+// buildCollectRequest constructs a CollectRequest for the given collector from the environment.
+func buildCollectRequest(env *collectEnv, collector domain.SourceCollector) domain.CollectRequest {
+	since := time.Now().Add(-env.sinceWindow)
+	var until time.Time
+	if env.untilWindow != 0 {
+		until = time.Now().Add(env.untilWindow)
+	}
+	var languages []string
+	if env.language != "" {
+		languages = []string{env.language}
+	}
+	var cursor map[string]string
+	if env.resume {
+		if c, exists := env.mem.GetCursor(collector.Name()); exists {
+			cursor = map[string]string{collector.Name(): c}
+		}
+	}
+	return domain.CollectRequest{
+		Since:     since,
+		Until:     until,
+		MaxItems:  env.maxItems,
+		Force:     env.force,
+		DryRun:    env.dryRun,
+		Sources:   env.selectedSources,
+		Languages: languages,
+		Cursor:    cursor,
+	}
+}
+
+// deduplicateSignals filters out signals that already exist in persistent memory.
+// When --force is set, all signals pass through without filtering.
+func deduplicateSignals(signals []domain.RawSignal, env *collectEnv) []domain.RawSignal {
+	if env.force || len(signals) == 0 {
+		return signals
+	}
+	filtered := make([]domain.RawSignal, 0, len(signals))
+	for i := range signals {
+		if env.mem.HasRawSignal(signals[i].Source, signals[i].SourceID) || env.mem.HasContentHash(signals[i].ContentHash) {
+			continue
+		}
+		filtered = append(filtered, signals[i])
+	}
+	return filtered
+}
+
+// trackCollectorStats records HN or Stack Exchange request/cache-hit stats into memory.
+func trackCollectorStats(env *collectEnv, collector domain.SourceCollector) {
+	if hnCol, ok := collector.(*hackernews.Collector); ok {
+		stats := hnCol.Stats()
+		env.mem.AddHNRequests(stats.Requests)
+		env.mem.AddHNCacheHits(stats.CacheHits)
+	}
+	if seCol, ok := collector.(*stackexchange.Collector); ok {
+		stats := seCol.Stats()
+		env.mem.AddStackExchangeRequests(stats.Requests)
+		env.mem.AddStackExchangeCacheHits(stats.CacheHits)
+	}
+}
+
+// persistCursor updates memory with any cursor returned by a cursor-aware collector.
+func persistCursor(env *collectEnv, collector domain.SourceCollector) {
+	if ca, ok := collector.(cursorAware); ok {
+		cursors := ca.Cursor()
+		for src, cur := range cursors {
+			env.mem.SetCursor(src, cur)
+		}
+	}
+}
+
+// recordSignals adds all signals to the persistent memory.
+func recordSignals(env *collectEnv, signals []domain.RawSignal) {
+	for i := range signals {
+		env.mem.AddRawSignal(signals[i].Source, signals[i].SourceID)
+	}
 }
 
 func resolveCollectSources(raw string) ([]string, error) {

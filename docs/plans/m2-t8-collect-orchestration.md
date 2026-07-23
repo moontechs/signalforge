@@ -29,12 +29,12 @@
 
 ### Task 4: Implement deterministic source orchestration and force behavior
 
-- [ ] Normalize and validate requested source names before collection begins.
-- [ ] Order selected collectors deterministically as GitHub, Hacker News, then Stack Exchange, regardless of `--sources` input order.
-- [ ] Continue using `buildCollector` to construct collectors from configuration.
-- [ ] Update the CLI-side deduplication path so `--force` bypasses both `mem.HasRawSignal` and `mem.HasContentHash` checks.
-- [ ] Preserve normal deduplication and memory recording when `--force` is not set.
-- [ ] Keep source-specific failures and summary reporting consistent with existing CLI error-handling conventions.
+- [x] Normalize and validate requested source names before collection begins.
+- [x] Order selected collectors deterministically as GitHub, Hacker News, then Stack Exchange, regardless of `--sources` input order.
+- [x] Continue using `buildCollector` to construct collectors from configuration.
+- [x] Update the CLI-side deduplication path so `--force` bypasses both `mem.HasRawSignal` and `mem.HasContentHash` checks.
+- [x] Preserve normal deduplication and memory recording when `--force` is not set.
+- [x] Keep source-specific failures and summary reporting consistent with existing CLI error-handling conventions.
 
 ### Task 5: Implement dry-run planning output
 
