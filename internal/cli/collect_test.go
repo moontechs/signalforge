@@ -9,6 +9,7 @@ import (
 	"github.com/moontechs/signalforge/internal/config"
 	"github.com/moontechs/signalforge/internal/domain"
 	"github.com/moontechs/signalforge/internal/sources/hackernews"
+	"github.com/moontechs/signalforge/internal/sources/stackexchange"
 	"github.com/moontechs/signalforge/internal/storage"
 )
 
@@ -42,6 +43,23 @@ func TestBuildCollector_HN(t *testing.T) {
 	_, ok := collector.(*hackernews.Collector)
 	if !ok {
 		t.Errorf("expected *hackernews.Collector, got %T", collector)
+	}
+}
+
+func TestBuildCollector_StackExchange(t *testing.T) {
+	t.Parallel()
+	cfg := newTestConfig()
+	store := newTestStorage(t)
+
+	collector, err := buildCollector("stackexchange", cfg, store)
+	if err != nil {
+		t.Fatalf("buildCollector(stackexchange) failed: %v", err)
+	}
+	if collector == nil || collector.Name() != "stackexchange" {
+		t.Fatalf("expected stackexchange collector, got %v", collector)
+	}
+	if _, ok := collector.(*stackexchange.Collector); !ok {
+		t.Fatalf("expected *stackexchange.Collector, got %T", collector)
 	}
 }
 

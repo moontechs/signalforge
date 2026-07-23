@@ -98,16 +98,16 @@
 
 ### Task 7: Wire collector into CLI
 
-- [ ] Add `"github.com/moontechs/signalforge/internal/sources/stackexchange"` import to `cli/collect.go`
-- [ ] Add `case "stackexchange":` in `buildCollector()`:
+- [x] Add `"github.com/moontechs/signalforge/internal/sources/stackexchange"` import to `cli/collect.go`
+- [x] Add `case "stackexchange":` in `buildCollector()`:
   - Check `cfg.Sources.StackExchange.Enabled`
   - Build `stackexchange.ConfigValues` from cfg.Sources.StackExchange + cfg.Limits.MaxStackExchangeReqs
   - Use `strings.TrimSpace(os.Getenv("STACKEXCHANGE_API_KEY"))` for optional API key
   - Constructor: `stackexchange.New(cfg, client)`, then `collector.WithCache(store)`
-- [ ] Update `--sources` help text to include `stackexchange`
-- [ ] Ensure `signalforge collect --sources stackexchange --since 30d` works without API key
-- [ ] Ensure all existing tests for `buildCollector("hackernews"...)` still pass
-- [ ] Update `collectStatsDelta` zero-value initialization (line ~285) to include seRequests/seCacheHits
+- [x] Update `--sources` help text to include `stackexchange`
+- [x] Ensure `signalforge collect --sources stackexchange --since 30d` works without API key
+- [x] Ensure all existing tests for `buildCollector("hackernews"...)` still pass
+- [x] Update `collectStatsDelta` zero-value initialization (line ~285) to include seRequests/seCacheHits
 
 ### Task 8: Tests and quality gates
 

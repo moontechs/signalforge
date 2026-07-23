@@ -16,6 +16,7 @@ import (
 	"github.com/moontechs/signalforge/internal/memory"
 	"github.com/moontechs/signalforge/internal/sources/github"
 	"github.com/moontechs/signalforge/internal/sources/hackernews"
+	"github.com/moontechs/signalforge/internal/sources/stackexchange"
 	"github.com/moontechs/signalforge/internal/storage"
 )
 
@@ -28,10 +29,11 @@ func newCollectCmd() *cobra.Command {
 		Short: "Collect raw signals from configured sources",
 		Long: `Collects raw signals from public sources and stores them in the SignalForge data directory.
 
-For the current MVP CLI flow, GitHub collection is wired end-to-end.
+For the current MVP CLI flow, GitHub, Hacker News, and Stack Exchange collection are wired end-to-end.
 
 Example:
-  signalforge collect --sources github --since 30d`,
+  signalforge collect --sources github --since 30d
+  signalforge collect --sources stackexchange --since 30d`,
 		RunE: runCollect,
 	}
 
@@ -132,6 +134,11 @@ func executeCollect(cmd *cobra.Command, env *collectEnv) error {
 			stats := hnCol.Stats()
 			env.mem.AddHNRequests(stats.Requests)
 			env.mem.AddHNCacheHits(stats.CacheHits)
+		}
+		if seCol, ok := collector.(*stackexchange.Collector); ok {
+			stats := seCol.Stats()
+			env.mem.AddStackExchangeRequests(stats.Requests)
+			env.mem.AddStackExchangeCacheHits(stats.CacheHits)
 		}
 
 		if err != nil {
@@ -272,6 +279,26 @@ func buildCollector(source string, cfg *config.Config, store *storage.Storage) (
 			return nil, fmt.Errorf("create hackernews collector: %w", err)
 		}
 
+		collector.WithCache(store)
+		return collector, nil
+
+	case "stackexchange":
+		if !cfg.Sources.StackExchange.Enabled {
+			return nil, errors.New("stackexchange collection is disabled in config")
+		}
+
+		seCfg := &stackexchange.ConfigValues{
+			Enabled:         cfg.Sources.StackExchange.Enabled,
+			APIKey:          strings.TrimSpace(os.Getenv("STACKEXCHANGE_API_KEY")),
+			Sites:           cfg.Sources.StackExchange.Sites,
+			MaxItemsPerSite: cfg.Sources.StackExchange.MaxItemsPerSite,
+			MinimumScore:    cfg.Sources.StackExchange.MinimumScore,
+			MinimumViews:    cfg.Sources.StackExchange.MinimumViews,
+			PageSize:        cfg.Sources.StackExchange.PageSize,
+			MaxPagesPerSite: cfg.Sources.StackExchange.MaxPagesPerSite,
+			MaxRequests:     cfg.Limits.MaxStackExchangeReqs,
+		}
+		collector := stackexchange.New(seCfg, nil)
 		collector.WithCache(store)
 		return collector, nil
 
