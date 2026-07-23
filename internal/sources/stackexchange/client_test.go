@@ -1,13 +1,13 @@
 package stackexchange
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -16,24 +16,6 @@ import (
 
 	"github.com/moontechs/signalforge/internal/storage"
 )
-
-// ---- Helper: response builder ----.
-
-func response(status int, body string) *http.Response {
-	return &http.Response{
-		StatusCode: status,
-		Body:       http.NoBody,
-		Header:     make(http.Header),
-	}
-}
-
-func bodyResponse(status int, body string) *http.Response {
-	return &http.Response{
-		StatusCode: status,
-		Body:       http.NoBody,
-		Header:     make(http.Header),
-	}
-}
 
 // ---- Questions endpoint ----.
 
@@ -202,7 +184,7 @@ func TestClient_apiKeyInURL(t *testing.T) {
 	t.Parallel()
 	fake := newFakeTransport()
 
-	c := newClient(fake, ConfigValues{
+	c := newClient(fake, &ConfigValues{
 		APIKey:  "my-secret-key",
 		BaseURL: "https://api.stackexchange.com/2.3",
 	})
@@ -656,7 +638,7 @@ func TestClient_questionsFromDateToDate(t *testing.T) {
 	t.Parallel()
 	fake := newFakeTransport()
 
-	c := newClient(fake, ConfigValues{
+	c := newClient(fake, &ConfigValues{
 		BaseURL: "https://api.stackexchange.com/2.3",
 	})
 
@@ -699,7 +681,7 @@ func TestClient_cachedResponseJSON(t *testing.T) {
 	if err := json.Unmarshal(data, &cr2); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if string(cr2.Body) != string(cr.Body) {
+	if !bytes.Equal(cr2.Body, cr.Body) {
 		t.Fatalf("body mismatch: %q vs %q", string(cr2.Body), string(cr.Body))
 	}
 }
@@ -710,7 +692,7 @@ func TestClient_questionsQueryParams(t *testing.T) {
 	t.Parallel()
 	fake := newFakeTransport()
 
-	c := newClient(fake, ConfigValues{
+	c := newClient(fake, &ConfigValues{
 		BaseURL: "https://api.stackexchange.com/2.3",
 	})
 

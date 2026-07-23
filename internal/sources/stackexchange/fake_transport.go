@@ -120,13 +120,6 @@ func (f *fakeTransport) Do(req *http.Request) (*http.Response, error) {
 	}, nil
 }
 
-// callCountFor returns how many times a URL was requested.
-func (f *fakeTransport) callCountFor(url string) int {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.callCount[url]
-}
-
 // resetCallCount resets all call counters and recorded calls.
 func (f *fakeTransport) resetCallCount() {
 	f.mu.Lock()
@@ -141,5 +134,5 @@ func testClient(fake *fakeTransport) *client {
 	if fake == nil {
 		fake = newFakeTransport()
 	}
-	return newClient(fake, ConfigValues{})
+	return newClient(fake, &ConfigValues{})
 }

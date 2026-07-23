@@ -111,7 +111,7 @@
 
 ### Task 8: Tests and quality gates
 
-- [ ] **client_test.go**: httptest-based tests for:
+- [x] **client_test.go**: httptest-based tests for:
   - URL construction with site/dates/filter/key
   - Optional API key omitted vs included
   - Transient retry success + retry exhaustion
@@ -120,13 +120,13 @@
   - backoff delay + context cancellation during backoff
   - quota_remaining == 0 behaviour
   - Malformed JSON response
-- [ ] **parser_test.go**: fixture-based tests for:
+- [x] **parser_test.go**: fixture-based tests for:
   - Realistic SE question HTML → clean plain text
   - Stable source ID format: `se:<site>:<id>`
   - Metadata mapping (score, author, tags, view count)
   - Content hash determinism
   - Skip rules (empty body, below score threshold)
-- [ ] **collector_test.go**: integration-style tests for:
+- [x] **collector_test.go**: integration-style tests for:
   - Multi-site sequential pagination
   - has_more pagination stop
   - Per-site/per-run limits
@@ -134,8 +134,8 @@
   - Duplicate suppression (same ID across pages)
   - Source name correctness
   - Stats tracking (Requests, CacheHits)
-- [ ] Add fake transport / test server (mirror HN's fake_transport.go)
-- [ ] Add CLI test in `collect_test.go`: `buildCollector("stackexchange", cfg, store)` succeeds
+- [x] Add fake transport / test server (mirror HN's fake_transport.go)
+- [x] Add CLI test in `collect_test.go`: `buildCollector("stackexchange", cfg, store)` succeeds
 
 ### Task 9: Verify end-to-end
 

@@ -93,7 +93,7 @@ func TestParseQuestion_allFields(t *testing.T) {
 	}
 
 	collectedAt := time.Date(2025, 6, 1, 12, 0, 0, 0, time.UTC)
-	signal := parseQuestion(target, qAnswers, qComments, "stackoverflow", collectedAt)
+	signal := parseQuestion(&target, qAnswers, qComments, "stackoverflow", collectedAt)
 
 	// Basic fields.
 	if signal.ID != "se:1001" {
@@ -211,7 +211,7 @@ func TestParseQuestion_noOwner(t *testing.T) {
 		AnswerCount:      0,
 	}
 	// Empty owner is fine; display name will be empty string.
-	signal := parseQuestion(q, nil, nil, "serverfault", time.Now())
+	signal := parseQuestion(&q, nil, nil, "serverfault", time.Now())
 	if signal.Metadata[MetaKeyAuthor] != "" {
 		t.Fatalf("MetaKeyAuthor = %q, want empty", signal.Metadata[MetaKeyAuthor])
 	}
@@ -240,7 +240,7 @@ func TestParseQuestion_noTags(t *testing.T) {
 		t.Fatal("question 1007 not found")
 	}
 
-	signal := parseQuestion(target, nil, nil, "stackoverflow", time.Now())
+	signal := parseQuestion(&target, nil, nil, "stackoverflow", time.Now())
 	if len(signal.Tags) != 0 {
 		t.Fatalf("Tags = %v, want empty", signal.Tags)
 	}
@@ -270,7 +270,7 @@ func TestParseQuestion_noAcceptedAnswer(t *testing.T) {
 		AnswerCount:      2,
 		IsAnswered:       false,
 	}
-	signal := parseQuestion(q, nil, nil, "superuser", time.Now())
+	signal := parseQuestion(&q, nil, nil, "superuser", time.Now())
 	if _, ok := signal.Metadata[MetaKeyAcceptedAnswer]; ok {
 		t.Fatal("MetaKeyAcceptedAnswer should not be set")
 	}
@@ -297,7 +297,7 @@ func TestParseQuestion_notAnswered(t *testing.T) {
 		AnswerCount:      0,
 		IsAnswered:       false,
 	}
-	signal := parseQuestion(q, nil, nil, "stackoverflow", time.Now())
+	signal := parseQuestion(&q, nil, nil, "stackoverflow", time.Now())
 	if signal.AnswerCount != 0 {
 		t.Fatalf("AnswerCount = %d, want 0", signal.AnswerCount)
 	}
@@ -320,7 +320,7 @@ func TestParseAnswer(t *testing.T) {
 		Score:        42,
 		IsAccepted:   true,
 	}
-	comment := parseAnswer(a)
+	comment := parseAnswer(&a)
 	if comment.ID != "se_answer:5001" {
 		t.Fatalf("ID = %q, want se_answer:5001", comment.ID)
 	}
@@ -349,7 +349,7 @@ func TestParseComment(t *testing.T) {
 		CreationDate: 2000,
 		Score:        7,
 	}
-	comment := parseComment(c)
+	comment := parseComment(&c)
 	if comment.ID != "se_comment:6001" {
 		t.Fatalf("ID = %q, want se_comment:6001", comment.ID)
 	}
@@ -438,7 +438,7 @@ func TestEligibleQuestion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := eligibleQuestion(tt.item, tt.scope)
+			got := eligibleQuestion(&tt.item, tt.scope)
 			if got != tt.want {
 				t.Fatalf("eligibleQuestion(%+v, %+v) = %v, want %v", tt.item, tt.scope, got, tt.want)
 			}
@@ -537,8 +537,8 @@ func TestContentHashDeterminism(t *testing.T) {
 		{CommentID: 2, BodyMarkdown: "<p>Comment 1</p>", CreationDate: 1050},
 	}
 
-	s1 := parseQuestion(q, answers, comments, "stackoverflow", time.Now())
-	s2 := parseQuestion(q, answers, comments, "stackoverflow", time.Now())
+	s1 := parseQuestion(&q, answers, comments, "stackoverflow", time.Now())
+	s2 := parseQuestion(&q, answers, comments, "stackoverflow", time.Now())
 
 	if s1.ContentHash != s2.ContentHash {
 		t.Fatal("content hash is not deterministic")
@@ -561,8 +561,8 @@ func TestContentHashDiffersWithDifferentComments(t *testing.T) {
 	}
 
 	// Different comment content should produce different hashes.
-	s1 := parseQuestion(q, nil, nil, "stackoverflow", time.Now())
-	s2 := parseQuestion(q, nil, []commentDTO{{CommentID: 1, BodyMarkdown: "<p>Extra comment</p>", CreationDate: 1100}}, "stackoverflow", time.Now())
+	s1 := parseQuestion(&q, nil, nil, "stackoverflow", time.Now())
+	s2 := parseQuestion(&q, nil, []commentDTO{{CommentID: 1, BodyMarkdown: "<p>Extra comment</p>", CreationDate: 1100}}, "stackoverflow", time.Now())
 
 	if s1.ContentHash == s2.ContentHash {
 		t.Fatal("content hashes should differ with different comment content")
@@ -583,13 +583,13 @@ func TestParseQuestion_fromFixture_questions(t *testing.T) {
 	}
 
 	// Verify all questions can be parsed without panic/error.
-	for _, q := range questions {
-		signal := parseQuestion(q, nil, nil, "stackoverflow", time.Now())
+	for i := range questions {
+		signal := parseQuestion(&questions[i], nil, nil, "stackoverflow", time.Now())
 		if signal.ID == "" {
-			t.Fatalf("empty ID for question %d", q.QuestionID)
+			t.Fatalf("empty ID for question %d", questions[i].QuestionID)
 		}
 		if signal.Title == "" {
-			t.Fatalf("empty title for question %d", q.QuestionID)
+			t.Fatalf("empty title for question %d", questions[i].QuestionID)
 		}
 		// Body may be empty after cleaning, but that's OK for some edge cases.
 	}
@@ -615,15 +615,15 @@ func TestParseQuestion_fromFixture_withAnswersAndComments(t *testing.T) {
 		comByQ[c.PostID] = append(comByQ[c.PostID], c)
 	}
 
-	for _, q := range questions {
-		signal := parseQuestion(q, ansByQ[q.QuestionID], comByQ[q.QuestionID], "stackoverflow", time.Now())
+	for i := range questions {
+		signal := parseQuestion(&questions[i], ansByQ[questions[i].QuestionID], comByQ[questions[i].QuestionID], "stackoverflow", time.Now())
 		if signal.ID == "" {
-			t.Fatalf("empty ID for question %d", q.QuestionID)
+			t.Fatalf("empty ID for question %d", questions[i].QuestionID)
 		}
 		// Verify comments/answers count matches.
-		expectedComments := len(ansByQ[q.QuestionID]) + len(comByQ[q.QuestionID])
+		expectedComments := len(ansByQ[questions[i].QuestionID]) + len(comByQ[questions[i].QuestionID])
 		if len(signal.Comments) != expectedComments {
-			t.Fatalf("question %d: len(Comments) = %d, want %d", q.QuestionID, len(signal.Comments), expectedComments)
+			t.Fatalf("question %d: len(Comments) = %d, want %d", questions[i].QuestionID, len(signal.Comments), expectedComments)
 		}
 	}
 }

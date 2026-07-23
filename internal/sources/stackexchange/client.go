@@ -22,7 +22,7 @@ import (
 
 // transport is the pluggable HTTP round-tripper for testability.
 type transport interface {
-	Do(*http.Request) (*http.Response, error)
+	Do(req *http.Request) (*http.Response, error)
 }
 
 // httpTransport wraps http.Client to satisfy transport.
@@ -77,10 +77,10 @@ func (c *client) getQuestions(ctx context.Context, site string, fromUnix, toUnix
 }
 
 // newClient creates a Stack Exchange API client with the given transport and config.
-func newClient(t transport, cfg ConfigValues) *client {
+func newClient(t transport, cfg *ConfigValues) *client {
 	defaultBackoff := func(attempt int) time.Duration {
 		return time.Duration(math.Pow(2, float64(attempt)))*time.Second +
-			time.Duration(rand.Intn(1000))*time.Millisecond
+			time.Duration(rand.Intn(1000))*time.Millisecond //nolint:gosec // G404: crypto/rand not needed for jitter
 	}
 	baseURL := cfg.BaseURL
 	if baseURL == "" {
@@ -100,9 +100,8 @@ func newClient(t transport, cfg ConfigValues) *client {
 }
 
 // WithCache attaches an on-disk cache.
-func (c *client) WithCache(s *storage.Storage) *client {
+func (c *client) WithCache(s *storage.Storage) {
 	c.store = s
-	return c
 }
 
 // Stats returns the current request and cache-hit counters.
@@ -166,12 +165,44 @@ func (c *client) readBody(resp *http.Response) ([]byte, error) {
 	limited := io.LimitReader(resp.Body, c.maxBodySize+1)
 	body, err := io.ReadAll(limited)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read response body: %w", err)
 	}
 	if int64(len(body)) > c.maxBodySize {
 		return nil, fmt.Errorf("response body exceeds %d bytes", c.maxBodySize)
 	}
 	return body, nil
+}
+
+// process2xxResponse handles an HTTP 2xx response from the SE API.
+// It unmarshals the JSON, checks for API-level errors, applies forced backoff,
+// handles quota exhaustion, and caches the response body.
+func (c *client) process2xxResponse(body []byte, path string) (*apiResponse, error) {
+	var wrapper apiResponse
+	if err := json.Unmarshal(body, &wrapper); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrMalformedResponse, err)
+	}
+
+	// Check API-level error inside the response body.
+	if wrapper.ErrorID != nil && *wrapper.ErrorID != 0 {
+		return &wrapper, &APIError{
+			ID:      *wrapper.ErrorID,
+			Name:    wrapper.ErrorName,
+			Message: wrapper.ErrorMessage,
+		}
+	}
+
+	// Apply server-requested backoff.
+	c.setForcedBackoff(wrapper.Backoff)
+
+	c.incrementRequests()
+	c.save(path, body)
+
+	// Check quota exhaustion.
+	if wrapper.QuotaRemaining <= 0 {
+		return &wrapper, ErrQuotaExhausted
+	}
+
+	return &wrapper, nil
 }
 
 // get performs an HTTP GET and returns the parsed API response envelope.
@@ -227,33 +258,7 @@ func (c *client) get(ctx context.Context, path string, ttl time.Duration) (*apiR
 		}
 
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			var wrapper apiResponse
-			if err := json.Unmarshal(body, &wrapper); err != nil {
-				return nil, fmt.Errorf("%w: %w", ErrMalformedResponse, err)
-			}
-
-			// Check API-level error inside the response body.
-			if wrapper.ErrorID != nil && *wrapper.ErrorID != 0 {
-				return &wrapper, &APIError{
-					ID:      *wrapper.ErrorID,
-					Name:    wrapper.ErrorName,
-					Message: wrapper.ErrorMessage,
-				}
-			}
-
-			// Apply server-requested backoff.
-			c.setForcedBackoff(wrapper.Backoff)
-
-			// Check quota exhaustion.
-			if wrapper.QuotaRemaining <= 0 {
-				c.incrementRequests()
-				c.save(path, body)
-				return &wrapper, ErrQuotaExhausted
-			}
-
-			c.incrementRequests()
-			c.save(path, body)
-			return &wrapper, nil
+			return c.process2xxResponse(body, path)
 		}
 
 		lastErr = fmt.Errorf("status %d", resp.StatusCode)
@@ -290,6 +295,20 @@ func (c *client) waitForcedBackoff(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// fetchItems fetches items (answers or comments) for a specific question.
+func (c *client) fetchItems(ctx context.Context, site string, questionID, page, pageSize int, suffix string) (*apiResponse, error) {
+	v := url.Values{}
+	v.Set("site", site)
+	v.Set("filter", "withbody")
+	v.Set("page", strconv.Itoa(page))
+	v.Set("pagesize", strconv.Itoa(pageSize))
+	if c.apiKey != "" {
+		v.Set("key", c.apiKey)
+	}
+	path := fmt.Sprintf("/questions/%d/%s?%s", questionID, suffix, v.Encode())
+	return c.get(ctx, path, 30*time.Minute)
 }
 
 // setForcedBackoff sets the forced backoff deadline. If a longer backoff
@@ -341,18 +360,8 @@ func (c *client) questions(ctx context.Context, site string, fromUnix, toUnix in
 }
 
 // answers fetches answers for a specific question.
-func (c *client) answers(ctx context.Context, site string, questionID int, page, pageSize int) (*answersResponse, error) {
-	v := url.Values{}
-	v.Set("site", site)
-	v.Set("filter", "withbody")
-	v.Set("page", strconv.Itoa(page))
-	v.Set("pagesize", strconv.Itoa(pageSize))
-	if c.apiKey != "" {
-		v.Set("key", c.apiKey)
-	}
-	path := fmt.Sprintf("/questions/%d/answers?%s", questionID, v.Encode())
-
-	env, err := c.get(ctx, path, 30*time.Minute)
+func (c *client) answers(ctx context.Context, site string, questionID, page, pageSize int) (*answersResponse, error) {
+	env, err := c.fetchItems(ctx, site, questionID, page, pageSize, "answers")
 	if err != nil {
 		return nil, err
 	}
@@ -366,18 +375,8 @@ func (c *client) answers(ctx context.Context, site string, questionID int, page,
 }
 
 // comments fetches comments for a specific question.
-func (c *client) comments(ctx context.Context, site string, questionID int, page, pageSize int) (*commentsResponse, error) {
-	v := url.Values{}
-	v.Set("site", site)
-	v.Set("filter", "withbody")
-	v.Set("page", strconv.Itoa(page))
-	v.Set("pagesize", strconv.Itoa(pageSize))
-	if c.apiKey != "" {
-		v.Set("key", c.apiKey)
-	}
-	path := fmt.Sprintf("/questions/%d/comments?%s", questionID, v.Encode())
-
-	env, err := c.get(ctx, path, 30*time.Minute)
+func (c *client) comments(ctx context.Context, site string, questionID, page, pageSize int) (*commentsResponse, error) {
+	env, err := c.fetchItems(ctx, site, questionID, page, pageSize, "comments")
 	if err != nil {
 		return nil, err
 	}

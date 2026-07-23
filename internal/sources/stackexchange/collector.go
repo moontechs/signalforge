@@ -26,7 +26,7 @@ func New(cfg *ConfigValues, apiClient *client) *Collector {
 		cfg = &ConfigValues{}
 	}
 	if apiClient == nil {
-		apiClient = newClient(&httpTransport{client: &http.Client{Timeout: 30 * time.Second}}, *cfg)
+		apiClient = newClient(&httpTransport{client: &http.Client{Timeout: 30 * time.Second}}, cfg)
 	}
 	return &Collector{config: *cfg, client: apiClient, now: time.Now}
 }
@@ -42,8 +42,64 @@ func (c *Collector) WithCache(store *storage.Storage) *Collector { c.client.With
 // Stats returns this collector's most recent run counters.
 func (c *Collector) Stats() Stats { return c.stats }
 
+// processParsedSignals filters parsed signals through dedup and memory checks
+// and appends new ones to the result slice. Returns the updated result and count.
+func (c *Collector) processParsedSignals(parsed []domain.RawSignal, seen map[string]struct{}, mem *memory.DefaultMemory, maxItems int, signals []domain.RawSignal) (result []domain.RawSignal, count int) {
+	items := 0
+	for i := range parsed {
+		sig := &parsed[i]
+		if _, ok := seen[sig.ID]; ok {
+			continue
+		}
+		seen[sig.ID] = struct{}{}
+		if mem != nil && (mem.HasRawSignal(SourceName, sig.SourceID) || mem.HasContentHash(sig.ContentHash)) {
+			continue
+		}
+		if maxItems > 0 && items >= maxItems {
+			break
+		}
+		signals = append(signals, *sig)
+		items++
+		if mem != nil {
+			mem.AddRawSignal(SourceName, sig.SourceID)
+			mem.AddContentHash(sig.ContentHash, sig.ID)
+		}
+	}
+	result = signals
+	count = items
+	return
+}
+
+// collectSite collects questions from one site across pages,
+// filtering through dedup and memory.
+func (c *Collector) collectSite(ctx context.Context, site string, from, to int64, pageSize, maxPages int, mem *memory.DefaultMemory) ([]domain.RawSignal, error) {
+	var signals []domain.RawSignal
+	items := 0
+	seen := make(map[string]struct{})
+	for page := 1; page <= maxPages && items < c.config.MaxItemsPerSite; page++ {
+		if err := ctx.Err(); err != nil {
+			return signals, err
+		}
+		resp, err := c.client.getQuestions(ctx, site, from, to, page, pageSize, APIFieldFilter)
+		if err != nil && resp == nil {
+			return signals, fmt.Errorf("site %s: %w", site, err)
+		}
+		parsed, _ := parseQuestionsWithStats(site, resp.Items, c.config.MinimumScore, c.config.MinimumViews)
+		signals, items = c.processParsedSignals(parsed, seen, mem, c.config.MaxItemsPerSite, signals)
+		if err != nil {
+			// getQuestions may return a parsed page alongside quota exhaustion;
+			// preserve that page, but report the exhaustion to the caller.
+			return signals, fmt.Errorf("site %s: %w", site, err)
+		}
+		if !resp.HasMore || len(resp.Items) == 0 {
+			break
+		}
+	}
+	return signals, nil
+}
+
 // Collect implements domain.SourceCollector.
-func (c *Collector) Collect(ctx context.Context, req domain.CollectRequest) ([]domain.RawSignal, error) {
+func (c *Collector) Collect(ctx context.Context, req domain.CollectRequest) ([]domain.RawSignal, error) { //nolint:gocritic // heavy param required by SourceCollector interface
 	if !c.config.Enabled {
 		return nil, ErrDisabled
 	}
@@ -78,47 +134,14 @@ func (c *Collector) Collect(ctx context.Context, req domain.CollectRequest) ([]d
 			c.updateStats()
 			return signals, err
 		}
-		items := 0
-		seen := make(map[string]struct{})
-		for page := 1; page <= maxPages && items < c.config.MaxItemsPerSite; page++ {
-			if err := ctx.Err(); err != nil {
-				c.updateStats()
-				return signals, err
-			}
-			resp, err := c.client.getQuestions(ctx, site, from, to, page, pageSize, APIFieldFilter)
-			if err != nil && resp == nil {
-				errs = append(errs, fmt.Errorf("site %s: %w", site, err))
-				break
-			}
-			parsed, _ := parseQuestionsWithStats(site, resp.Items, c.config.MinimumScore, c.config.MinimumViews)
-			for _, signal := range parsed {
-				if _, ok := seen[signal.ID]; ok {
-					continue
-				}
-				seen[signal.ID] = struct{}{}
-				if mem != nil && (mem.HasRawSignal(SourceName, signal.SourceID) || mem.HasContentHash(signal.ContentHash)) {
-					continue
-				}
-				if c.config.MaxItemsPerSite > 0 && items >= c.config.MaxItemsPerSite {
-					break
-				}
-				signals = append(signals, signal)
-				items++
-				if mem != nil {
-					mem.AddRawSignal(SourceName, signal.SourceID)
-					mem.AddContentHash(signal.ContentHash, signal.ID)
-				}
-			}
-			if err != nil {
-				// getQuestions may return a parsed page alongside quota exhaustion;
-				// preserve that page, but report the exhaustion to the caller.
-				errs = append(errs, fmt.Errorf("site %s: %w", site, err))
-				break
-			}
-			if !resp.HasMore || len(resp.Items) == 0 {
-				break
-			}
+		siteSignals, err := c.collectSite(ctx, site, from, to, pageSize, maxPages, mem)
+		if err != nil {
+			errs = append(errs, err)
+			// collectSite returns partial results alongside errors (e.g. quota exhaustion).
+			signals = append(signals, siteSignals...)
+			continue
 		}
+		signals = append(signals, siteSignals...)
 	}
 	if mem != nil {
 		_ = mem.Save()

@@ -22,7 +22,7 @@ var (
 // parseQuestion converts a single question with its answers and comments into
 // a domain.RawSignal. It merges answers and comments, sorts them
 // chronologically, and populates all metadata fields.
-func parseQuestion(item questionDTO, answers []answerDTO, comments []commentDTO, site string, collectedAt time.Time) domain.RawSignal {
+func parseQuestion(item *questionDTO, answers []answerDTO, comments []commentDTO, site string, collectedAt time.Time) domain.RawSignal {
 	body := cleanHTML(item.BodyMarkdown)
 	title := cleanHTML(item.Title)
 	tags := append([]string(nil), item.Tags...)
@@ -75,7 +75,7 @@ func parseQuestion(item questionDTO, answers []answerDTO, comments []commentDTO,
 
 // parseAnswer converts an answer DTO into a domain.Comment with a
 // "se_answer:{id}" ID.
-func parseAnswer(item answerDTO) domain.Comment {
+func parseAnswer(item *answerDTO) domain.Comment {
 	return domain.Comment{
 		ID:        fmt.Sprintf("se_answer:%d", item.AnswerID),
 		Body:      cleanHTML(item.BodyMarkdown),
@@ -86,7 +86,7 @@ func parseAnswer(item answerDTO) domain.Comment {
 
 // parseComment converts a comment DTO into a domain.Comment with a
 // "se_comment:{id}" ID.
-func parseComment(item commentDTO) domain.Comment {
+func parseComment(item *commentDTO) domain.Comment {
 	return domain.Comment{
 		ID:        fmt.Sprintf("se_comment:%d", item.CommentID),
 		Body:      cleanHTML(item.BodyMarkdown),
@@ -97,7 +97,7 @@ func parseComment(item commentDTO) domain.Comment {
 
 // eligibleQuestion checks whether a question meets the scope's eligibility
 // criteria: minimum score, minimum views, and the since window.
-func eligibleQuestion(item questionDTO, scope QuestionScope) bool {
+func eligibleQuestion(item *questionDTO, scope QuestionScope) bool {
 	if scope.MinimumScore > 0 && item.Score < scope.MinimumScore {
 		return false
 	}
@@ -118,11 +118,11 @@ func eligibleQuestion(item questionDTO, scope QuestionScope) bool {
 // then comments, and the combined result is sorted by CreatedAt ascending.
 func mergeAndSortComments(answers []answerDTO, comments []commentDTO) []domain.Comment {
 	out := make([]domain.Comment, 0, len(answers)+len(comments))
-	for _, a := range answers {
-		out = append(out, parseAnswer(a))
+	for i := range answers {
+		out = append(out, parseAnswer(&answers[i]))
 	}
-	for _, c := range comments {
-		out = append(out, parseComment(c))
+	for i := range comments {
+		out = append(out, parseComment(&comments[i]))
 	}
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].CreatedAt.Before(out[j].CreatedAt)
@@ -154,11 +154,11 @@ func parseQuestions(site string, questions []questionDTO) []domain.RawSignal {
 
 // parseQuestionsWithStats additionally applies score/view thresholds and
 // returns the number of skipped questions.
-func parseQuestionsWithStats(site string, questions []questionDTO, minimumScore, minimumViews int) ([]domain.RawSignal, int) {
+func parseQuestionsWithStats(site string, questions []questionDTO, minimumScore, minimumViews int) (signals []domain.RawSignal, skipped int) {
 	collectedAt := time.Now().UTC()
 	out := make([]domain.RawSignal, 0, len(questions))
-	skipped := 0
-	for _, q := range questions {
+	for i := range questions {
+		q := &questions[i]
 		body := cleanHTML(q.BodyMarkdown)
 		if body == "" || q.Score < minimumScore || q.ViewCount < minimumViews {
 			skipped++
@@ -173,8 +173,10 @@ func parseQuestionsWithStats(site string, questions []questionDTO, minimumScore,
 			Title: cleanHTML(q.Title), Body: body, Community: site, Tags: tags, Score: q.Score,
 			ViewCount: q.ViewCount, AnswerCount: q.AnswerCount, CreatedAt: time.Unix(q.CreationDate, 0).UTC(),
 			UpdatedAt: time.Unix(q.LastActivityDate, 0).UTC(), CollectedAt: collectedAt,
-			Metadata: map[string]string{MetaKeyStoryScore: strconv.Itoa(q.Score), MetaKeyAuthor: q.Owner.DisplayName,
-				MetaKeyViewCount: strconv.Itoa(q.ViewCount), MetaKeyTags: strings.Join(tags, ","), MetaKeySiteName: site},
+			Metadata: map[string]string{
+				MetaKeyStoryScore: strconv.Itoa(q.Score), MetaKeyAuthor: q.Owner.DisplayName,
+				MetaKeyViewCount: strconv.Itoa(q.ViewCount), MetaKeyTags: strings.Join(tags, ","), MetaKeySiteName: site,
+			},
 		}
 		s.ContentHash = storage.ContentHash(s.Title, s.Body, strings.Join(sortedTags, ","))
 		out = append(out, s)

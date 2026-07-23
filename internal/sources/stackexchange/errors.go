@@ -26,12 +26,14 @@ type APIError struct {
 func (e *APIError) Error() string {
 	return fmt.Sprintf("stack exchange API error %d (%s): %s", e.ID, e.Name, e.Message)
 }
+
 func (e *APIError) Unwrap() error {
 	if e.Cause != nil {
 		return e.Cause
 	}
 	return ErrAPIError
 }
+
 func (e *APIError) Is(target error) bool {
 	return target == ErrAPIError || (e.Cause != nil && errors.Is(e.Cause, target))
 }
