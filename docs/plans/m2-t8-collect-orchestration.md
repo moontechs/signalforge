@@ -46,11 +46,11 @@
 
 ### Task 6: Update collection statistics and summary reporting
 
-- [ ] Extend `statsDelta` to capture source-level attempted, collected, skipped/deduplicated, failed, and dry-run-planned work as applicable.
-- [ ] Update `reportCollectSummary` to report all selected sources in deterministic order.
-- [ ] Include force, dry-run, and resume/cursor information in the summary where useful for operator review.
-- [ ] Ensure dry-run summaries clearly state that no API calls were made and no data was persisted.
-- [ ] Preserve existing aggregate statistics and avoid double-counting records skipped by deduplication.
+- [x] Extend `statsDelta` to capture source-level attempted, collected, skipped/deduplicated, failed, and dry-run-planned work as applicable.
+- [x] Update `reportCollectSummary` to report all selected sources in deterministic order.
+- [x] Include force, dry-run, and resume/cursor information in the summary where useful for operator review.
+- [x] Ensure dry-run summaries clearly state that no API calls were made and no data was persisted.
+- [x] Preserve existing aggregate statistics and avoid double-counting records skipped by deduplication.
 
 ### Task 7: Add and update tests
 

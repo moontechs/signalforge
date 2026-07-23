@@ -164,11 +164,22 @@ func TestReportCollectSummary_StackExchange(t *testing.T) {
 	cmd := &cobra.Command{}
 	buf := new(strings.Builder)
 	cmd.SetOut(buf)
-	if err := reportCollectSummary(cmd, "stackexchange", 3, collectStatsDelta{seRequests: 7, seCacheHits: 2}); err != nil {
+	delta := collectStatsDelta{
+		seRequests:  7,
+		seCacheHits: 2,
+		sources: []sourceCollectionResult{
+			{name: "stackexchange", attempted: 3, collected: 3, skipped: 0},
+		},
+	}
+	if err := reportCollectSummary(cmd, 3, &delta); err != nil {
 		t.Fatalf("reportCollectSummary failed: %v", err)
 	}
-	if output := buf.String(); !strings.Contains(output, "Stack Exchange requests: 7 (cache hits: 2)") {
+	output := buf.String()
+	if !strings.Contains(output, "Stack Exchange requests: 7 (cache hits: 2)") {
 		t.Fatalf("expected Stack Exchange stats in output, got %q", output)
+	}
+	if !strings.Contains(output, "stackexchange: attempted=3, collected=3, dedup-skipped=0, status=ok") {
+		t.Errorf("expected per-source breakdown, got %q", output)
 	}
 }
 
@@ -204,9 +215,12 @@ func TestReportCollectSummary_HN(t *testing.T) {
 		requests:    50,
 		hnRequests:  15,
 		hnCacheHits: 7,
+		sources: []sourceCollectionResult{
+			{name: "hackernews", attempted: 12, collected: 10, skipped: 2},
+		},
 	}
 
-	err := reportCollectSummary(cmd, "hackernews", 12, delta)
+	err := reportCollectSummary(cmd, 12, &delta)
 	if err != nil {
 		t.Fatalf("reportCollectSummary failed: %v", err)
 	}
@@ -231,9 +245,12 @@ func TestReportCollectSummary_NoHN(t *testing.T) {
 		collected: 5,
 		skipped:   1,
 		requests:  20,
+		sources: []sourceCollectionResult{
+			{name: "github", attempted: 6, collected: 5, skipped: 1},
+		},
 	}
 
-	err := reportCollectSummary(cmd, "github", 5, delta)
+	err := reportCollectSummary(cmd, 5, &delta)
 	if err != nil {
 		t.Fatalf("reportCollectSummary failed: %v", err)
 	}
@@ -256,9 +273,12 @@ func TestReportCollectSummary_OnlyHN(t *testing.T) {
 		skipped:     1,
 		hnRequests:  12,
 		hnCacheHits: 4,
+		sources: []sourceCollectionResult{
+			{name: "hackernews", attempted: 9, collected: 8, skipped: 1},
+		},
 	}
 
-	err := reportCollectSummary(cmd, "hackernews", 8, delta)
+	err := reportCollectSummary(cmd, 8, &delta)
 	if err != nil {
 		t.Fatalf("reportCollectSummary failed: %v", err)
 	}
@@ -285,9 +305,12 @@ func TestReportCollectSummary_NoRequests(t *testing.T) {
 	delta := collectStatsDelta{
 		collected: 3,
 		skipped:   0,
+		sources: []sourceCollectionResult{
+			{name: "stackexchange", attempted: 3, collected: 3, skipped: 0},
+		},
 	}
 
-	err := reportCollectSummary(cmd, "stackexchange", 3, delta)
+	err := reportCollectSummary(cmd, 3, &delta)
 	if err != nil {
 		t.Fatalf("reportCollectSummary failed: %v", err)
 	}
@@ -299,7 +322,7 @@ func TestReportCollectSummary_NoRequests(t *testing.T) {
 	if strings.Contains(output, "HN requests") {
 		t.Errorf("unexpected HN requests when delta.hnRequests=0: %s", output)
 	}
-	if !strings.HasSuffix(strings.TrimSpace(output), "New: 3, skipped: 0") {
+	if !strings.Contains(output, "Total new signals: 3") || !strings.Contains(output, "total dedup-skipped: 0") {
 		t.Errorf("unexpected output format: %s", output)
 	}
 }

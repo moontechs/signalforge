@@ -421,22 +421,41 @@ func executeCollect(cmd *cobra.Command, env *collectEnv) error {
 		return printDryRunPlan(cmd, plans)
 	}
 
+	sourceResults := make([]sourceCollectionResult, 0, len(env.collectors))
 	var totalSignals int
+
 	for _, collector := range env.collectors {
 		req := buildCollectRequest(env, collector)
 		signals, err := collector.Collect(cmd.Context(), req)
+
+		// Track pre-dedup attempt count for per-source stats.
+		sr := sourceCollectionResult{
+			name:      collector.Name(),
+			attempted: len(signals),
+		}
+
 		signals = deduplicateSignals(signals, env)
+		sr.collected = len(signals)
+		sr.skipped = sr.attempted - sr.collected
 		totalSignals += len(signals)
 		trackCollectorStats(env, collector)
 
 		if err != nil {
+			sr.failed = true
+			sr.err = err
+			sourceResults = append(sourceResults, sr)
 			afterStats := env.mem.GetStats()
-			if outputErr := reportCollectSummary(cmd, collector.Name(), len(signals), statsDelta(env.before, &afterStats)); outputErr != nil {
+			delta := statsDelta(env.before, &afterStats)
+			delta.force = env.force
+			delta.resume = env.resume
+			delta.sources = sourceResults
+			if outputErr := reportCollectSummary(cmd, totalSignals, &delta); outputErr != nil {
 				return fmt.Errorf("write collection summary: %w", outputErr)
 			}
 			return fmt.Errorf("%s collection completed with errors: %w", collector.Name(), err)
 		}
 
+		sourceResults = append(sourceResults, sr)
 		persistCursor(env, collector)
 		recordSignals(env, signals)
 	}
@@ -446,7 +465,11 @@ func executeCollect(cmd *cobra.Command, env *collectEnv) error {
 	}
 
 	afterStats := env.mem.GetStats()
-	return reportCollectSummary(cmd, strings.Join(env.selectedSources, ","), totalSignals, statsDelta(env.before, &afterStats))
+	delta := statsDelta(env.before, &afterStats)
+	delta.force = env.force
+	delta.resume = env.resume
+	delta.sources = sourceResults
+	return reportCollectSummary(cmd, totalSignals, &delta)
 }
 
 // buildCollectRequest constructs a CollectRequest for the given collector from the environment.
@@ -698,6 +721,16 @@ func buildCollector(source string, cfg *config.Config, store *storage.Storage) (
 	}
 }
 
+// sourceCollectionResult captures per-source collection results for summary reporting.
+type sourceCollectionResult struct {
+	name      string
+	attempted int
+	collected int
+	skipped   int
+	failed    bool
+	err       error
+}
+
 type collectStatsDelta struct {
 	collected   int
 	skipped     int
@@ -706,6 +739,11 @@ type collectStatsDelta struct {
 	hnCacheHits int
 	seRequests  int
 	seCacheHits int
+
+	// New per-source and mode tracking.
+	force   bool
+	resume  bool
+	sources []sourceCollectionResult
 }
 
 func statsDelta(before, after *domain.ResearchStats) collectStatsDelta {
@@ -720,24 +758,61 @@ func statsDelta(before, after *domain.ResearchStats) collectStatsDelta {
 	}
 }
 
-func reportCollectSummary(cmd *cobra.Command, source string, totalSignals int, delta collectStatsDelta) error {
-	msg := fmt.Sprintf("Collected %d signals from %s. New: %d, skipped: %d",
-		totalSignals, source, delta.collected, delta.skipped)
+func reportCollectSummary(cmd *cobra.Command, totalSignals int, delta *collectStatsDelta) error {
+	w := cmd.OutOrStdout()
 
+	if _, err := fmt.Fprintln(w, "=== Collection Summary ==="); err != nil {
+		return fmt.Errorf("write summary header: %w", err)
+	}
+
+	// Mode flags.
+	if delta.force {
+		if _, err := fmt.Fprintln(w, "  Mode: force (deduplication disabled)"); err != nil {
+			return fmt.Errorf("write summary: %w", err)
+		}
+	}
+	if delta.resume {
+		if _, err := fmt.Fprintln(w, "  Mode: resume (cursor-based)"); err != nil {
+			return fmt.Errorf("write summary: %w", err)
+		}
+	}
+
+	// Per-source breakdown.
+	for _, sr := range delta.sources {
+		status := "ok"
+		if sr.failed {
+			status = "error: " + sr.err.Error()
+		}
+		line := fmt.Sprintf("  %s: attempted=%d, collected=%d, dedup-skipped=%d, status=%s",
+			sr.name, sr.attempted, sr.collected, sr.skipped, status)
+		if _, err := fmt.Fprintln(w, line); err != nil {
+			return fmt.Errorf("write summary: %w", err)
+		}
+	}
+
+	// Aggregate summary.
+	aggLine := fmt.Sprintf("  Total new signals: %d (from %d collected), total dedup-skipped: %d",
+		delta.collected, totalSignals, delta.skipped)
+	if _, err := fmt.Fprintln(w, aggLine); err != nil {
+		return fmt.Errorf("write summary: %w", err)
+	}
+
+	// Request stats.
 	if delta.requests > 0 {
-		msg += fmt.Sprintf(", GitHub requests: %d", delta.requests)
+		if _, err := fmt.Fprintf(w, "  GitHub requests: %d\n", delta.requests); err != nil {
+			return fmt.Errorf("write summary: %w", err)
+		}
 	}
 	if delta.hnRequests > 0 {
-		msg += fmt.Sprintf(", HN requests: %d (cache hits: %d)", delta.hnRequests, delta.hnCacheHits)
+		if _, err := fmt.Fprintf(w, "  HN requests: %d (cache hits: %d)\n", delta.hnRequests, delta.hnCacheHits); err != nil {
+			return fmt.Errorf("write summary: %w", err)
+		}
 	}
 	if delta.seRequests > 0 {
-		msg += fmt.Sprintf(", Stack Exchange requests: %d (cache hits: %d)", delta.seRequests, delta.seCacheHits)
+		if _, err := fmt.Fprintf(w, "  Stack Exchange requests: %d (cache hits: %d)\n", delta.seRequests, delta.seCacheHits); err != nil {
+			return fmt.Errorf("write summary: %w", err)
+		}
 	}
-	msg += "\n"
 
-	_, err := fmt.Fprint(cmd.OutOrStdout(), msg)
-	if err != nil {
-		return fmt.Errorf("write collection summary: %w", err)
-	}
 	return nil
 }
