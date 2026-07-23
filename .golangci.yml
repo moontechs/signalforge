@@ -166,8 +166,8 @@ linters-settings:
       - .WithMessage(
       - .WithMessagef(
       - status.Errorf(
-      - ctx.Err()
-      - t.client.Do(
+      - context.Context).Err(
+      - net/http.Client).Do(
     ignoreSigRegexps:
       - \.New.*Error\(
   wsl:
