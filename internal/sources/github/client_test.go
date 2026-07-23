@@ -208,7 +208,7 @@ func TestClient_RESTPagination(t *testing.T) {
 		searchIssues: true,
 	}
 
-	issues, err := fetchIssuesSearchStrategy(t.Context(), c, scope)
+	issues, err := fetchIssuesSearchStrategy(t.Context(), c, &scope)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -293,7 +293,7 @@ func TestClient_GraphQLPagination(t *testing.T) {
 		repos:             []string{"owner/repo"},
 	}
 
-	discussions, err := fetchDiscussions(t.Context(), c, nil, scope)
+	discussions, err := fetchDiscussions(t.Context(), c, nil, &scope)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -339,7 +339,7 @@ func TestClient_TransientRetrySuccess(t *testing.T) {
 		searchIssues: true,
 	}
 
-	issues, err := fetchIssuesSearchStrategy(t.Context(), c, scope)
+	issues, err := fetchIssuesSearchStrategy(t.Context(), c, &scope)
 	if err != nil {
 		t.Fatalf("unexpected error after retry: %v", err)
 	}
@@ -375,7 +375,7 @@ func TestClient_RetryExhaustion(t *testing.T) {
 		searchIssues: true,
 	}
 
-	_, err := fetchIssuesSearchStrategy(t.Context(), c, scope)
+	_, err := fetchIssuesSearchStrategy(t.Context(), c, &scope)
 	if err == nil {
 		t.Fatal("expected error but got nil")
 	}
@@ -426,7 +426,7 @@ func TestClient_PrimaryRateLimit(t *testing.T) {
 		searchIssues: true,
 	}
 
-	issues, err := fetchIssuesSearchStrategy(t.Context(), c, scope)
+	issues, err := fetchIssuesSearchStrategy(t.Context(), c, &scope)
 	if err != nil {
 		t.Fatalf("unexpected error after rate limit recovery: %v", err)
 	}
@@ -474,7 +474,7 @@ func TestClient_SecondaryRateLimit(t *testing.T) {
 		searchIssues: true,
 	}
 
-	issues, err := fetchIssuesSearchStrategy(t.Context(), c, scope)
+	issues, err := fetchIssuesSearchStrategy(t.Context(), c, &scope)
 	if err != nil {
 		t.Fatalf("unexpected error after secondary rate limit recovery: %v", err)
 	}
@@ -519,7 +519,7 @@ func TestClient_304ConditionalResponse(t *testing.T) {
 		searchIssues: true,
 	}
 
-	issues1, err := fetchIssuesSearchStrategy(t.Context(), c, scope)
+	issues1, err := fetchIssuesSearchStrategy(t.Context(), c, &scope)
 	if err != nil {
 		t.Fatalf("first request failed: %v", err)
 	}
@@ -549,7 +549,7 @@ func TestClient_304ConditionalResponse(t *testing.T) {
 	})
 
 	// Execute second request — should use ETag and get 304.
-	issues2, err := fetchIssuesSearchStrategy(t.Context(), c, scope)
+	issues2, err := fetchIssuesSearchStrategy(t.Context(), c, &scope)
 	if err != nil {
 		t.Fatalf("second request failed: %v", err)
 	}
@@ -581,7 +581,7 @@ func TestClient_RequestLimitCutoff(t *testing.T) {
 	// Pre-fill request count to reach limit.
 	c.requestCount = 1
 
-	_, err := fetchIssuesSearchStrategy(t.Context(), c, scope)
+	_, err := fetchIssuesSearchStrategy(t.Context(), c, &scope)
 	if err == nil {
 		t.Fatal("expected request limit error, got nil")
 	}
@@ -657,7 +657,7 @@ func TestClient_BuildSearchQuery(t *testing.T) {
 		since:     "2025-01-01T00:00:00Z",
 	}
 
-	query := buildSearchQuery(scope)
+	query := buildSearchQuery(&scope)
 
 	if !strings.Contains(query, "is:issue") {
 		t.Fatal("expected is:issue in query")
@@ -686,7 +686,7 @@ func TestClient_BuildSearchQuery(t *testing.T) {
 
 	// Empty scope.
 	empty := collectionScope{}
-	q := buildSearchQuery(empty)
+	q := buildSearchQuery(&empty)
 	if q != "is:issue is:open" {
 		t.Fatalf("unexpected empty query: %q", q)
 	}
@@ -781,7 +781,7 @@ func TestClient_doJSONRequest_non200(t *testing.T) {
 	c := testClient(fake)
 
 	var target struct{}
-	_, err := c.doJSONRequest(t.Context(), requestOptions{
+	_, err := c.doJSONRequest(t.Context(), &requestOptions{
 		Method: "GET",
 		Path:   "/some/path",
 	}, &target)

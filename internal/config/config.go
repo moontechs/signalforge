@@ -232,7 +232,7 @@ func (c *Config) Validate() error {
 }
 
 // Validate checks the GitHub collector configuration for invalid values.
-func (c GitHubConfig) Validate() error {
+func (c *GitHubConfig) Validate() error {
 	if c.MaxItemsPerRun <= 0 {
 		return errors.New("max_items_per_run must be greater than zero")
 	}

@@ -235,7 +235,7 @@ func buildCollector(source string, cfg *config.Config, store *storage.Storage) (
 			MaxRequests:        cfg.Limits.MaxGitHubRequests,
 		}
 
-		collector, err := github.New(ghCfg)
+		collector, err := github.New(&ghCfg)
 		if err != nil {
 			return nil, fmt.Errorf("create github collector: %w", err)
 		}

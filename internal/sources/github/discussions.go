@@ -81,7 +81,7 @@ type graphQLDiscussionComment struct {
 // ---- Fetching discussions ----.
 
 // fetchDiscussions fetches GitHub Discussions for the given repositories using GraphQL.
-func fetchDiscussions(ctx context.Context, c *githubClient, repos []string, scope collectionScope) ([]graphQLDiscussionNode, error) {
+func fetchDiscussions(ctx context.Context, c *githubClient, repos []string, scope *collectionScope) ([]graphQLDiscussionNode, error) {
 	if !scope.searchDiscussions {
 		return nil, nil
 	}
@@ -172,9 +172,9 @@ func listRepoDiscussions(ctx context.Context, c *githubClient, owner, repo, sinc
 			sinceTime, err := time.Parse(time.RFC3339, since)
 			if err == nil {
 				var filtered []graphQLDiscussionNode
-				for _, n := range nodes {
-					if n.UpdatedAt.After(sinceTime) || n.UpdatedAt.Equal(sinceTime) {
-						filtered = append(filtered, n)
+				for i := range nodes {
+					if nodes[i].UpdatedAt.After(sinceTime) || nodes[i].UpdatedAt.Equal(sinceTime) {
+						filtered = append(filtered, nodes[i])
 					}
 				}
 				nodes = filtered

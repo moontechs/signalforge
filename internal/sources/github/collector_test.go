@@ -11,7 +11,7 @@ import (
 // TestCollector_New_NotEnabled verifies that New returns ErrNotEnabled when disabled.
 func TestCollector_New_NotEnabled(t *testing.T) {
 	t.Parallel()
-	_, err := New(CollectorConfig{Enabled: false})
+	_, err := New(&CollectorConfig{Enabled: false})
 	if err != ErrNotEnabled {
 		t.Fatalf("expected ErrNotEnabled, got %v", err)
 	}
@@ -29,7 +29,7 @@ func TestCollector_New_Defaults(t *testing.T) {
 		MaxRequests:        500,
 	}
 
-	c, err := New(cfg)
+	c, err := New(&cfg)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestCollector_New_Defaults(t *testing.T) {
 // TestCollector_WithTransport verifies that WithTransport replaces the transport.
 func TestCollector_WithTransport(t *testing.T) {
 	t.Parallel()
-	c, err := New(CollectorConfig{Enabled: true, MaxRequests: 100})
+	c, err := New(&CollectorConfig{Enabled: true, MaxRequests: 100})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestCollector_WithTransport(t *testing.T) {
 // TestCollector_WithNow verifies that WithNow overrides the time function.
 func TestCollector_WithNow(t *testing.T) {
 	t.Parallel()
-	c, err := New(CollectorConfig{Enabled: true, MaxRequests: 100})
+	c, err := New(&CollectorConfig{Enabled: true, MaxRequests: 100})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -95,7 +95,7 @@ func TestCollector_WithNow(t *testing.T) {
 // when both sources are disabled.
 func TestCollector_Collect_Empty(t *testing.T) {
 	t.Parallel()
-	c, err := New(CollectorConfig{
+	c, err := New(&CollectorConfig{
 		Enabled:           true,
 		SearchIssues:      false,
 		SearchDiscussions: false,
@@ -119,7 +119,7 @@ func TestCollector_Collect_Empty(t *testing.T) {
 // TestCollector_Collect_NilContext verifies that nil context returns an error.
 func TestCollector_Collect_NilContext(t *testing.T) {
 	t.Parallel()
-	c, err := New(CollectorConfig{Enabled: true, MaxRequests: 100})
+	c, err := New(&CollectorConfig{Enabled: true, MaxRequests: 100})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -134,7 +134,7 @@ func TestCollector_Collect_NilContext(t *testing.T) {
 func TestDeriveScope_SearchStrategy(t *testing.T) {
 	t.Parallel()
 	scope := deriveScope(
-		configValues{MaxItemsPerRun: 100, MaxCommentsPerItem: 10},
+		&configValues{MaxItemsPerRun: 100, MaxCommentsPerItem: 10},
 		nil, // empty repos.
 		[]string{"bug"},
 		[]string{"go"},
@@ -173,7 +173,7 @@ func TestDeriveScope_PerRepoStrategy(t *testing.T) {
 	t.Parallel()
 	repos := []string{"owner/repo1", "owner/repo2"}
 	scope := deriveScope(
-		configValues{},
+		&configValues{},
 		repos,
 		nil,
 		nil,
@@ -211,7 +211,7 @@ func TestDeriveScope_PerRepoStrategy(t *testing.T) {
 func TestDeriveScope_EmptyValues(t *testing.T) {
 	t.Parallel()
 	scope := deriveScope(
-		configValues{},
+		&configValues{},
 		nil,
 		nil,
 		nil,

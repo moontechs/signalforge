@@ -266,6 +266,11 @@ issues:
     - linters:
         - nestif
       path: internal/sources/github/client\.go
+    # gocritic/hugeParam: req is part of the SourceCollector interface, cannot change
+    - linters:
+        - gocritic
+      text: "hugeParam: req is heavy"
+      path: internal/sources/github/collector\.go
   exclude:
     - "comment on exported"
     - "should have a package comment"

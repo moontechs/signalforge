@@ -176,7 +176,7 @@ rangeValCopy, paramTypeCombine
 `internal/sources/github/types.go`,
 `internal/sources/github/integration_test.go`,
 `internal/config/config.go`
-  - [ ] **hugeParam (12 changes):** Pass heavy structs by
+  - [x] **hugeParam (12 changes):** Pass heavy structs by
 pointer:
   - `config.go:235` — `(c GitHubConfig) Validate()` ->
 `(c *GitHubConfig) Validate()`
@@ -203,7 +203,7 @@ callers)
 *collectionScope` in buildSearchQuery
   - `integration_test.go:33` — `cfg CollectorConfig` ->
 `cfg *CollectorConfig` in setupCollector
-  - [ ] **rangeValCopy (3 changes):** Use index-based
+  - [x] **rangeValCopy (3 changes):** Use index-based
 iteration:
   - `collector.go:176` — `for _, s := range signals` ->
 `for i := range signals` use `signals[i]`
@@ -211,13 +211,13 @@ iteration:
 `for i := range issues` use `issues[i]`
   - `discussions.go:175` — `for _, n := range nodes` ->
 `for i := range nodes` use `nodes[i]`
-  - [ ] **paramTypeCombine (1 change):** 
+  - [x] **paramTypeCombine (1 change):** 
   - `issues.go:237` — combine adjacent `int` params:
 `issueNumber int, maxComments int` -> `issueNumber,
 maxComments int`
-  - [ ] Update all call sites for changed function
+  - [x] Update all call sites for changed function
 signatures
-  - [ ] Run tests — must pass
+  - [x] Run tests — must pass
 ### Task 7: Fix exhaustruct (10 issues) — Missing struct
 fields in initialization
 **Files:**

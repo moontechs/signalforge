@@ -415,8 +415,8 @@ func (c *githubClient) doRequest(ctx context.Context, opts requestOptions) (*htt
 }
 
 // doJSONRequest performs an HTTP request and unmarshals the JSON response.
-func (c *githubClient) doJSONRequest(ctx context.Context, opts requestOptions, target any) (*http.Response, error) {
-	resp, err := c.doRequest(ctx, opts)
+func (c *githubClient) doJSONRequest(ctx context.Context, opts *requestOptions, target any) (*http.Response, error) {
+	resp, err := c.doRequest(ctx, *opts)
 	if err != nil {
 		return nil, err
 	}

@@ -42,7 +42,7 @@ type requestLimits struct {
 
 // New creates a new GitHub Collector with the given configuration.
 // It returns an error if the collector would have no usable configuration.
-func New(cfg CollectorConfig) (*Collector, error) {
+func New(cfg *CollectorConfig) (*Collector, error) {
 	if !cfg.Enabled {
 		return nil, ErrNotEnabled
 	}
@@ -135,7 +135,7 @@ func (c *Collector) Collect(ctx context.Context, req domain.CollectRequest) ([]d
 	}
 
 	scope := deriveScope(
-		c.config,
+		&c.config,
 		c.config.Repositories,
 		c.config.Labels,
 		c.config.Languages,
@@ -150,22 +150,22 @@ func (c *Collector) Collect(ctx context.Context, req domain.CollectRequest) ([]d
 
 	// 1. Fetch issues (REST).
 	if scope.searchIssues {
-		issues, err := fetchIssues(ctx, c.client, scope)
+		issues, err := fetchIssues(ctx, c.client, &scope)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("github issues: %w", err))
 		} else {
-			parsed := parseIssues(ctx, c.client, issues, scope, collectedAt)
+			parsed := parseIssues(ctx, c.client, issues, &scope, collectedAt)
 			signals = append(signals, parsed...)
 		}
 	}
 
 	// 2. Fetch discussions (GraphQL).
 	if scope.searchDiscussions {
-		discussions, err := fetchDiscussions(ctx, c.client, nil, scope)
+		discussions, err := fetchDiscussions(ctx, c.client, nil, &scope)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("github discussions: %w", err))
 		} else {
-			parsed := parseDiscussions(discussions, scope, collectedAt)
+			parsed := parseDiscussions(discussions, &scope, collectedAt)
 			signals = append(signals, parsed...)
 		}
 	}
@@ -173,10 +173,10 @@ func (c *Collector) Collect(ctx context.Context, req domain.CollectRequest) ([]d
 	// 3. Dedup within this run (by signal ID).
 	seen := make(map[string]bool, len(signals))
 	deduped := make([]domain.RawSignal, 0, len(signals))
-	for _, s := range signals {
-		if !seen[s.ID] {
-			seen[s.ID] = true
-			deduped = append(deduped, s)
+	for i := range signals {
+		if !seen[signals[i].ID] {
+			seen[signals[i].ID] = true
+			deduped = append(deduped, signals[i])
 		}
 	}
 	signals = deduped
@@ -196,7 +196,7 @@ func (c *Collector) Collect(ctx context.Context, req domain.CollectRequest) ([]d
 
 // parseIssues parses a slice of ghIssue into domain.RawSignal, fetching comments
 // for each issue. Issues where owner/repo cannot be determined are skipped.
-func parseIssues(ctx context.Context, c *githubClient, issues []ghIssue, scope collectionScope, collectedAt time.Time) []domain.RawSignal {
+func parseIssues(ctx context.Context, c *githubClient, issues []ghIssue, scope *collectionScope, collectedAt time.Time) []domain.RawSignal {
 	signals := make([]domain.RawSignal, 0, len(issues))
 
 	for i := range issues {
@@ -230,7 +230,7 @@ func parseIssues(ctx context.Context, c *githubClient, issues []ghIssue, scope c
 
 // parseDiscussions parses a slice of graphQLDiscussionNode into domain.RawSignal.
 // Discussions where owner/repo cannot be determined from the URL are skipped.
-func parseDiscussions(discussions []graphQLDiscussionNode, scope collectionScope, collectedAt time.Time) []domain.RawSignal {
+func parseDiscussions(discussions []graphQLDiscussionNode, scope *collectionScope, collectedAt time.Time) []domain.RawSignal {
 	signals := make([]domain.RawSignal, 0, len(discussions))
 
 	for i := range discussions {

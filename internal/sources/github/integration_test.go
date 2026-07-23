@@ -30,7 +30,7 @@ func issuesListToJSON(issues []ghIssue) []byte {
 // ---- Test helpers ----.
 
 // setupCollector creates a Collector with a fakeTransport and convenient defaults.
-func setupCollector(t *testing.T, cfg CollectorConfig, fake *fakeTransport) *Collector {
+func setupCollector(t *testing.T, cfg *CollectorConfig, fake *fakeTransport) *Collector {
 	t.Helper()
 	if fake == nil {
 		fake = newFakeTransport()
@@ -140,7 +140,7 @@ func TestCollect_MixedIssuesAndDiscussions(t *testing.T) {
 		body:       string(discBody),
 	})
 
-	c := setupCollector(t, CollectorConfig{
+	c := setupCollector(t, &CollectorConfig{
 		Enabled:            true,
 		SearchIssues:       true,
 		SearchDiscussions:  true,
@@ -228,7 +228,7 @@ func TestCollect_IssuesOnly(t *testing.T) {
 		body:       string(searchBody),
 	})
 
-	c := setupCollector(t, CollectorConfig{
+	c := setupCollector(t, &CollectorConfig{
 		Enabled:            true,
 		SearchIssues:       true,
 		SearchDiscussions:  false,
@@ -288,7 +288,7 @@ func TestCollect_DiscussionsOnly(t *testing.T) {
 		body:       string(discBody),
 	})
 
-	c := setupCollector(t, CollectorConfig{
+	c := setupCollector(t, &CollectorConfig{
 		Enabled:            true,
 		SearchIssues:       false,
 		SearchDiscussions:  true,
@@ -361,7 +361,7 @@ func TestCollect_Dedup(t *testing.T) {
 	discBody, _ := json.Marshal(discPage)
 	fake.addResponse("https://api.github.com/graphql", fakeResponse{statusCode: 200, body: string(discBody)})
 
-	c := setupCollector(t, CollectorConfig{
+	c := setupCollector(t, &CollectorConfig{
 		Enabled:            true,
 		SearchIssues:       true,
 		SearchDiscussions:  true,
@@ -401,7 +401,7 @@ func TestCollect_RequestLimitCutoff(t *testing.T) {
 	t.Parallel()
 	fake := newFakeTransport()
 
-	c := setupCollector(t, CollectorConfig{
+	c := setupCollector(t, &CollectorConfig{
 		Enabled:            true,
 		SearchIssues:       true,
 		SearchDiscussions:  false,
@@ -430,7 +430,7 @@ func TestCollect_RateLimitExhaustion(t *testing.T) {
 	t.Parallel()
 	fake := newFakeTransport()
 
-	c := setupCollector(t, CollectorConfig{
+	c := setupCollector(t, &CollectorConfig{
 		Enabled:            true,
 		SearchIssues:       true,
 		SearchDiscussions:  false,
@@ -463,7 +463,7 @@ func TestCollect_RateLimitExhaustion(t *testing.T) {
 // TestCollect_NilContext verifies that nil context returns an error.
 func TestCollect_NilContext(t *testing.T) {
 	t.Parallel()
-	c, err := New(CollectorConfig{Enabled: true, MaxRequests: 100})
+	c, err := New(&CollectorConfig{Enabled: true, MaxRequests: 100})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -476,7 +476,7 @@ func TestCollect_NilContext(t *testing.T) {
 // TestCollect_NotEnabled verifies that disabled collector returns ErrNotEnabled.
 func TestCollect_NotEnabled(t *testing.T) {
 	t.Parallel()
-	_, err := New(CollectorConfig{Enabled: false})
+	_, err := New(&CollectorConfig{Enabled: false})
 	if err != ErrNotEnabled {
 		t.Fatalf("expected ErrNotEnabled, got %v", err)
 	}
@@ -485,7 +485,7 @@ func TestCollect_NotEnabled(t *testing.T) {
 // TestCollect_EmptyResults verifies empty results when no sources configured.
 func TestCollect_EmptyResults(t *testing.T) {
 	t.Parallel()
-	c := setupCollector(t, CollectorConfig{
+	c := setupCollector(t, &CollectorConfig{
 		Enabled:           true,
 		SearchIssues:      false,
 		SearchDiscussions: false,
@@ -563,7 +563,7 @@ func TestCollect_MaxItemsLimit(t *testing.T) {
 	discBody, _ := json.Marshal(discPage)
 	fake.addResponse("https://api.github.com/graphql", fakeResponse{statusCode: 200, body: string(discBody)})
 
-	c := setupCollector(t, CollectorConfig{
+	c := setupCollector(t, &CollectorConfig{
 		Enabled:            true,
 		SearchIssues:       true,
 		SearchDiscussions:  true,
@@ -603,7 +603,7 @@ func TestCollect_PerRepoStrategy(t *testing.T) {
 	issuesBody := issuesListToJSON(issues)
 	fake.addResponse(issuesPrefix+"*", fakeResponse{statusCode: 200, body: string(issuesBody)})
 
-	c := setupCollector(t, CollectorConfig{
+	c := setupCollector(t, &CollectorConfig{
 		Enabled:            true,
 		SearchIssues:       true,
 		SearchDiscussions:  false,
@@ -658,7 +658,7 @@ func TestCollect_PartialFailure_IssueError(t *testing.T) {
 	discBody, _ := json.Marshal(discPage)
 	fake.addResponse("https://api.github.com/graphql", fakeResponse{statusCode: 200, body: string(discBody)})
 
-	c := setupCollector(t, CollectorConfig{
+	c := setupCollector(t, &CollectorConfig{
 		Enabled:            true,
 		SearchIssues:       true,
 		SearchDiscussions:  true,
@@ -705,7 +705,7 @@ func TestCollect_PartialFailure_DiscussionError(t *testing.T) {
 	fake.addResponse(issuesPrefix+"*", fakeResponse{statusCode: 200, body: string(issuesBody)})
 
 	// Discussions endpoint is NOT registered — will fail with 404.
-	c := setupCollector(t, CollectorConfig{
+	c := setupCollector(t, &CollectorConfig{
 		Enabled:            true,
 		SearchIssues:       true,
 		SearchDiscussions:  true,
@@ -756,7 +756,7 @@ func TestCollect_WithCache(t *testing.T) {
 		body:       string(searchBody),
 	})
 
-	c := setupCollector(t, CollectorConfig{
+	c := setupCollector(t, &CollectorConfig{
 		Enabled:            true,
 		SearchIssues:       true,
 		SearchDiscussions:  false,
@@ -820,7 +820,7 @@ func TestCollect_IssueWithoutRepoURL(t *testing.T) {
 	searchURL := "https://api.github.com/search/issues?q=is%3Aissue+is%3Aopen&sort=updated&direction=asc&per_page=100&page=1"
 	fake.addResponse(searchURL, fakeResponse{statusCode: 200, body: string(searchBody)})
 
-	c := setupCollector(t, CollectorConfig{
+	c := setupCollector(t, &CollectorConfig{
 		Enabled:            true,
 		SearchIssues:       true,
 		SearchDiscussions:  false,
@@ -862,7 +862,7 @@ func TestCollect_InvalidIssueURL(t *testing.T) {
 	searchURL := "https://api.github.com/search/issues?q=is%3Aissue+is%3Aopen&sort=updated&direction=asc&per_page=100&page=1"
 	fake.addResponse(searchURL, fakeResponse{statusCode: 200, body: string(searchBody)})
 
-	c := setupCollector(t, CollectorConfig{
+	c := setupCollector(t, &CollectorConfig{
 		Enabled:            true,
 		SearchIssues:       true,
 		SearchDiscussions:  false,

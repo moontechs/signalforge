@@ -71,7 +71,7 @@ type ghSearchResponse struct {
 
 // fetchIssues fetches issues from GitHub using the appropriate strategy.
 // (search API or per-repo listing) based on the scope.
-func fetchIssues(ctx context.Context, c *githubClient, scope collectionScope) ([]ghIssue, error) {
+func fetchIssues(ctx context.Context, c *githubClient, scope *collectionScope) ([]ghIssue, error) {
 	if !scope.searchIssues {
 		return nil, nil
 	}
@@ -83,7 +83,7 @@ func fetchIssues(ctx context.Context, c *githubClient, scope collectionScope) ([
 }
 
 // fetchIssuesPerRepoStrategy fetches issues from each configured repository.
-func fetchIssuesPerRepoStrategy(ctx context.Context, c *githubClient, scope collectionScope) ([]ghIssue, error) {
+func fetchIssuesPerRepoStrategy(ctx context.Context, c *githubClient, scope *collectionScope) ([]ghIssue, error) {
 	var allIssues []ghIssue
 	maxItems := scope.maxItems
 	var lastErr error
@@ -121,7 +121,7 @@ func fetchIssuesPerRepoStrategy(ctx context.Context, c *githubClient, scope coll
 }
 
 // fetchIssuesSearchStrategy fetches issues using the GitHub search API.
-func fetchIssuesSearchStrategy(ctx context.Context, c *githubClient, scope collectionScope) ([]ghIssue, error) {
+func fetchIssuesSearchStrategy(ctx context.Context, c *githubClient, scope *collectionScope) ([]ghIssue, error) {
 	query := buildSearchQuery(scope)
 	if query == "" {
 		return nil, nil
@@ -145,7 +145,7 @@ func fetchIssuesSearchStrategy(ctx context.Context, c *githubClient, scope colle
 		cacheKey := "REST:GET:" + path
 
 		var searchResp ghSearchResponse
-		_, err := c.doJSONRequest(ctx, requestOptions{
+		_, err := c.doJSONRequest(ctx, &requestOptions{
 			Method:   "GET",
 			Path:     path,
 			CacheKey: cacheKey,
@@ -197,7 +197,7 @@ func listRepoIssues(ctx context.Context, c *githubClient, owner, repo, since str
 
 		var issues []ghIssue
 		// The per-repo endpoint returns an array, not a search wrapper.
-		resp, err := c.doJSONRequest(ctx, requestOptions{
+		resp, err := c.doJSONRequest(ctx, &requestOptions{
 			Method:   "GET",
 			Path:     u,
 			CacheKey: cacheKey,
@@ -207,9 +207,9 @@ func listRepoIssues(ctx context.Context, c *githubClient, owner, repo, since str
 		}
 
 		// Filter out pull requests (the issues endpoint returns PRs too).
-		for _, iss := range issues {
-			if iss.PullRequest == nil {
-				allIssues = append(allIssues, iss)
+		for i := range issues {
+			if issues[i].PullRequest == nil {
+				allIssues = append(allIssues, issues[i])
 			}
 		}
 
@@ -256,7 +256,7 @@ func fetchIssueComments(ctx context.Context, c *githubClient, owner, repo string
 		cacheKey := "REST:GET:" + path
 
 		var comments []ghIssueComment
-		resp, err := c.doJSONRequest(ctx, requestOptions{
+		resp, err := c.doJSONRequest(ctx, &requestOptions{
 			Method:   "GET",
 			Path:     path,
 			CacheKey: cacheKey,
@@ -287,7 +287,7 @@ func fetchIssueComments(ctx context.Context, c *githubClient, owner, repo string
 }
 
 // buildSearchQuery constructs the GitHub search query from the collection scope.
-func buildSearchQuery(scope collectionScope) string {
+func buildSearchQuery(scope *collectionScope) string {
 	var parts []string
 
 	parts = append(parts, "is:issue", "is:open")
