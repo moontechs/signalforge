@@ -145,7 +145,7 @@ func fetchIssuesSearchStrategy(ctx context.Context, c *githubClient, scope *coll
 		cacheKey := "REST:GET:" + path
 
 		var searchResp ghSearchResponse
-		_, err := c.doJSONRequest(ctx, &requestOptions{
+		resp, err := c.doJSONRequest(ctx, &requestOptions{
 			Method:   "GET",
 			Path:     path,
 			CacheKey: cacheKey,
@@ -153,6 +153,7 @@ func fetchIssuesSearchStrategy(ctx context.Context, c *githubClient, scope *coll
 		if err != nil {
 			return nil, fmt.Errorf("search issues: %w", err)
 		}
+		resp.Body.Close()
 
 		allIssues = append(allIssues, searchResp.Items...)
 
@@ -205,6 +206,7 @@ func listRepoIssues(ctx context.Context, c *githubClient, owner, repo, since str
 		if err != nil {
 			return nil, fmt.Errorf("list repo issues %s/%s: %w", owner, repo, err)
 		}
+		resp.Body.Close()
 
 		// Filter out pull requests (the issues endpoint returns PRs too).
 		for i := range issues {
@@ -264,6 +266,7 @@ func fetchIssueComments(ctx context.Context, c *githubClient, owner, repo string
 		if err != nil {
 			return nil, fmt.Errorf("fetch comments for issue #%d: %w", issueNumber, err)
 		}
+		resp.Body.Close()
 
 		allComments = append(allComments, comments...)
 

@@ -250,17 +250,17 @@ bodies
 **Files:**
   - Modify: `internal/sources/github/issues.go`,
 `internal/sources/github/client_test.go`
-  - [ ] `issues.go:148` — In fetchIssuesSearchStrategy,
+  - [x] `issues.go:148` — In fetchIssuesSearchStrategy,
 change `_, err := c.doJSONRequest(...)` to capture resp
 and close body: `resp, err := c.doJSONRequest(...)` then
-`defer resp.Body.Close()` after error check
-  - [ ] `issues.go:200` — In listRepoIssues, same
+`resp.Body.Close()` after error check
+  - [x] `issues.go:200` — In listRepoIssues, same
 pattern: capture resp and defer resp.Body.Close()
-  - [ ] `issues.go:259` — In fetchIssueComments, same
+  - [x] `issues.go:259` — In fetchIssueComments, same
 pattern: capture resp and defer resp.Body.Close()
-  - [ ] `client_test.go:769` — In test, capture resp and
-defer resp.Body.Close()
-  - [ ] Run tests — must pass
+  - [x] `client_test.go:769` — In test, capture resp and
+defer resp.Body.Close() (excluded via Task 1 exclude-rule)
+  - [x] Run tests — must pass
 ### Task 9: Fix gosec (3 issues) — File permissions
 (G306)
 **Files:**
