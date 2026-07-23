@@ -1,0 +1,100 @@
+[
+  {
+    "answer_id": 2001,
+    "question_id": 1001,
+    "body_markdown": "<p>Use a middleware approach with a centralized error handler. Define custom error types and wrap them with context.</p>",
+    "owner": {
+      "display_name": "stackmaster",
+      "user_id": 6001,
+      "reputation": 5000,
+      "user_type": "registered"
+    },
+    "creation_date": 1700010000,
+    "score": 67,
+    "is_accepted": true
+  },
+  {
+    "answer_id": 2002,
+    "question_id": 1001,
+    "body_markdown": "<p>Consider using the <code>errors</code> package with <code>fmt.Errorf</code> and <code>%w</code> for error wrapping.</p>",
+    "owner": {
+      "display_name": "helper",
+      "user_id": 6002,
+      "reputation": 1200,
+      "user_type": "registered"
+    },
+    "creation_date": 1700020000,
+    "score": 34,
+    "is_accepted": false
+  },
+  {
+    "answer_id": 2003,
+    "question_id": 1002,
+    "body_markdown": "<p>Your list comprehension is correct. Make sure you're printing the result, not the generator.</p>",
+    "owner": {
+      "display_name": "pythonwhiz",
+      "user_id": 6003,
+      "reputation": 3200,
+      "user_type": "registered"
+    },
+    "creation_date": 1699910000,
+    "score": 25,
+    "is_accepted": true
+  },
+  {
+    "answer_id": 2004,
+    "question_id": 1002,
+    "body_markdown": "<p>Try wrapping in <code>list()</code> if using Python 3.</p>",
+    "owner": {
+      "display_name": "learner",
+      "user_id": 6004,
+      "reputation": 450,
+      "user_type": "registered"
+    },
+    "creation_date": 1699920000,
+    "score": 8,
+    "is_accepted": false
+  },
+  {
+    "answer_id": 2005,
+    "question_id": 1003,
+    "body_markdown": "<p>Your process is running as PID 1. Add <code>--init</code> flag or use a process manager like <code>tini</code>.</p>",
+    "owner": {
+      "display_name": "dockerpro",
+      "user_id": 6005,
+      "reputation": 7800,
+      "user_type": "registered"
+    },
+    "creation_date": 1699810000,
+    "score": 92,
+    "is_accepted": true
+  },
+  {
+    "answer_id": 2006,
+    "question_id": 1005,
+    "body_markdown": "<p>Safari has a known bug with <code>auto-fill</code> in grid. Use media queries as a fallback.</p>",
+    "owner": {
+      "display_name": "cssguru",
+      "user_id": 6006,
+      "reputation": 4100,
+      "user_type": "registered"
+    },
+    "creation_date": 1700210000,
+    "score": 31,
+    "is_accepted": true
+  },
+  {
+    "answer_id": 2007,
+    "question_id": 1005,
+    "body_markdown": "<p>You can also try using <code>grid-template-columns: repeat(3, 1fr)</code> as a Safari-compatible alternative.</p>",
+    "owner": {
+      "display_name": "frontenddev",
+      "user_id": 6007,
+      "reputation": 890,
+      "user_type": "registered"
+    },
+    "creation_date": 1700220000,
+    "score": 14,
+    "is_accepted": false
+  }
+]

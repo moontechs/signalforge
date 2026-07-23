@@ -1,0 +1,140 @@
+[
+  {
+    "question_id": 1001,
+    "title": "How to handle errors in Go gracefully?",
+    "body_markdown": "<p>I'm writing a Go web service and find myself repeating <code>if err != nil</code> everywhere. Is there a better pattern for error handling?</p>",
+    "link": "https://stackoverflow.com/questions/1001/go-error-handling",
+    "owner": {
+      "display_name": "gopher123",
+      "user_id": 5001,
+      "reputation": 1500,
+      "user_type": "registered"
+    },
+    "creation_date": 1700000000,
+    "last_activity_date": 1700100000,
+    "score": 42,
+    "answer_count": 3,
+    "view_count": 15000,
+    "tag_count": 3,
+    "tags": ["go", "error-handling", "best-practices"],
+    "is_answered": true,
+    "accepted_answer_id": 2001
+  },
+  {
+    "question_id": 1002,
+    "title": "Why does my Python list comprehension behave differently?",
+    "body_markdown": "<p>I have this code: <code>[x for x in range(10) if x % 2 == 0]</code> but the result is unexpected.</p>",
+    "link": "https://stackoverflow.com/questions/1002/python-list-comprehension",
+    "owner": {
+      "display_name": "pythonista",
+      "user_id": 5002,
+      "reputation": 850,
+      "user_type": "registered"
+    },
+    "creation_date": 1699900000,
+    "last_activity_date": 1699950000,
+    "score": 15,
+    "answer_count": 2,
+    "view_count": 3200,
+    "tag_count": 2,
+    "tags": ["python", "list-comprehension"],
+    "is_answered": true,
+    "accepted_answer_id": 2003
+  },
+  {
+    "question_id": 1003,
+    "title": "Docker container exits immediately after start",
+    "body_markdown": "<p>My Docker container exits immediately with code 0. The Dockerfile uses <code>CMD [\"node\", \"app.js\"]</code> but the process finishes instantly.</p>",
+    "link": "https://stackoverflow.com/questions/1003/docker-exit-immediately",
+    "owner": {
+      "display_name": "dockdev",
+      "user_id": 5003,
+      "reputation": 320,
+      "user_type": "registered"
+    },
+    "creation_date": 1699800000,
+    "last_activity_date": 1699900000,
+    "score": 78,
+    "answer_count": 5,
+    "view_count": 25000,
+    "tag_count": 3,
+    "tags": ["docker", "node.js", "containers"],
+    "is_answered": true,
+    "accepted_answer_id": 2005
+  },
+  {
+    "question_id": 1004,
+    "title": "How to optimize SQL query with multiple JOINs?",
+    "body_markdown": "<p>I have a query with 6 JOINs that takes 30 seconds to run. How can I optimize it?</p>",
+    "link": "https://stackoverflow.com/questions/1004/sql-optimization",
+    "owner": {
+      "display_name": "sqldude",
+      "user_id": 5004,
+      "reputation": 2100,
+      "user_type": "registered"
+    },
+    "creation_date": 1705000000,
+    "last_activity_date": 1705100000,
+    "score": 5,
+    "answer_count": 1,
+    "view_count": 120,
+    "tag_count": 2,
+    "tags": ["sql", "performance"],
+    "is_answered": false
+  },
+  {
+    "question_id": 1005,
+    "title": "CSS Grid layout not working in Safari",
+    "body_markdown": "<p>My CSS Grid layout works in Chrome and Firefox but breaks in Safari. The <code>grid-template-columns: repeat(auto-fill, minmax(200px, 1fr))</code> doesn't render correctly.</p>",
+    "link": "https://stackoverflow.com/questions/1005/css-grid-safari",
+    "owner": {
+      "display_name": "frontenddev",
+      "user_id": 5005,
+      "reputation": 670,
+      "user_type": "registered"
+    },
+    "creation_date": 1700200000,
+    "last_activity_date": 1700250000,
+    "score": 23,
+    "answer_count": 2,
+    "view_count": 8900,
+    "tag_count": 3,
+    "tags": ["css", "grid", "safari"],
+    "is_answered": true,
+    "accepted_answer_id": 2006
+  },
+  {
+    "question_id": 1006,
+    "title": "Unanswered low-score question",
+    "body_markdown": "<p>This question has no answers and low score.</p>",
+    "link": "https://stackoverflow.com/questions/1006/low-score-question",
+    "owner": {
+      "display_name": "nobody",
+      "user_id": 5006,
+      "reputation": 1,
+      "user_type": "unregistered"
+    },
+    "creation_date": 1699000000,
+    "last_activity_date": 1699000000,
+    "score": -2,
+    "answer_count": 0,
+    "view_count": 5,
+    "tag_count": 1,
+    "tags": ["trivia"],
+    "is_answered": false
+  },
+  {
+    "question_id": 1007,
+    "title": "Question no tags unanswered",
+    "body_markdown": "<p>Question with missing owner and no tags.</p>",
+    "link": "https://stackoverflow.com/questions/1007/no-owner",
+    "creation_date": 1699500000,
+    "last_activity_date": 1699500000,
+    "score": 10,
+    "answer_count": 0,
+    "view_count": 100,
+    "tag_count": 0,
+    "tags": [],
+    "is_answered": false
+  }
+]

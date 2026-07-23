@@ -19,6 +19,117 @@ var (
 	spaceRE     = regexp.MustCompile(`[ \t\r\n]+`)
 )
 
+// parseQuestion converts a single question with its answers and comments into
+// a domain.RawSignal. It merges answers and comments, sorts them
+// chronologically, and populates all metadata fields.
+func parseQuestion(item questionDTO, answers []answerDTO, comments []commentDTO, site string, collectedAt time.Time) domain.RawSignal {
+	body := cleanHTML(item.BodyMarkdown)
+	title := cleanHTML(item.Title)
+	tags := append([]string(nil), item.Tags...)
+
+	// Merge and sort answers + comments.
+	merged := mergeAndSortComments(answers, comments)
+
+	// Build metadata.
+	meta := map[string]string{
+		MetaKeyAuthor:      item.Owner.DisplayName,
+		MetaKeyStoryScore:  strconv.Itoa(item.Score),
+		MetaKeyViewCount:   strconv.Itoa(item.ViewCount),
+		MetaKeyAnswerCount: strconv.Itoa(item.AnswerCount),
+		MetaKeyTags:        strings.Join(tags, ","),
+		MetaKeySiteName:    site,
+		MetaKeyIsAnswered:  strconv.FormatBool(item.IsAnswered),
+	}
+	if item.AcceptedAnswerID != nil {
+		meta[MetaKeyAcceptedAnswer] = strconv.Itoa(*item.AcceptedAnswerID)
+	}
+
+	// Content hash from title, body, and all comment bodies.
+	contentParts := []string{title, body}
+	for _, c := range merged {
+		contentParts = append(contentParts, c.Body)
+	}
+
+	s := domain.RawSignal{
+		ID:          fmt.Sprintf("%s:%d", SignalIDPrefix, item.QuestionID),
+		Source:      SourceName,
+		SourceID:    strconv.Itoa(item.QuestionID),
+		SourceType:  SourceType,
+		URL:         item.Link,
+		Title:       title,
+		Body:        body,
+		Comments:    merged,
+		Community:   site,
+		Tags:        tags,
+		Score:       item.Score,
+		ViewCount:   item.ViewCount,
+		AnswerCount: item.AnswerCount,
+		CreatedAt:   time.Unix(item.CreationDate, 0).UTC(),
+		UpdatedAt:   time.Unix(item.LastActivityDate, 0).UTC(),
+		CollectedAt: collectedAt,
+		ContentHash: storage.ContentHash(contentParts...),
+		Metadata:    meta,
+	}
+	return s
+}
+
+// parseAnswer converts an answer DTO into a domain.Comment with a
+// "se_answer:{id}" ID.
+func parseAnswer(item answerDTO) domain.Comment {
+	return domain.Comment{
+		ID:        fmt.Sprintf("se_answer:%d", item.AnswerID),
+		Body:      cleanHTML(item.BodyMarkdown),
+		Score:     item.Score,
+		CreatedAt: time.Unix(item.CreationDate, 0).UTC(),
+	}
+}
+
+// parseComment converts a comment DTO into a domain.Comment with a
+// "se_comment:{id}" ID.
+func parseComment(item commentDTO) domain.Comment {
+	return domain.Comment{
+		ID:        fmt.Sprintf("se_comment:%d", item.CommentID),
+		Body:      cleanHTML(item.BodyMarkdown),
+		Score:     item.Score,
+		CreatedAt: time.Unix(item.CreationDate, 0).UTC(),
+	}
+}
+
+// eligibleQuestion checks whether a question meets the scope's eligibility
+// criteria: minimum score, minimum views, and the since window.
+func eligibleQuestion(item questionDTO, scope QuestionScope) bool {
+	if scope.MinimumScore > 0 && item.Score < scope.MinimumScore {
+		return false
+	}
+	if scope.MinimumViews > 0 && item.ViewCount < scope.MinimumViews {
+		return false
+	}
+	if !scope.Since.IsZero() {
+		created := time.Unix(item.CreationDate, 0).UTC()
+		if created.Before(scope.Since) {
+			return false
+		}
+	}
+	return true
+}
+
+// mergeAndSortComments merges answer and comment slices into a single
+// chronological list (oldest first). Answers are ordered by creation date,
+// then comments, and the combined result is sorted by CreatedAt ascending.
+func mergeAndSortComments(answers []answerDTO, comments []commentDTO) []domain.Comment {
+	out := make([]domain.Comment, 0, len(answers)+len(comments))
+	for _, a := range answers {
+		out = append(out, parseAnswer(a))
+	}
+	for _, c := range comments {
+		out = append(out, parseComment(c))
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].CreatedAt.Before(out[j].CreatedAt)
+	})
+	return out
+}
+
 // cleanHTML turns the API's HTML body into readable plain text. Code blocks
 // are omitted because they tend to dominate problem text without adding much
 // signal for discovery.

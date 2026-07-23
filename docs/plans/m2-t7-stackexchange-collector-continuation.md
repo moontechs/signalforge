@@ -40,16 +40,16 @@ Remaining work: API client, parser, collector, lint excludes, and final validati
 
 **Files:** internal/sources/stackexchange/parser.go, internal/sources/stackexchange/parser_test.go, testdata/stackexchange/{questions.json,answers.json,comments.json}
 
-- [ ] Create `parser.go` with:
+- [x] Create `parser.go` with:
   - `parseQuestion(item, answers, comments, site, collectedAt)` → domain.RawSignal: ID="se:{question_id}", Source="stackexchange", SourceID=str(question_id), URL=item.Link, Title, Body (HTML from API), Comments merged+sort, Community=site, Tags=item.Tags, Score, ViewCount, AnswerCount, CreatedAt=Unix, UpdatedAt=LastActivityDate, CollectedAt, metadata with MetaKeySite/MetaKeyQuestionScore/MetaKeyAnswerCount/MetaKeyViewCount/MetaKeyIsAnswered/MetaKeyTags/MetaKeyAcceptedAnswerID/MetaKeyAuthor, ContentHash from title+body+comment bodies
   - `parseAnswer(item)` → domain.Comment with ID="se_answer:{id}"
   - `parseComment(item)` → domain.Comment with ID="se_comment:{id}"
   - `eligibleQuestion(item, scope)` → checks score threshold, views threshold, since window
   - `mergeAndSortComments(answers, comments)` → chronological order
-- [ ] Create testdata/stackexchange/questions.json — 3+ questions with varying scores/views/tags/owners
-- [ ] Create testdata/stackexchange/answers.json — multiple answers for a question, mix of accepted/non-accepted
-- [ ] Create testdata/stackexchange/comments.json — multiple comments on a question
-- [ ] Write parser_test.go with: TestParseQuestion (all fields), TestParseQuestion_noOwner, TestParseQuestion_noTags, TestParseQuestion_noAcceptedAnswer, TestParseQuestion_notAnswered, TestParseAnswer, TestParseComment, TestEligibleQuestion (table-driven), TestMergeAndSortComments, TestContentHashDeterminism, TestParseQuestion_fromFixture
+- [x] Create testdata/stackexchange/questions.json — 3+ questions with varying scores/views/tags/owners
+- [x] Create testdata/stackexchange/answers.json — multiple answers for a question, mix of accepted/non-accepted
+- [x] Create testdata/stackexchange/comments.json — multiple comments on a question
+- [x] Write parser_test.go with: TestParseQuestion (all fields), TestParseQuestion_noOwner, TestParseQuestion_noTags, TestParseQuestion_noAcceptedAnswer, TestParseQuestion_notAnswered, TestParseAnswer, TestParseComment, TestEligibleQuestion (table-driven), TestMergeAndSortComments, TestContentHashDeterminism, TestParseQuestion_fromFixture
 
 ### Task 3: Build the SE collector with bounded concurrency + site iteration
 

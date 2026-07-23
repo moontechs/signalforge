@@ -143,10 +143,20 @@ type Stats struct {
 	CacheHits int
 }
 
+// QuestionScope defines eligibility criteria for a single SE question.
+type QuestionScope struct {
+	MinimumScore int
+	MinimumViews int
+	Since        time.Time
+}
+
 const (
-	MetaKeyStoryScore = "story_score"
-	MetaKeyAuthor     = "author"
-	MetaKeyViewCount  = "view_count"
-	MetaKeyTags       = "tags"
-	MetaKeySiteName   = "site_name"
+	MetaKeyStoryScore     = "story_score"
+	MetaKeyAuthor         = "author"
+	MetaKeyViewCount      = "view_count"
+	MetaKeyTags           = "tags"
+	MetaKeySiteName       = "site_name"
+	MetaKeyAnswerCount    = "answer_count"
+	MetaKeyIsAnswered     = "is_answered"
+	MetaKeyAcceptedAnswer = "accepted_answer_id"
 )
