@@ -67,7 +67,7 @@
 
 ### Task 5: Parse and normalize Stack Exchange questions
 
-- [ ] Create `internal/sources/stackexchange/parser.go`:
+- [x] Create `internal/sources/stackexchange/parser.go`:
   - `parseQuestions(site string, questions []questionDTO) []domain.RawSignal` with content hash dedup
   - Stable source ID: `se:<site>:<question_id>` (e.g. `se:stackoverflow:12345`)
   - Source name: `"stackexchange"`

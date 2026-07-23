@@ -1,6 +1,10 @@
 package stackexchange
 
-import "net/http"
+import (
+	"encoding/json"
+	"net/http"
+	"time"
+)
 
 const (
 	SourceName     = "stackexchange"
@@ -12,7 +16,6 @@ const (
 
 var DefaultSites = []string{"stackoverflow", "serverfault", "superuser"}
 
-// searchResponse is the response envelope returned by the Stack Exchange API.
 type searchResponse struct {
 	Items          []questionDTO `json:"items"`
 	HasMore        bool          `json:"has_more"`
@@ -22,6 +25,37 @@ type searchResponse struct {
 	ErrorID        *int          `json:"error_id,omitempty"`
 	ErrorName      string        `json:"error_name,omitempty"`
 	ErrorMessage   string        `json:"error_message,omitempty"`
+}
+
+// apiResponse is the generic response envelope from the Stack Exchange API.
+// Items is left as raw JSON so that each endpoint can decode its own item type.
+type apiResponse struct {
+	Items          json.RawMessage `json:"items"`
+	HasMore        bool            `json:"has_more"`
+	QuotaMax       int             `json:"quota_max"`
+	QuotaRemaining int             `json:"quota_remaining"`
+	Backoff        int             `json:"backoff,omitempty"`
+	ErrorID        *int            `json:"error_id,omitempty"`
+	ErrorName      string          `json:"error_name,omitempty"`
+	ErrorMessage   string          `json:"error_message,omitempty"`
+}
+
+// questionsResponse wraps apiResponse for the /questions endpoint.
+type questionsResponse struct {
+	apiResponse
+	Questions []questionDTO
+}
+
+// answersResponse wraps apiResponse for the /questions/{id}/answers endpoint.
+type answersResponse struct {
+	apiResponse
+	Answers []answerDTO
+}
+
+// commentsResponse wraps apiResponse for the /questions/{id}/comments endpoint.
+type commentsResponse struct {
+	apiResponse
+	Comments []commentDTO
 }
 
 type questionDTO struct {
@@ -51,6 +85,33 @@ type ownerDTO struct {
 	AcceptRate  *int   `json:"accept_rate,omitempty"`
 }
 
+// answerDTO represents an answer from the Stack Exchange API.
+type answerDTO struct {
+	AnswerID     int      `json:"answer_id"`
+	QuestionID   int      `json:"question_id"`
+	BodyMarkdown string   `json:"body_markdown"`
+	Owner        ownerDTO `json:"owner"`
+	CreationDate int64    `json:"creation_date"`
+	Score        int      `json:"score"`
+	IsAccepted   bool     `json:"is_accepted"`
+}
+
+// commentDTO represents a comment from the Stack Exchange API.
+type commentDTO struct {
+	CommentID    int      `json:"comment_id"`
+	PostID       int      `json:"post_id"`
+	BodyMarkdown string   `json:"body_markdown"`
+	Owner        ownerDTO `json:"owner"`
+	CreationDate int64    `json:"creation_date"`
+	Score        int      `json:"score"`
+}
+
+// cachedResponse stores a response body and its collection timestamp for caching.
+type cachedResponse struct {
+	Body        []byte    `json:"body"`
+	CollectedAt time.Time `json:"collected_at"`
+}
+
 // SiteConfig describes collection settings for one Stack Exchange site.
 type SiteConfig struct {
 	Name         string
@@ -76,7 +137,16 @@ type ConfigValues struct {
 	HTTPClient      *http.Client
 }
 
+// Stats holds per-run request and cache-hit counters.
 type Stats struct {
 	Requests  int
 	CacheHits int
 }
+
+const (
+	MetaKeyStoryScore = "story_score"
+	MetaKeyAuthor     = "author"
+	MetaKeyViewCount  = "view_count"
+	MetaKeyTags       = "tags"
+	MetaKeySiteName   = "site_name"
+)
