@@ -79,7 +79,7 @@
 
 ### Task 6: Implement Stack Exchange collector
 
-- [ ] Create `internal/sources/stackexchange/collector.go` implementing `domain.SourceCollector`:
+- [x] Create `internal/sources/stackexchange/collector.go` implementing `domain.SourceCollector`:
   - `Name() string` returns `"stackexchange"`
   - Constructor: `New(cfg *ConfigValues, client *client) *Collector`
   - `WithCache(store *storage.Storage) *Collector` — attach TTL cache (mirror HN pattern)

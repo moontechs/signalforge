@@ -110,9 +110,9 @@ func (c *Collector) Collect(ctx context.Context, req domain.CollectRequest) ([]d
 				}
 			}
 			if err != nil {
-				if !errors.Is(err, ErrQuotaExhausted) {
-					errs = append(errs, fmt.Errorf("site %s: %w", site, err))
-				}
+				// getQuestions may return a parsed page alongside quota exhaustion;
+				// preserve that page, but report the exhaustion to the caller.
+				errs = append(errs, fmt.Errorf("site %s: %w", site, err))
 				break
 			}
 			if !resp.HasMore || len(resp.Items) == 0 {
