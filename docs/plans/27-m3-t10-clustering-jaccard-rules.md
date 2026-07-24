@@ -168,7 +168,7 @@ A prompt template that asks the LLM whether two problem descriptions describe th
 - [x] Implement `checkSemanticBoundary` using OpenRouter
 
 ### Task 2: Create semantic prompt
-- [ ] Create `prompts/cluster_check.txt` with a prompt for checking if two problems are the same
+- [x] Create `prompts/cluster_check.txt` with a prompt for checking if two problems are the same
 
 ### Task 3: Write tests
 - [ ] Create `internal/clustering/cluster_test.go` with comprehensive tests
