@@ -18,13 +18,13 @@
 
 ### Task 2: Wire the discover CLI command
 
-- [ ] Replace the existing `internal/cli/brainstorm.go` stub with a full `signalforge discover` command using `cobra`
-- [ ] Register `discover` subcommand in `cmd/signalforge/main.go` following existing patterns (CollectCmd, ClusterCmd, etc.)
-- [ ] Command flags: `--limit` (max clusters to process), `--dry-run`, `--no-semantic` (skip LLM calls)
-- [ ] Implementation: load persisted clusters from storage → initialize OpenRouter client → run JTBD generation → no-product classification → solution generation → deduplication → save results
-- [ ] The `discover` command should save results to `discover.json` (JTBDs + solutions) under the SignalForge home directory using `storage.SaveJSON`
-- [ ] Handle: no clusters found, missing OpenRouter config, context cancellation, partial generation failures — all with clear errors and safe persistence
-- [ ] Support `OPENROUTER_MODEL` override from env/config
+- [x] Replace the existing `internal/cli/brainstorm.go` stub with a full `signalforge discover` command using `cobra`
+- [x] Register `discover` subcommand in `cmd/signalforge/main.go` following existing patterns (CollectCmd, ClusterCmd, etc.)
+- [x] Command flags: `--limit` (max clusters to process), `--dry-run`, `--no-semantic` (skip LLM calls)
+- [x] Implementation: load persisted clusters from storage → initialize OpenRouter client → run JTBD generation → no-product classification → solution generation → deduplication → save results
+- [x] The `discover` command should save results to `discover.json` (JTBDs + solutions) under the SignalForge home directory using `storage.SaveJSON`
+- [x] Handle: no clusters found, missing OpenRouter config, context cancellation, partial generation failures — all with clear errors and safe persistence
+- [x] Support `OPENROUTER_MODEL` override from env/config
 
 ### Task 3: Add tests
 
