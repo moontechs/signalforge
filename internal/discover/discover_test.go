@@ -62,3 +62,24 @@ func TestClassifierNoProduct(t *testing.T) {
 		t.Fatalf("%v %q %v", p, reason, e)
 	}
 }
+
+func TestGeneratorRejectsInvalidJTBD(t *testing.T) {
+	m := &mockLLM{content: `{"jobs":[{"situation":"", "motivation":"x", "expected_outcome":"y", "target_users":["users"]}]}`}
+	if _, err := (Generator{Client: m}).Generate(context.Background(), domain.ProblemCluster{ID: "cluster"}); err == nil {
+		t.Fatal("expected invalid JTBD error")
+	}
+}
+
+func TestSolverRejectsInvalidProductType(t *testing.T) {
+	m := &mockLLM{content: `{"solutions":[{"title":"one","summary":"s","product_type":"invalid"},{"title":"two","summary":"s","product_type":"api"},{"title":"three","summary":"s","product_type":"saas"}]}`}
+	if _, err := (Solver{Client: m}).Generate(context.Background(), domain.JobToBeDone{ID: "job"}); err == nil {
+		t.Fatal("expected invalid product type error")
+	}
+}
+
+func TestSolverRejectsNoProduct(t *testing.T) {
+	m := &mockLLM{content: `{"solutions":[{"title":"one","summary":"s","product_type":"no_product"},{"title":"two","summary":"s","product_type":"api"},{"title":"three","summary":"s","product_type":"saas"}]}`}
+	if _, err := (Solver{Client: m}).Generate(context.Background(), domain.JobToBeDone{ID: "job"}); err == nil {
+		t.Fatal("expected no-product solution error")
+	}
+}

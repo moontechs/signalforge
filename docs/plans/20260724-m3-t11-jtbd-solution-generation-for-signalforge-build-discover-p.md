@@ -28,14 +28,14 @@
 
 ### Task 3: Add tests
 
-- [ ] Unit tests for JTBD rendering and schema validation (no LLM needed — test with canned input)
-- [ ] Unit tests for product-type validation using `domain.IsValidProductType`
-- [ ] Unit tests for no-product classification parsing (mock LLM returns "no_product" → verify no solutions generated)
-- [ ] Unit tests for solution generation: mock LLM returns 3+ solutions → verify all pass validation, distinct product types, minimum-3 requirement
-- [ ] Unit tests for deduplication: exact-match, same-title-different-type should NOT dedupe, same-title-same-type SHOULD dedupe
-- [ ] Unit tests for persistence: save/load discover results atomically
-- [ ] CLI tests: empty clusters, missing OpenRouter config, dry-run mode
-- [ ] All tests must pass without network access or API credentials
+- [x] Unit tests for JTBD rendering and schema validation (no LLM needed — test with canned input)
+- [x] Unit tests for product-type validation using `domain.IsValidProductType`
+- [x] Unit tests for no-product classification parsing (mock LLM returns "no_product" → verify no solutions generated)
+- [x] Unit tests for solution generation: mock LLM returns 3+ solutions → verify all pass validation, distinct product types, minimum-3 requirement
+- [x] Unit tests for deduplication: exact-match, same-title-different-type should NOT dedupe, same-title-same-type SHOULD dedupe
+- [x] Unit tests for persistence: save/load discover results atomically
+- [x] CLI tests: empty clusters, missing OpenRouter config, dry-run mode
+- [x] All tests must pass without network access or API credentials
 
 ## Validation Commands
 
