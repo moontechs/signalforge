@@ -387,6 +387,260 @@ func TestIsValidHNFeed(t *testing.T) {
 	}
 }
 
+func TestDefaultConfigRedditDefaults(t *testing.T) {
+	t.Parallel()
+	cfg := DefaultConfig()
+
+	if cfg.Sources.Reddit.Enabled {
+		t.Fatal("expected reddit source to be disabled by default")
+	}
+	if len(cfg.Sources.Reddit.Subreddits) != 0 {
+		t.Fatalf("expected no default subreddits, got %v", cfg.Sources.Reddit.Subreddits)
+	}
+	if cfg.Sources.Reddit.MaxPostsPerRun != 200 {
+		t.Fatalf("expected max posts per run 200, got %d", cfg.Sources.Reddit.MaxPostsPerRun)
+	}
+	if cfg.Sources.Reddit.MaxCommentsPerPost != 20 {
+		t.Fatalf("expected max comments per post 20, got %d", cfg.Sources.Reddit.MaxCommentsPerPost)
+	}
+	if cfg.Sources.Reddit.Sort != "new" {
+		t.Fatalf("expected sort 'new', got %q", cfg.Sources.Reddit.Sort)
+	}
+	if cfg.Sources.Reddit.Time != "week" {
+		t.Fatalf("expected time 'week', got %q", cfg.Sources.Reddit.Time)
+	}
+	if cfg.Limits.MaxRedditRequests != 300 {
+		t.Fatalf("expected MaxRedditRequests 300, got %d", cfg.Limits.MaxRedditRequests)
+	}
+}
+
+func TestRedditConfigValidate(t *testing.T) {
+	t.Parallel()
+	valid := DefaultConfig().Sources.Reddit
+	valid.Enabled = true
+	valid.Subreddits = []string{"golang"}
+
+	tests := []struct {
+		name    string
+		cfg     RedditConfig
+		wantErr string
+	}{
+		{
+			name: "valid enabled",
+			cfg:  valid,
+		},
+		{
+			name: "disabled is valid",
+			cfg: func() RedditConfig {
+				cfg := valid
+				cfg.Enabled = false
+				return cfg
+			}(),
+		},
+		{
+			name: "no subreddits",
+			cfg: func() RedditConfig {
+				cfg := valid
+				cfg.Subreddits = []string{}
+				return cfg
+			}(),
+			wantErr: "at least one subreddit",
+		},
+		{
+			name: "empty subreddit in list",
+			cfg: func() RedditConfig {
+				cfg := valid
+				cfg.Subreddits = []string{" "}
+				return cfg
+			}(),
+			wantErr: "empty values",
+		},
+		{
+			name: "invalid max posts",
+			cfg: func() RedditConfig {
+				cfg := valid
+				cfg.MaxPostsPerRun = 0
+				return cfg
+			}(),
+			wantErr: "max_posts_per_run",
+		},
+		{
+			name: "invalid max comments",
+			cfg: func() RedditConfig {
+				cfg := valid
+				cfg.MaxCommentsPerPost = -1
+				return cfg
+			}(),
+			wantErr: "max_comments_per_post",
+		},
+		{
+			name: "empty sort",
+			cfg: func() RedditConfig {
+				cfg := valid
+				cfg.Sort = ""
+				return cfg
+			}(),
+			wantErr: "sort must not be empty",
+		},
+		{
+			name: "invalid sort",
+			cfg: func() RedditConfig {
+				cfg := valid
+				cfg.Sort = "controversial"
+				return cfg
+			}(),
+			wantErr: "unsupported sort",
+		},
+		{
+			name: "empty time",
+			cfg: func() RedditConfig {
+				cfg := valid
+				cfg.Time = ""
+				return cfg
+			}(),
+			wantErr: "time must not be empty",
+		},
+		{
+			name: "invalid time",
+			cfg: func() RedditConfig {
+				cfg := valid
+				cfg.Time = "decade"
+				return cfg
+			}(),
+			wantErr: "unsupported time",
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := tc.cfg.Validate()
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("expected no error, got %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("expected error containing %q", tc.wantErr)
+			}
+			if !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("expected error containing %q, got %v", tc.wantErr, err)
+			}
+		})
+	}
+}
+
+func TestValidRedditSortValues(t *testing.T) {
+	t.Parallel()
+
+	sorts := ValidRedditSortValues()
+	expected := []string{"hot", "new", "top", "rising"}
+	if len(sorts) != len(expected) {
+		t.Fatalf("ValidRedditSortValues() returned %d values, want %d", len(sorts), len(expected))
+	}
+	for i, v := range expected {
+		if sorts[i] != v {
+			t.Fatalf("ValidRedditSortValues()[%d] = %q, want %q", i, sorts[i], v)
+		}
+	}
+}
+
+func TestIsValidRedditSort(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		sort string
+		want bool
+	}{
+		{sort: "hot", want: true},
+		{sort: "new", want: true},
+		{sort: "top", want: true},
+		{sort: "rising", want: true},
+		{sort: "Hot", want: true},
+		{sort: "TOP", want: true},
+		{sort: "controversial", want: false},
+		{sort: "", want: false},
+		{sort: "best", want: false},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.sort, func(t *testing.T) {
+			t.Parallel()
+			got := IsValidRedditSort(tc.sort)
+			if got != tc.want {
+				t.Fatalf("IsValidRedditSort(%q) = %v, want %v", tc.sort, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestValidRedditTimeValues(t *testing.T) {
+	t.Parallel()
+
+	times := ValidRedditTimeValues()
+	expected := []string{"hour", "day", "week", "month", "year", "all"}
+	if len(times) != len(expected) {
+		t.Fatalf("ValidRedditTimeValues() returned %d values, want %d", len(times), len(expected))
+	}
+	for i, v := range expected {
+		if times[i] != v {
+			t.Fatalf("ValidRedditTimeValues()[%d] = %q, want %q", i, times[i], v)
+		}
+	}
+}
+
+func TestIsValidRedditTime(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		time string
+		want bool
+	}{
+		{time: "hour", want: true},
+		{time: "day", want: true},
+		{time: "week", want: true},
+		{time: "month", want: true},
+		{time: "year", want: true},
+		{time: "all", want: true},
+		{time: "Hour", want: true},
+		{time: "YEAR", want: true},
+		{time: "decade", want: false},
+		{time: "", want: false},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.time, func(t *testing.T) {
+			t.Parallel()
+			got := IsValidRedditTime(tc.time)
+			if got != tc.want {
+				t.Fatalf("IsValidRedditTime(%q) = %v, want %v", tc.time, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestLoadConfigValidatesRedditConfig(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	data := `{"sources":{"reddit":{"enabled":true,"subreddits":["golang"],"sort":"invalid"}}}`
+	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	_, err := LoadConfig(dir)
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+	if !strings.Contains(err.Error(), "unsupported sort") {
+		t.Fatalf("expected sort validation error, got %v", err)
+	}
+}
+
 func TestNormalizeSourceName(t *testing.T) {
 	t.Parallel()
 
