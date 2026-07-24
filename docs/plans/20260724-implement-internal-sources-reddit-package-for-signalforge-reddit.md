@@ -13,17 +13,17 @@
 
 ### Task 2: Implement the Reddit OAuth HTTP client
 
-- [ ] Create `internal/sources/reddit/client.go` with the same injectable `transport` abstraction, `httpTransport`, bounded retries, context-aware request construction, response-size limit, request counters, cache-hit counters, and test hooks used by `internal/sources/hackernews`.
-- [ ] Read `REDDIT_CLIENT_ID` and `REDDIT_CLIENT_SECRET` only at collector construction or CLI wiring time; never serialize, log, expose through stats, or include either value in a cache key.
-- [ ] Implement client-credentials token acquisition with `POST https://www.reddit.com/api/v1/access_token`, HTTP Basic authentication, `Content-Type: application/x-www-form-urlencoded`, and `grant_type=client_credentials`.
-- [ ] Use the acquired bearer token only for API calls to `https://oauth.reddit.com`; set a stable, descriptive User-Agent on token and API requests.
-- [ ] Keep the access token in client memory only, reuse it until shortly before `expires_in`, and safely refresh it under concurrent collection without writing tokens to `cache/reddit` or any JSON output.
-- [ ] Count token acquisition and Reddit API network calls against `MaxRedditRequests`; ensure concurrent callers cannot exceed the configured cap.
-- [ ] Implement authenticated GET helpers for subreddit listings and post comment trees, retrying transient transport, 429, and 5xx failures with exponential backoff while returning non-retryable 4xx/auth failures promptly.
-- [ ] Attach the existing shared cache through `cache.NewCache(store, "reddit")`; cache only public response bodies under deterministic keys derived from endpoint path and non-secret query parameters, with no Authorization header or token material represented in cache paths.
-- [ ] Select and document bounded TTLs for listing and comment-tree responses, preserve cache-hit/request statistics, and treat cache read/write failures as non-fatal misses.
-- [ ] Create `internal/sources/reddit/fake_transport.go` by adapting the Hacker News concurrency-safe fake transport, including sequential canned responses, request recording, headers, method, and request-body inspection helpers.
-- [ ] Add client tests for OAuth request method/form/basic auth/user-agent, missing credentials, token reuse/expiry refresh, bearer headers on OAuth API requests, request-cap enforcement, retries, cancellation, malformed JSON, response-size limits, non-success responses, and cache behavior without real network calls.
+- [x] Create `internal/sources/reddit/client.go` with the same injectable `transport` abstraction, `httpTransport`, bounded retries, context-aware request construction, response-size limit, request counters, cache-hit counters, and test hooks used by `internal/sources/hackernews`.
+- [x] Read `REDDIT_CLIENT_ID` and `REDDIT_CLIENT_SECRET` only at collector construction or CLI wiring time; never serialize, log, expose through stats, or include either value in a cache key.
+- [x] Implement client-credentials token acquisition with `POST https://www.reddit.com/api/v1/access_token`, HTTP Basic authentication, `Content-Type: application/x-www-form-urlencoded`, and `grant_type=client_credentials`.
+- [x] Use the acquired bearer token only for API calls to `https://oauth.reddit.com`; set a stable, descriptive User-Agent on token and API requests.
+- [x] Keep the access token in client memory only, reuse it until shortly before `expires_in`, and safely refresh it under concurrent collection without writing tokens to `cache/reddit` or any JSON output.
+- [x] Count token acquisition and Reddit API network calls against `MaxRedditRequests`; ensure concurrent callers cannot exceed the configured cap.
+- [x] Implement authenticated GET helpers for subreddit listings and post comment trees, retrying transient transport, 429, and 5xx failures with exponential backoff while returning non-retryable 4xx/auth failures promptly.
+- [x] Attach the existing shared cache through `cache.NewCache(store, "reddit")`; cache only public response bodies under deterministic keys derived from endpoint path and non-secret query parameters, with no Authorization header or token material represented in cache paths.
+- [x] Select and document bounded TTLs for listing and comment-tree responses, preserve cache-hit/request statistics, and treat cache read/write failures as non-fatal misses.
+- [x] Create `internal/sources/reddit/fake_transport.go` by adapting the Hacker News concurrency-safe fake transport, including sequential canned responses, request recording, headers, method, and request-body inspection helpers.
+- [x] Add client tests for OAuth request method/form/basic auth/user-agent, missing credentials, token reuse/expiry refresh, bearer headers on OAuth API requests, request-cap enforcement, retries, cancellation, malformed JSON, response-size limits, non-success responses, and cache behavior without real network calls.
 
 ### Task 3: Parse Reddit listings and comment trees into raw signals
 
