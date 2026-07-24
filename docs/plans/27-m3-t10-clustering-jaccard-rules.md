@@ -171,8 +171,8 @@ A prompt template that asks the LLM whether two problem descriptions describe th
 - [x] Create `prompts/cluster_check.txt` with a prompt for checking if two problems are the same
 
 ### Task 3: Write tests
-- [ ] Create `internal/clustering/cluster_test.go` with comprehensive tests
-- [ ] Tests should cover all edge cases: empty, single, identical, different, boundary
+- [x] Create `internal/clustering/cluster_test.go` with comprehensive tests
+- [x] Tests should cover all edge cases: empty, single, identical, different, boundary
 
 ### Task 4: Create CLI command
 - [ ] Create `internal/cli/cluster.go` with the cluster command
