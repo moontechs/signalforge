@@ -47,6 +47,7 @@ type commentTreeEntry struct {
 // parsePost converts a Reddit post (from a subreddit listing child) and its
 // flattened comments into a domain.RawSignal. The sort parameter, if non-empty,
 // is stored in metadata for downstream consumers.
+//
 //nolint:gocritic // postData passed by value intentionally
 func parsePost(post postData, comments []domain.Comment, sort string, collectedAt time.Time) domain.RawSignal {
 	url := "https://www.reddit.com" + post.Permalink
@@ -146,7 +147,7 @@ func flattenEntries(entries []commentTreeEntry, maxComments int) []domain.Commen
 		if maxComments > 0 && len(out) >= maxComments {
 			break
 		}
-		comment := buildComment(&entry.Data)
+		comment := buildComment(entry.Data)
 		if comment == nil {
 			continue
 		}
@@ -177,7 +178,7 @@ func flattenReplyChildren(children []replyChild, maxComments int) []domain.Comme
 		if child.Kind != "t1" {
 			continue
 		}
-		comment := buildComment(&child.Data)
+		comment := buildComment(child.Data)
 		if comment == nil {
 			continue
 		}
@@ -193,7 +194,7 @@ func flattenReplyChildren(children []replyChild, maxComments int) []domain.Comme
 
 // buildComment constructs a domain.Comment from commentData, returning nil
 // if the comment should be skipped (deleted, removed, empty body).
-func buildComment(data *commentData) *domain.Comment {
+func buildComment(data commentData) *domain.Comment {
 	body := strings.TrimSpace(data.Body)
 	if body == "" || body == "[deleted]" || body == "[removed]" {
 		return nil

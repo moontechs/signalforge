@@ -36,14 +36,14 @@
 
 ### Task 4: Implement collector orchestration
 
-- [ ] Create `internal/sources/reddit/collector.go` following the Hacker News collector structure: validated construction, `Name`, `WithTransport`, `WithNow`, `WithCache`, `Stats`, and `domain.SourceCollector` interface assertion.
-- [ ] Validate subreddit names before building URLs: trim whitespace, reject empty values and separators/path traversal characters, normalize optional `r/` prefixes, and de-duplicate configured communities while preserving configured order.
-- [ ] Derive a collection scope from `ConfigValues` and `domain.CollectRequest`, including configured subreddits, sort, time, limits, and `Since`; honor a positive CLI `MaxItems` as a stricter per-run cap if it is lower than the configured post cap.
-- [ ] Request each configured listing through `/r/{subreddit}/{sort}.json` with a bounded `limit` and `t=<time>` only for applicable sorts; apply `Since` filtering after parsing timestamps.
-- [ ] Fetch comment trees only for retained posts, using a bounded worker pool and the shared request-limited client; preserve deterministic final signal ordering by `CreatedAt` descending.
-- [ ] Return successful signals together with `errors.Join` partial failures for individual subreddit/listing/post-comment failures, while returning context cancellation immediately after outstanding work is reconciled.
-- [ ] Ensure no production path panics and no collector behavior requires credentials when Reddit is not selected or is disabled.
-- [ ] Add collector tests for disabled and invalid configuration, source naming, subreddit normalization/deduplication, sort/time request construction, `Since` and max-post filtering, max-comment enforcement, partial failures, request caps, context cancellation, bounded concurrency, cached repeat runs, and stable ordering.
+- [x] Create `internal/sources/reddit/collector.go` following the Hacker News collector structure: validated construction, `Name`, `WithTransport`, `WithNow`, `WithCache`, `Stats`, and `domain.SourceCollector` interface assertion.
+- [x] Validate subreddit names before building URLs: trim whitespace, reject empty values and separators/path traversal characters, normalize optional `r/` prefixes, and de-duplicate configured communities while preserving configured order.
+- [x] Derive a collection scope from `ConfigValues` and `domain.CollectRequest`, including configured subreddits, sort, time, limits, and `Since`; honor a positive CLI `MaxItems` as a stricter per-run cap if it is lower than the configured post cap.
+- [x] Request each configured listing through `/r/{subreddit}/{sort}.json` with a bounded `limit` and `t=<time>` only for applicable sorts; apply `Since` filtering after parsing timestamps.
+- [x] Fetch comment trees only for retained posts, using a bounded worker pool and the shared request-limited client; preserve deterministic final signal ordering by `CreatedAt` descending.
+- [x] Return successful signals together with `errors.Join` partial failures for individual subreddit/listing/post-comment failures, while returning context cancellation immediately after outstanding work is reconciled.
+- [x] Ensure no production path panics and no collector behavior requires credentials when Reddit is not selected or is disabled.
+- [x] Add collector tests for disabled and invalid configuration, source naming, subreddit normalization/deduplication, sort/time request construction, `Since` and max-post filtering, max-comment enforcement, partial failures, request caps, context cancellation, bounded concurrency, cached repeat runs, and stable ordering.
 
 ### Task 5: Wire Reddit into collection CLI and memory
 
