@@ -27,17 +27,17 @@
 
 ### Task 3: Add comprehensive shared-cache tests
 
-- [ ] Add `internal/cache` tests using a temporary storage root and deterministic test keys.
-- [ ] Verify set/get round trips preserve body, TTL, and stored timestamp behavior.
-- [ ] Verify `Get` returns a defensive body copy that callers cannot mutate in-place.
-- [ ] Verify zero `StoredAt` is initialized during `Set`.
-- [ ] Verify expired entries are cache misses and are deleted or otherwise no longer reusable.
-- [ ] Verify unexpired entries remain readable.
-- [ ] Verify `Delete` removes an existing entry and succeeds for a missing entry.
-- [ ] Verify distinct keys produce distinct cached values and no raw key is present in the resulting filename.
-- [ ] Verify the same key in two namespaces cannot collide or be read across namespaces.
-- [ ] Verify invalid namespaces, empty keys, and invalid TTLs return useful errors.
-- [ ] Add a concurrent test exercising simultaneous `Get`, `Set`, and `Delete` calls, suitable for `go test -race`.
+- [x] Add `internal/cache` tests using a temporary storage root and deterministic test keys.
+- [x] Verify set/get round trips preserve body, TTL, and stored timestamp behavior.
+- [x] Verify `Get` returns a defensive body copy that callers cannot mutate in-place.
+- [x] Verify zero `StoredAt` is initialized during `Set`.
+- [x] Verify expired entries are cache misses and are deleted or otherwise no longer reusable.
+- [x] Verify unexpired entries remain readable.
+- [x] Verify `Delete` removes an existing entry and succeeds for a missing entry.
+- [x] Verify distinct keys produce distinct cached values and no raw key is present in the resulting filename.
+- [x] Verify the same key in two namespaces cannot collide or be read across namespaces.
+- [x] Verify invalid namespaces, empty keys, and invalid TTLs return useful errors.
+- [x] Add a concurrent test exercising simultaneous `Get`, `Set`, and `Delete` calls, suitable for `go test -race`.
 
 ### Task 4: Migrate Hacker News inline cache usage
 
