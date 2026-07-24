@@ -23,10 +23,10 @@ func TestCacheRoundTripExpiryAndCopy(t *testing.T) {
 	root := t.TempDir()
 	c := cache.NewCache(storage.New(root), "tests")
 	stored := time.Now().Add(-time.Millisecond)
-	if err := c.Set("key", cache.CacheEntry{Body: []byte("body"), TTL: time.Hour, StoredAt: stored}); err != nil {
+	if err := c.Set("key", cache.Entry{Body: []byte("body"), TTL: time.Hour, StoredAt: stored}); err != nil {
 		t.Fatal(err)
 	}
-	var persisted cache.CacheEntry
+	var persisted cache.Entry
 	digest := sha256.Sum256([]byte("key"))
 	path := filepath.Join(root, "cache", "tests", hex.EncodeToString(digest[:])+".json")
 	if err := storage.New(root).LoadJSON(path, &persisted); err != nil {
@@ -44,13 +44,13 @@ func TestCacheRoundTripExpiryAndCopy(t *testing.T) {
 	if string(body) != "body" {
 		t.Fatal("Get did not return a defensive copy")
 	}
-	if err := c.Set("zero", cache.CacheEntry{Body: []byte("x"), TTL: time.Hour}); err != nil {
+	if err := c.Set("zero", cache.Entry{Body: []byte("x"), TTL: time.Hour}); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := c.Get("zero"); !ok {
 		t.Fatal("zero StoredAt entry was not readable")
 	}
-	if err := c.Set("old", cache.CacheEntry{Body: []byte("x"), TTL: time.Millisecond, StoredAt: time.Now().Add(-time.Hour)}); err != nil {
+	if err := c.Set("old", cache.Entry{Body: []byte("x"), TTL: time.Millisecond, StoredAt: time.Now().Add(-time.Hour)}); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := c.Get("old"); ok {
@@ -64,10 +64,10 @@ func TestCacheRoundTripExpiryAndCopy(t *testing.T) {
 func TestCacheDeleteNamespacesAndHashedKeys(t *testing.T) {
 	root := t.TempDir()
 	a, b := cache.NewCache(storage.New(root), "one"), cache.NewCache(storage.New(root), "two")
-	if err := a.Set("same", cache.CacheEntry{Body: []byte("a"), TTL: time.Hour}); err != nil {
+	if err := a.Set("same", cache.Entry{Body: []byte("a"), TTL: time.Hour}); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Set("same", cache.CacheEntry{Body: []byte("b"), TTL: time.Hour}); err != nil {
+	if err := b.Set("same", cache.Entry{Body: []byte("b"), TTL: time.Hour}); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ := b.Get("same"); string(got) != "b" {
@@ -79,7 +79,7 @@ func TestCacheDeleteNamespacesAndHashedKeys(t *testing.T) {
 	if err := a.Delete("missing"); err != nil {
 		t.Fatal(err)
 	}
-	if err := a.Set("different", cache.CacheEntry{Body: []byte("different"), TTL: time.Hour}); err != nil {
+	if err := a.Set("different", cache.Entry{Body: []byte("different"), TTL: time.Hour}); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ := a.Get("different"); string(got) != "different" {
@@ -108,11 +108,11 @@ func TestCacheValidationAndConcurrency(t *testing.T) {
 		}()
 	}
 	c := testCache(t, "concurrent")
-	if err := c.Set("", cache.CacheEntry{TTL: time.Hour}); err == nil {
+	if err := c.Set("", cache.Entry{TTL: time.Hour}); err == nil {
 		t.Fatal("empty key accepted")
 	}
 	for _, ttl := range []time.Duration{0, -time.Second} {
-		if err := c.Set("bad", cache.CacheEntry{TTL: ttl}); err == nil || !strings.Contains(err.Error(), "TTL") {
+		if err := c.Set("bad", cache.Entry{TTL: ttl}); err == nil || !strings.Contains(err.Error(), "TTL") {
 			t.Fatalf("invalid TTL error = %v", err)
 		}
 	}
@@ -122,7 +122,7 @@ func TestCacheValidationAndConcurrency(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for j := 0; j < 20; j++ {
-				_ = c.Set("k", cache.CacheEntry{Body: []byte("v"), TTL: time.Hour})
+				_ = c.Set("k", cache.Entry{Body: []byte("v"), TTL: time.Hour})
 				c.Get("k")
 				_ = c.Delete("k")
 			}

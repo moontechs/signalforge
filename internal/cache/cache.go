@@ -4,6 +4,7 @@ package cache
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -23,6 +24,9 @@ type CacheEntry struct {
 	StoredAt time.Time     `json:"stored_at"`
 }
 
+// Entry is an alias for CacheEntry.
+type Entry = CacheEntry
+
 // Cache stores entries under cache/<namespace>. Keys are hashed before being
 // used as filenames, and an entry is reusable only until StoredAt+TTL.
 type Cache struct {
@@ -32,8 +36,7 @@ type Cache struct {
 	prefix    string
 }
 
-// Storage returns the backing storage for components that share the cache's
-// data directory, such as persistent signal memory.
+// Storage returns the backing storage for components sharing the data directory.
 func (c *Cache) Storage() *storage.Storage { return c.store }
 
 // NewCache creates a cache for namespace. Invalid namespaces panic because a
@@ -70,10 +73,10 @@ func (c *Cache) Get(key string) ([]byte, bool) {
 // Set stores entry atomically. Keys must be non-empty and TTL must be positive.
 func (c *Cache) Set(key string, entry CacheEntry) error {
 	if key == "" {
-		return fmt.Errorf("cache: key must not be empty")
+		return errors.New("cache: key must not be empty")
 	}
 	if entry.TTL <= 0 {
-		return fmt.Errorf("cache: TTL must be positive")
+		return errors.New("cache: TTL must be positive")
 	}
 	if entry.StoredAt.IsZero() {
 		entry.StoredAt = time.Now()
@@ -81,7 +84,10 @@ func (c *Cache) Set(key string, entry CacheEntry) error {
 	entry.Body = append([]byte(nil), entry.Body...)
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.store.SaveJSON(c.path(key), entry)
+	if err := c.store.SaveJSON(c.path(key), entry); err != nil {
+		return fmt.Errorf("cache: save: %w", err)
+	}
+	return nil
 }
 
 // Delete removes an entry. It is safe to call when the entry is absent.
@@ -95,5 +101,8 @@ func (c *Cache) Delete(key string) error {
 	if os.IsNotExist(err) {
 		return nil
 	}
-	return err
+	if err != nil {
+		return fmt.Errorf("cache: delete: %w", err)
+	}
+	return nil
 }
