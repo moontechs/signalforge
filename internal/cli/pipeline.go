@@ -92,14 +92,6 @@ func runPipeline(cmd *cobra.Command, _ []string) error {
 	return executePipeline(cmd, env)
 }
 
-// stageState tracks the state of a pipeline stage.
-type stageState struct {
-	name     string
-	skipped  bool
-	message  string
-	err      error
-}
-
 func executePipeline(cmd *cobra.Command, env *pipelineEnv) error {
 	stages := []struct {
 		name     string

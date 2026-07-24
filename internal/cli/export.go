@@ -129,6 +129,7 @@ func executeExport(cmd *cobra.Command, env *exportEnv) error {
 	}
 
 	_, err = fmt.Fprint(cmd.OutOrStdout(), output)
+	//nolint:wrapcheck // Fprint returns underlying I/O error, caller can wrap
 	return err
 }
 

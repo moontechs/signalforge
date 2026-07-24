@@ -155,7 +155,7 @@ func loadSolutions(store *storage.Storage) ([]domain.SolutionHypothesis, error) 
 func rankClusters(clusters []domain.ProblemCluster, minProblemScore, minConfidence float64) []rankedCluster {
 	eps := 1e-9
 
-	var result []rankedCluster
+	result := make([]rankedCluster, 0, len(clusters))
 	for _, c := range clusters {
 		total := c.ProblemScore.Total()
 
@@ -188,7 +188,7 @@ func rankClusters(clusters []domain.ProblemCluster, minProblemScore, minConfiden
 func rankSolutions(solutions []domain.SolutionHypothesis, minSolutionScore, minConfidence float64) []rankedSolution {
 	eps := 1e-9
 
-	var result []rankedSolution
+	result := make([]rankedSolution, 0, len(solutions))
 	for _, s := range solutions {
 		total := s.SolutionScore.Total()
 
