@@ -179,7 +179,7 @@ A prompt template that asks the LLM whether two problem descriptions describe th
 - [x] Wire the command into `cmd/signalforge/main.go`
 
 ### Task 5: Verify everything compiles and tests pass
-- [ ] `go build ./...`
-- [ ] `go vet ./...`
-- [ ] `go test ./internal/clustering/... -v`
-- [ ] `go test ./... -v`
+- [x] `go build ./...`
+- [x] `go vet ./...`
+- [x] `go test ./internal/clustering/... -v`
+- [x] `go test ./... -v`
