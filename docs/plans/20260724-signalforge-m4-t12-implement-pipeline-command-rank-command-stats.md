@@ -35,12 +35,12 @@ SignalForge Go CLI app. Core domain types in `internal/domain/types.go`. Storage
 
 ### Task 3: Add the `stats` command
 
-- [ ] Create `internal/cli/stats.go` with a Cobra `stats` command.
-- [ ] Load `memory.json` and read `ResearchStats` from it.
-- [ ] Print formatted stats: raw signals collected/skipped, problem signals found, noise, clusters, jobs, ideas, duplicates, per-source requests, per-source cache hits, LLM requests.
-- [ ] Handle missing memory.json gracefully (print "No stats available. Run 'signalforge collect' first.").
-- [ ] Add `--json` flag for machine-readable output.
-- [ ] Register `stats` with rootCmd in `cmd/signalforge/main.go`.
+- [x] Create `internal/cli/stats.go` with a Cobra `stats` command.
+- [x] Load `memory.json` and read `ResearchStats` from it.
+- [x] Print formatted stats: raw signals collected/skipped, problem signals found, noise, clusters, jobs, ideas, duplicates, per-source requests, per-source cache hits, LLM requests.
+- [x] Handle missing memory.json gracefully (print "No stats available. Run 'signalforge collect' first.").
+- [x] Add `--json` flag for machine-readable output.
+- [x] Register `stats` with rootCmd in `cmd/signalforge/main.go`.
 
 ### Task 4: Add the `export` command with markdown, json, csv
 
