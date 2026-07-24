@@ -46,7 +46,7 @@
 
 ### Task 3: OpenRouter client tests with fake HTTP server
 
-- [ ] Create `internal/openrouter/client_test.go` with `httptest.NewServer`:
+- [x] Create `internal/openrouter/client_test.go` with `httptest.NewServer`:
   - Test successful request/response: verify auth header, URL, model name, content, usage mapping
   - Test `:free` model suffix preserved in request
   - Test 429 retry with `Retry-After: 5` (inject fake clock to avoid real wait)

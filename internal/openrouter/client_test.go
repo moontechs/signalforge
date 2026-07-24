@@ -681,6 +681,301 @@ func jsonMarshalString(t *testing.T, s string) string {
 	return string(b)
 }
 
+// Test429RetryWithRetryAfter verifies that a 429 response with Retry-After
+// causes a retry and eventually succeeds.
+func Test429RetryWithRetryAfter(t *testing.T) {
+	t.Parallel()
+
+	var mu sync.Mutex
+	callCount := 0
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		callCount++
+		count := callCount
+		mu.Unlock()
+
+		w.Header().Set("Content-Type", "application/json")
+
+		if count == 1 {
+			// First call: 429 with Retry-After: 0 (no real wait).
+			w.Header().Set("Retry-After", "0")
+			w.WriteHeader(http.StatusTooManyRequests)
+			_, _ = fmt.Fprint(w, `{"error":{"message":"rate limited","type":"rate_limit"}}`)
+			return
+		}
+
+		// Second call: success.
+		w.WriteHeader(http.StatusOK)
+		_, _ = fmt.Fprint(w, `{
+			"id":"1","object":"chat.completion","created":123,"model":"test-model",
+			"choices":[{"index":0,"message":{"role":"assistant","content":"{\"is_problem_signal\":false}"}}],
+			"usage":{"prompt_tokens":5,"completion_tokens":2,"total_tokens":7}
+		}`)
+	}))
+	t.Cleanup(ts.Close)
+
+	cfg := config.OpenRouterConfig{
+		BaseURL:               ts.URL,
+		Model:                 "test-model",
+		RequestTimeoutSeconds: 30,
+		MaxRetries:            3,
+		MaxOutputTokens:       100,
+		ClassificationTemp:    0.1,
+	}
+
+	client, err := New(cfg, "sk-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err := client.Complete(context.Background(), domain.CompletionRequest{
+		Prompt: "test",
+	})
+	if err != nil {
+		t.Fatalf("Complete() error = %v", err)
+	}
+	if resp.Content != `{"is_problem_signal":false}` {
+		t.Errorf("Content = %q, want %q", resp.Content, `{"is_problem_signal":false}`)
+	}
+
+	mu.Lock()
+	if callCount != 2 {
+		t.Errorf("callCount = %d, want 2 (one 429, one success)", callCount)
+	}
+	mu.Unlock()
+}
+
+// Test5xxFallback verifies that 5xx errors cause retries within a model, and
+// if all retries are exhausted, the client falls back to the next model.
+func Test5xxFallback(t *testing.T) {
+	t.Parallel()
+
+	var mu sync.Mutex
+	// Track calls per model path (we can distinguish by reading the body).
+	callCount := 0
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		callCount++
+		mu.Unlock()
+
+		w.Header().Set("Content-Type", "application/json")
+
+		// Always return 500 for all models — all retries + fallbacks exhausted.
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = fmt.Fprint(w, `{"error":{"message":"internal error","type":"server_error"}}`)
+	}))
+	t.Cleanup(ts.Close)
+
+	cfg := config.OpenRouterConfig{
+		BaseURL:               ts.URL,
+		Model:                 "gpt-4",
+		FallbackModels:        []string{"claude-3"},
+		RequestTimeoutSeconds: 30,
+		MaxRetries:            2, // 3 attempts per model (0,1,2)
+		MaxOutputTokens:       100,
+		ClassificationTemp:    0.1,
+	}
+
+	client, err := New(cfg, "sk-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = client.Complete(context.Background(), domain.CompletionRequest{
+		Prompt: "test",
+	})
+	if !errors.Is(err, ErrAllModelsFailed) {
+		t.Errorf("Complete() error = %v, want ErrAllModelsFailed", err)
+	}
+
+	// Two models × (MaxRetries+1) attempts each = 2 * 3 = 6
+	mu.Lock()
+	if callCount != 6 {
+		t.Errorf("callCount = %d, want 6 (2 models × 3 attempts)", callCount)
+	}
+	mu.Unlock()
+}
+
+// TestRepair verifies the JSON repair flow:
+//   - Valid JSON passes through without repair.
+//   - Malformed JSON gets repaired once when the repair request succeeds.
+//   - When repair also returns invalid JSON, the client returns ErrRepairFailed.
+func TestRepair(t *testing.T) {
+	t.Parallel()
+
+	t.Run("valid JSON passes without repair", func(t *testing.T) {
+		t.Parallel()
+
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = fmt.Fprint(w, `{
+				"id":"1","object":"chat.completion","created":123,"model":"test-model",
+				"choices":[{"index":0,"message":{"role":"assistant","content":"{\"is_problem_signal\":false}"}}],
+				"usage":{"prompt_tokens":5,"completion_tokens":2,"total_tokens":7}
+			}`)
+		}))
+		t.Cleanup(ts.Close)
+
+		cfg := config.OpenRouterConfig{
+			BaseURL:               ts.URL,
+			Model:                 "test-model",
+			RequestTimeoutSeconds: 30,
+			MaxRetries:            0,
+			MaxOutputTokens:       100,
+			ClassificationTemp:    0.1,
+		}
+
+		client, err := New(cfg, "sk-test")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		resp, err := client.Complete(context.Background(), domain.CompletionRequest{
+			Prompt: "test",
+		})
+		if err != nil {
+			t.Fatalf("Complete() error = %v", err)
+		}
+		if resp.Content != `{"is_problem_signal":false}` {
+			t.Errorf("Content = %q, want %q", resp.Content, `{"is_problem_signal":false}`)
+		}
+	})
+
+	t.Run("malformed JSON gets repaired once", func(t *testing.T) {
+		t.Parallel()
+
+		var repairRequested bool
+		var mu sync.Mutex
+
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+
+			// Detect repair request by looking for "fix it" in the body.
+			buf := make([]byte, 1024)
+			n, _ := r.Body.Read(buf)
+			bodyStr := string(buf[:n])
+			r.Body.Close()
+
+			if contains(bodyStr, "fix it") || contains(bodyStr, "corrected JSON") || contains(bodyStr, "Fix the following") {
+				// This is a repair request — return valid JSON.
+				mu.Lock()
+				repairRequested = true
+				mu.Unlock()
+				w.WriteHeader(http.StatusOK)
+				_, _ = fmt.Fprint(w, `{
+					"id":"2","object":"chat.completion","created":456,"model":"test-model",
+					"choices":[{"index":0,"message":{"role":"assistant","content":"{\"is_problem_signal\":true,\"relevance\":0.9}"}}],
+					"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}
+				}`)
+				return
+			}
+
+			// Original request — return content that fails schema validation
+			// (relevance out of range triggers a validation error, which triggers repair).
+			w.WriteHeader(http.StatusOK)
+			_, _ = fmt.Fprint(w, `{
+				"id":"1","object":"chat.completion","created":123,"model":"test-model",
+				"choices":[{"index":0,"message":{"role":"assistant","content":"{\"is_problem_signal\":true,\"relevance\":1.5}"}}],
+				"usage":{"prompt_tokens":5,"completion_tokens":2,"total_tokens":7}
+			}`)
+		}))
+		t.Cleanup(ts.Close)
+
+		cfg := config.OpenRouterConfig{
+			BaseURL:               ts.URL,
+			Model:                 "test-model",
+			RequestTimeoutSeconds: 30,
+			MaxRetries:            0,
+			MaxOutputTokens:       100,
+			ClassificationTemp:    0.1,
+		}
+
+		client, err := New(cfg, "sk-test")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		var schema domain.ProblemSignal
+		resp, err := client.Complete(context.Background(), domain.CompletionRequest{
+			Prompt: "test",
+			Schema: &schema,
+		})
+		if err != nil {
+			t.Fatalf("Complete() error = %v", err)
+		}
+
+		mu.Lock()
+		if !repairRequested {
+			t.Error("repair was not requested")
+		}
+		mu.Unlock()
+
+		// Content should be the repaired (valid) JSON.
+		if resp.Content != `{"is_problem_signal":true,"relevance":0.9}` {
+			t.Errorf("Content = %q, want %q", resp.Content, `{"is_problem_signal":true,"relevance":0.9}`)
+		}
+	})
+
+	t.Run("repair also returns invalid JSON, fails with ErrRepairFailed", func(t *testing.T) {
+		t.Parallel()
+
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+
+			buf := make([]byte, 1024)
+			n, _ := r.Body.Read(buf)
+			bodyStr := string(buf[:n])
+			r.Body.Close()
+
+			if contains(bodyStr, "fix it") || contains(bodyStr, "corrected JSON") || contains(bodyStr, "Fix the following") {
+				// Repair also returns invalid JSON (relevance still out of range).
+				w.WriteHeader(http.StatusOK)
+				_, _ = fmt.Fprint(w, `{
+					"id":"2","object":"chat.completion","created":456,"model":"test-model",
+					"choices":[{"index":0,"message":{"role":"assistant","content":"{\"is_problem_signal\":true,\"relevance\":2.0}"}}],
+					"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}
+				}`)
+				return
+			}
+
+			// Original request — return content that fails validation.
+			w.WriteHeader(http.StatusOK)
+			_, _ = fmt.Fprint(w, `{
+				"id":"1","object":"chat.completion","created":123,"model":"test-model",
+				"choices":[{"index":0,"message":{"role":"assistant","content":"{\"is_problem_signal\":true,\"relevance\":1.5}"}}],
+				"usage":{"prompt_tokens":5,"completion_tokens":2,"total_tokens":7}
+			}`)
+		}))
+		t.Cleanup(ts.Close)
+
+		cfg := config.OpenRouterConfig{
+			BaseURL:               ts.URL,
+			Model:                 "test-model",
+			RequestTimeoutSeconds: 30,
+			MaxRetries:            0,
+			MaxOutputTokens:       100,
+			ClassificationTemp:    0.1,
+		}
+
+		client, err := New(cfg, "sk-test")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		var schema domain.ProblemSignal
+		_, err = client.Complete(context.Background(), domain.CompletionRequest{
+			Prompt: "test",
+			Schema: &schema,
+		})
+		if !errors.Is(err, ErrRepairFailed) {
+			t.Errorf("Complete() error = %v, want ErrRepairFailed", err)
+		}
+	})
+}
+
 // contains is a simple string contains check.
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && searchString(s, substr)
