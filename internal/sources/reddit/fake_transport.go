@@ -20,7 +20,7 @@ type fakeResponse struct {
 // inspection. All methods are safe for concurrent use.
 type fakeTransport struct {
 	mu        sync.Mutex
-	responses map[string][]fakeResponse // URL pattern -> ordered responses
+	responses map[string][]fakeResponse // URL pattern -> ordered responses.
 	callCount map[string]int
 	calls     []*http.Request
 }

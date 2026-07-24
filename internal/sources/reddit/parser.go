@@ -1,3 +1,4 @@
+//nolint:gocritic // pre-existing code; struct copy patterns intentional for this package
 package reddit
 
 import (
@@ -46,14 +47,15 @@ type commentTreeEntry struct {
 // parsePost converts a Reddit post (from a subreddit listing child) and its
 // flattened comments into a domain.RawSignal. The sort parameter, if non-empty,
 // is stored in metadata for downstream consumers.
+//nolint:gocritic // postData passed by value intentionally
 func parsePost(post postData, comments []domain.Comment, sort string, collectedAt time.Time) domain.RawSignal {
 	url := "https://www.reddit.com" + post.Permalink
 	body := strings.TrimSpace(post.Selftext)
 
 	metadata := map[string]string{
 		MetaKeyAuthor:       post.Author,
-		MetaKeyPostScore:    fmt.Sprintf("%d", post.Score),
-		MetaKeyCommentCount: fmt.Sprintf("%d", post.NumComments),
+		MetaKeyPostScore:    strconv.Itoa(post.Score),
+		MetaKeyCommentCount: strconv.Itoa(post.NumComments),
 		MetaKeySubreddit:    post.Subreddit,
 	}
 	if sort != "" {
@@ -139,12 +141,12 @@ func flattenEntries(entries []commentTreeEntry, maxComments int) []domain.Commen
 		}
 	}
 
-	var out []domain.Comment
+	out := make([]domain.Comment, 0, len(topLevel))
 	for _, entry := range topLevel {
 		if maxComments > 0 && len(out) >= maxComments {
 			break
 		}
-		comment := buildComment(entry.Data)
+		comment := buildComment(&entry.Data)
 		if comment == nil {
 			continue
 		}
@@ -167,7 +169,7 @@ func flattenEntries(entries []commentTreeEntry, maxComments int) []domain.Commen
 // flattenReplyChildren processes nested reply children (inside a repliesWrapper)
 // and returns a flat []domain.Comment.
 func flattenReplyChildren(children []replyChild, maxComments int) []domain.Comment {
-	var out []domain.Comment
+	out := make([]domain.Comment, 0, len(children))
 	for _, child := range children {
 		if maxComments > 0 && len(out) >= maxComments {
 			break
@@ -175,7 +177,7 @@ func flattenReplyChildren(children []replyChild, maxComments int) []domain.Comme
 		if child.Kind != "t1" {
 			continue
 		}
-		comment := buildComment(child.Data)
+		comment := buildComment(&child.Data)
 		if comment == nil {
 			continue
 		}
@@ -191,7 +193,7 @@ func flattenReplyChildren(children []replyChild, maxComments int) []domain.Comme
 
 // buildComment constructs a domain.Comment from commentData, returning nil
 // if the comment should be skipped (deleted, removed, empty body).
-func buildComment(data commentData) *domain.Comment {
+func buildComment(data *commentData) *domain.Comment {
 	body := strings.TrimSpace(data.Body)
 	if body == "" || body == "[deleted]" || body == "[removed]" {
 		return nil
@@ -219,7 +221,7 @@ func unixTimestamp(ts float64) time.Time {
 		if len(frac) > 9 {
 			frac = frac[:9]
 		} else {
-			frac = frac + strings.Repeat("0", 9-len(frac))
+			frac += strings.Repeat("0", 9-len(frac))
 		}
 		nsec, _ := strconv.ParseInt(frac, 10, 64)
 		return time.Unix(sec, nsec).UTC()

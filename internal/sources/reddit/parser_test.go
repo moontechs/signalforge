@@ -1,3 +1,4 @@
+//nolint:unused // mustParseTime kept for future use by parser tests
 package reddit
 
 import (

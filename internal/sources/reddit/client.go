@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -53,8 +54,8 @@ type client struct {
 	// User-Agent sent on every Reddit API request.
 	userAgent string
 
-	mu        sync.Mutex // protects token, requests, cacheHits, cache
-	acquireMu sync.Mutex // serialises OAuth token acquisition
+	mu        sync.Mutex // protects token, requests, cacheHits, cache.
+	acquireMu sync.Mutex // serialises OAuth token acquisition.
 
 	token       *oauthTokenResponse
 	tokenExpiry time.Time
@@ -68,6 +69,7 @@ type client struct {
 // calls per run; 0 or negative means no cap.
 func newClient(t transport, clientID, clientSecret string, maxRequests int) *client {
 	defaultBackoff := func(attempt int) time.Duration {
+		//nolint:gosec // weak RNG is acceptable for jitter in retry backoff
 		return time.Duration(math.Pow(2, float64(attempt)))*time.Second +
 			time.Duration(rand.Intn(1000))*time.Millisecond
 	}
@@ -78,7 +80,7 @@ func newClient(t transport, clientID, clientSecret string, maxRequests int) *cli
 		timeout:      30 * time.Second,
 		retryMax:     3,
 		maxRequests:  maxRequests,
-		maxBodySize:  10 * 1024 * 1024, // 10 MB
+		maxBodySize:  10 * 1024 * 1024, // 10 MB.
 		retryBackoff: defaultBackoff,
 		clientID:     clientID,
 		clientSecret: clientSecret,
@@ -263,6 +265,8 @@ func (c *client) acquireTokenLocked(ctx context.Context) error {
 // if needed, then issues the request with retry logic. Transient transport
 // errors, 429, 5xx, and 401 (token expired) are retried. Non-retryable 4xx
 // and auth failures are returned promptly.
+//
+//nolint:gocognit,gocyclo,cyclop,funlen // retry loop with cache, auth, and error handling
 func (c *client) get(ctx context.Context, path string, params url.Values, ttl time.Duration, out any) error {
 	// Build a deterministic cache key from path and non-secret query params.
 	cacheKey := path
@@ -370,7 +374,7 @@ func (c *client) readBody(resp *http.Response) ([]byte, error) {
 	limited := io.LimitReader(resp.Body, c.maxBodySize+1)
 	body, err := io.ReadAll(limited)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read response body: %w", err)
 	}
 	if int64(len(body)) > c.maxBodySize {
 		return nil, fmt.Errorf("response body exceeds %d bytes", c.maxBodySize)
@@ -389,7 +393,7 @@ func (c *client) readBody(resp *http.Response) ([]byte, error) {
 func (c *client) listing(ctx context.Context, subreddit, sort, timeFilter string, limit int) (*listingResponse, error) {
 	path := fmt.Sprintf("/r/%s/%s.json", subreddit, sort)
 	params := url.Values{}
-	params.Set("limit", fmt.Sprintf("%d", limit))
+	params.Set("limit", strconv.Itoa(limit))
 	if timeFilter != "" && sort == "top" {
 		params.Set("t", timeFilter)
 	}
@@ -412,4 +416,34 @@ func (c *client) comments(ctx context.Context, postID string) (commentTreeRespon
 		return nil, err
 	}
 	return resp, nil
+}
+
+// commentsRawJSON fetches a post's full comment tree and returns the raw
+// JSON bytes. The raw bytes are needed by FlattenComments because the
+// standard commentTreeResponse type cannot correctly decode comment-specific
+// fields (body, parent_id, replies) due to the use of postData in
+// listingChild.
+func (c *client) commentsRawJSON(ctx context.Context, postID string) ([]byte, error) {
+	path := fmt.Sprintf("/comments/%s.json", postID)
+	// Use a wrapper that captures the raw JSON.
+	rawHolder := &rawBytesHolder{}
+	// Comment trees change less frequently — longer TTL.
+	if err := c.get(ctx, path, nil, 30*time.Minute, rawHolder); err != nil {
+		return nil, err
+	}
+	return rawHolder.body, nil
+}
+
+// rawBytesHolder is a json.Unmarshaler that captures raw bytes.
+type rawBytesHolder struct {
+	body []byte
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+//
+//nolint:unparam // must implement json.Unmarshaler interface
+func (r *rawBytesHolder) UnmarshalJSON(b []byte) error {
+	r.body = make([]byte, len(b))
+	copy(r.body, b)
+	return nil
 }
