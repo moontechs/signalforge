@@ -1,122 +1,95 @@
+// Package cache provides a thread-safe, namespace-isolated on-disk cache.
 package cache
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
 	"sync"
 	"time"
+
+	"github.com/moontechs/signalforge/internal/storage"
 )
 
-const (
-	NamespaceGitHub             = "github"
-	NamespaceHackerNews         = "hackernews"
-	NamespaceStackExchange      = "stackexchange"
-	NamespaceReddit             = "reddit"
-	NamespaceBrightDataSERP     = "brightdata-serp"
-	NamespaceBrightDataUnlocker = "brightdata-unlocker"
-	NamespaceOpenRouter         = "openrouter"
-)
+var validNamespace = regexp.MustCompile(`^[A-Za-z0-9]+$`)
 
-var supportedNamespaces = map[string]struct{}{
-	NamespaceGitHub: {}, NamespaceHackerNews: {}, NamespaceStackExchange: {},
-	NamespaceReddit: {}, NamespaceBrightDataSERP: {}, NamespaceBrightDataUnlocker: {},
-	NamespaceOpenRouter: {},
+// CacheEntry is a response body and its per-entry expiration policy.
+type CacheEntry struct {
+	Body     []byte        `json:"body"`
+	TTL      time.Duration `json:"ttl"`
+	StoredAt time.Time     `json:"stored_at"`
 }
 
-type entry struct {
-	value     any
-	expiresAt time.Time
-}
-
-// Config contains the per-source cache TTLs. Every configured namespace must
-// be one of the supported namespaces and have a positive TTL.
-type Config struct {
-	Sources map[string]time.Duration
-}
-
-// Cache is a thread-safe, process-local cache partitioned by source namespace.
+// Cache stores entries under cache/<namespace>. Keys are hashed before being
+// used as filenames, and an entry is reusable only until StoredAt+TTL.
 type Cache struct {
-	mu      sync.RWMutex
-	entries map[string]map[string]entry
-	ttls    map[string]time.Duration
+	mu        sync.RWMutex
+	store     *storage.Storage
+	namespace string
+	prefix    string
 }
 
-// New creates a cache using the supplied per-source TTL configuration.
-func New(cfg Config) (*Cache, error) {
-	ttls := make(map[string]time.Duration, len(cfg.Sources))
-	for namespace, ttl := range cfg.Sources {
-		if _, ok := supportedNamespaces[namespace]; !ok {
-			return nil, fmt.Errorf("unsupported cache namespace %q", namespace)
-		}
-		if ttl <= 0 {
-			return nil, fmt.Errorf("cache TTL for namespace %q must be positive", namespace)
-		}
-		ttls[namespace] = ttl
+// NewCache creates a cache for namespace. Invalid namespaces panic because a
+// cache cannot function safely without a valid, isolated storage path.
+func NewCache(store *storage.Storage, namespace string) *Cache {
+	if store == nil {
+		panic("cache: storage must not be nil")
 	}
-	return &Cache{entries: make(map[string]map[string]entry), ttls: ttls}, nil
+	if !validNamespace.MatchString(namespace) {
+		panic(fmt.Sprintf("cache: invalid namespace %q (must be alphanumeric)", namespace))
+	}
+	return &Cache{store: store, namespace: namespace, prefix: filepath.Join(store.BaseDir(), "cache", namespace)}
 }
 
-// Get returns the fresh value stored under key in namespace. An absent,
-// expired, or unconfigured namespace returns false.
-func (c *Cache) Get(namespace, key string) (any, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.cleanup(time.Now())
+func (c *Cache) path(key string) string {
+	digest := sha256.Sum256([]byte(key))
+	return filepath.Join(c.prefix, hex.EncodeToString(digest[:])+".json")
+}
 
-	entries, ok := c.entries[namespace]
-	if !ok {
+// Get returns a defensive copy of a fresh entry's body.
+func (c *Cache) Get(key string) ([]byte, bool) {
+	if key == "" {
 		return nil, false
 	}
-	item, ok := entries[key]
-	if !ok {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	var entry CacheEntry
+	if err := c.store.LoadJSON(c.path(key), &entry); err != nil || entry.TTL <= 0 || !time.Now().Before(entry.StoredAt.Add(entry.TTL)) {
 		return nil, false
 	}
-	return item.value, true
+	return append([]byte(nil), entry.Body...), true
 }
 
-// Set stores value under key in namespace. Writes to unconfigured namespaces
-// are ignored because no expiration policy exists for them.
-func (c *Cache) Set(namespace, key string, value any) {
+// Set stores entry atomically. Keys must be non-empty and TTL must be positive.
+func (c *Cache) Set(key string, entry CacheEntry) error {
+	if key == "" {
+		return fmt.Errorf("cache: key must not be empty")
+	}
+	if entry.TTL <= 0 {
+		return fmt.Errorf("cache: TTL must be positive")
+	}
+	if entry.StoredAt.IsZero() {
+		entry.StoredAt = time.Now()
+	}
+	entry.Body = append([]byte(nil), entry.Body...)
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	now := time.Now()
-	c.cleanup(now)
-	ttl, ok := c.ttls[namespace]
-	if !ok {
-		return
-	}
-	if c.entries[namespace] == nil {
-		c.entries[namespace] = make(map[string]entry)
-	}
-	c.entries[namespace][key] = entry{value: value, expiresAt: now.Add(ttl)}
+	return c.store.SaveJSON(c.path(key), entry)
 }
 
-// Delete removes key from namespace.
-func (c *Cache) Delete(namespace, key string) {
+// Delete removes an entry. It is safe to call when the entry is absent.
+func (c *Cache) Delete(key string) error {
+	if key == "" {
+		return nil
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.cleanup(time.Now())
-	if entries := c.entries[namespace]; entries != nil {
-		delete(entries, key)
+	err := os.Remove(c.path(key))
+	if os.IsNotExist(err) {
+		return nil
 	}
-}
-
-// Clear removes all entries from namespace.
-func (c *Cache) Clear(namespace string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.cleanup(time.Now())
-	delete(c.entries, namespace)
-}
-
-func (c *Cache) cleanup(now time.Time) {
-	for namespace, entries := range c.entries {
-		for key, item := range entries {
-			if !now.Before(item.expiresAt) {
-				delete(entries, key)
-			}
-		}
-		if len(entries) == 0 {
-			delete(c.entries, namespace)
-		}
-	}
+	return err
 }

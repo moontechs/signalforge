@@ -1,7 +1,5 @@
-// Package cache provides a process-local, in-memory cache for source data.
-//
-// Entries are grouped into source namespaces and expire according to the
-// namespace's configured TTL. Expired entries are evicted lazily during cache
-// operations. Cache methods are safe for concurrent use. Cache keys must not
-// contain credentials, API tokens, or other secrets.
+// Package cache provides a shared, local JSON cache. Each cache has one
+// alphanumeric namespace beneath cache/, preventing sources from colliding.
+// Keys are hashed, so raw keys never become filenames. Entries carry their
+// own TTL and expire lazily on reads; cache methods are safe for concurrent use.
 package cache
