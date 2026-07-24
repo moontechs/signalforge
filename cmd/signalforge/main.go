@@ -47,7 +47,7 @@ func init() {
 	rootCmd.AddCommand(cli.ListCmd)
 	rootCmd.AddCommand(cli.ShowCmd)
 	rootCmd.AddCommand(cli.AnalyzeCmd)
-	rootCmd.AddCommand(cli.BrainstormCmd)
+	rootCmd.AddCommand(cli.DiscoverCmd)
 	rootCmd.AddCommand(cli.ClassifyCmd)
 	rootCmd.AddCommand(cli.ClusterCmd)
 }
