@@ -1,0 +1,76 @@
+You are a signal classifier. Analyze the following public post and determine if it describes a recurring user problem that could be solved by a product. Return only valid JSON.
+
+## Post
+
+Title: {{.Title}}
+Body: {{.Body}}
+Comments: {{.Comments}}
+Source: {{.Source}}
+URL: {{.URL}}
+
+## Decision criteria
+
+Classify this post into the following JSON structure:
+
+{
+  "is_problem_signal": false,
+  "relevance": 0.0,
+  "problem": "",
+  "target_user": "",
+  "context": "",
+  "current_workaround": "",
+  "desired_outcome": "",
+  "recurring": false,
+  "product_solvable": false,
+  "is_temporary_incident": false,
+  "is_support_question": false,
+  "is_existing_bug": false,
+  "is_configuration_issue": false,
+  "is_feature_request": false,
+  "severity_hint": 0,
+  "frequency_hint": 0,
+  "payment_hint": 0,
+  "frustration_hint": 0,
+  "keywords": [],
+  "entities": [],
+  "actions": [],
+  "constraints": []
+}
+
+### Fields
+
+- is_problem_signal (boolean): true if this post describes a recurring user problem that could be addressed by a product or tool
+- relevance (float 0-1): how relevant this post is to product opportunity discovery
+- problem (string): concise description of the core problem the user is facing
+- target_user (string): description of who experiences this problem
+- context (string): the circumstances or environment in which the problem occurs
+- current_workaround (string): how users currently deal with this problem, if any
+- desired_outcome (string): what the user wants to be able to do instead
+
+### Classification flags (boolean)
+
+- recurring: this problem happens repeatedly, not a one-time event
+- product_solvable: a product or tool could realistically solve this
+- is_temporary_incident: this is a temporary outage or transient issue
+- is_support_question: this is a simple support or how-to question
+- is_existing_bug: this describes a known bug in an existing product
+- is_configuration_issue: the problem is caused by incorrect setup or configuration
+- is_feature_request: this is a request for a feature in an existing product
+
+### Hints (0-10 integer, higher = more)
+
+- severity_hint: how severe/impactful the problem is for the user
+- frequency_hint: how often this problem occurs
+- payment_hint: how likely the user is to pay for a solution
+- frustration_hint: how frustrated the user is about this problem
+
+### Arrays (strings)
+
+- keywords: key terms that describe the problem domain
+- entities: specific products, companies, or technologies mentioned
+- actions: verbs describing what users are trying to do
+- constraints: limitations or requirements mentioned
+
+## Instructions
+
+Return valid JSON matching the schema above. Do not invent facts. If the post does not describe a problem signal, set is_problem_signal to false and relevance to 0. For non-problem signals, all other fields should be empty or zero values as appropriate.

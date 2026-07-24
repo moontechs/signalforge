@@ -2,7 +2,7 @@
 
 ### Task 1: Define OpenRouter API types, errors, and prompts
 
-- [ ] Create `prompts/classify_signal.txt` with the classification prompt template (section 41 from spec). Content:
+- [x] Create `prompts/classify_signal.txt` with the classification prompt template (section 41 from spec). Content:
   - System: "You are a signal classifier. Analyze the following public post and determine if it describes a recurring user problem that could be solved by a product. Return only valid JSON."
   - Template fields: `{{.Title}}`, `{{.Body}}`, `{{.Comments}}`, `{{.Source}}`, `{{.URL}}`
   - Decision criteria: is_problem_signal, relevance (0-1), problem description, target_user, context, current_workaround, desired_outcome
@@ -10,10 +10,10 @@
   - Hints (0-10): severity_hint, frequency_hint, payment_hint, frustration_hint
   - Keywords, entities, actions, constraints arrays
   - Instruction: "Return valid JSON matching the schema. Do not invent facts."
-- [ ] Create `internal/openrouter/errors.go` with typed errors: ErrNoAPIKey, ErrNoModel, ErrRateLimited, ErrInvalidResponse, ErrRepairFailed, ErrAllModelsFailed
-- [ ] Create `internal/openrouter/request.go` with OpenAI-compatible request types: ChatCompletionRequest, Message, ResponseFormat
-- [ ] Create `internal/openrouter/response.go` with response types: ChatCompletionResponse, Choice, Usage, APIError
-- [ ] Use `config.OpenRouterConfig` directly; preserve model strings including `:free` suffix
+- [x] Create `internal/openrouter/errors.go` with typed errors: ErrNoAPIKey, ErrNoModel, ErrRateLimited, ErrInvalidResponse, ErrRepairFailed, ErrAllModelsFailed
+- [x] Create `internal/openrouter/request.go` with OpenAI-compatible request types: ChatCompletionRequest, Message, ResponseFormat
+- [x] Create `internal/openrouter/response.go` with response types: ChatCompletionResponse, Choice, Usage, APIError
+- [x] Use `config.OpenRouterConfig` directly; preserve model strings including `:free` suffix
 
 ### Task 2: Implement OpenRouter client with retry, fallback, validation, and repair
 
