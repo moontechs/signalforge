@@ -1,140 +1,126 @@
-# AGENTS.md — SignalForge
+# SignalForge — Agent Instructions
 
-## Overview
+You are coding for **SignalForge**, a Go CLI that discovers recurring user problems from public sources (GitHub, HN, Stack Exchange). Collect → classify → cluster → generate product hypotheses.
 
-SignalForge is a Go CLI application that discovers recurring user problems from public sources. It follows a pipeline: collect signals → classify → cluster → generate product hypotheses.
+## Hard Constraints (DO NOT VIOLATE)
 
-## Quick Start
+- **No database dependencies** — no SQLite, Postgres, Redis, or any persistent DB. Storage is JSON files + JSONL only.
+- **No vector search / embeddings in MVP** — clustering uses Jaccard + weighted token overlap.
+- **No scraping private pages** — all sources are public APIs only. No auth-required endpoints.
+- **No API cost/token price calculations** — never count or log token usage or cost.
+- **No panic in production paths** — always return errors.
+- **No storing API tokens in logs, exports, or JSON output** — never leak secrets.
 
-```bash
-# Build
-go build ./cmd/signalforge/
+## Tech Stack
 
-# Init (creates ~/.signalforge/)
-./signalforge init
+- **Language:** Go 1.24+
+- **CLI framework:** Cobra
+- **Storage:** `encoding/json` for config/domain objects, JSONL for raw signals
+- **LLM:** OpenRouter (OpenAI-compatible). Free models (`:free` suffix) supported.
+- **APIs:** GitHub REST + GraphQL, HN Firebase, Stack Exchange API
 
-# Check configuration
-./signalforge doctor
+## Project Structure Rules
 
-# Collect signals from sources
-./signalforge collect --sources github
+- `internal/` — never importable from outside the module
+- `cmd/signalforge/main.go` — only CLI entrypoint (Cobra root command)
+- `internal/sources/<name>/` — one package per external source
+- `prompts/` — LLM prompt templates (loaded at runtime from disk, NOT embedded)
+- `testdata/` — test fixtures (not loaded at runtime)
 
-# Classify raw signals
-./signalforge classify
-
-# Cluster problems
-./signalforge cluster
-
-# Generate solutions
-./signalforge discover
-
-# Full pipeline
-./signalforge pipeline --sources github,hn,stackexchange --since 30d
+Each source package follows this structure:
+```
+client.go      — HTTP client
+parser.go      — response → domain mapping
+errors.go      — typed sentinel errors
+collector.go   — SourceCollector orchestration
 ```
 
-## Required environment variables
+## Coding Conventions
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `GITHUB_TOKEN` | Yes | GitHub personal access token (repo scope) |
-| `OPENROUTER_API_KEY` | No (for collection) | OpenRouter API key (required for classification) |
-| `OPENROUTER_MODEL` | No | OpenRouter model override (default: from config) |
-| `BRIGHTDATA_API_KEY` | No (post-MVP) | Bright Data API key |
-| `SIGNALFORGE_HOME` | No | Overrides ~/.signalforge data directory |
+### General
+- Standard library over external dependencies. Verify `go.sum` has no new deps before adding.
+- `context.Context` as first function argument
+- `log/slog` for all logging (not `log`, not `fmt.Print`)
+- Error wrapping: `fmt.Errorf("context: %w", err)` — always add context
+- No global state — pass dependencies explicitly
 
-## GitHub collector MVP behavior
+### Interface patterns
+- Each external source implements `SourceCollector`:
+  ```go
+  type SourceCollector interface {
+      Name() string
+      Collect(ctx context.Context, req CollectRequest) ([]RawSignal, error)
+  }
+  ```
+- HTTP clients accept a `transport` interface for testability (fakeTransport, not httptest.NewServer)
+- All HTTP clients: timeouts, retries, context cancellation, typed errors
 
-- `collect` currently supports `github` end to end in the CLI flow
-- GitHub collection requires `GITHUB_TOKEN` and only reads public Issues and Discussions
-- `--since` accepts Go duration values such as `24h` and day shorthands such as `7d`
-- Deduplication is persisted in `memory.json`, so repeat runs skip already-seen source IDs and duplicate content hashes
-- Initial MVP runs use a since-window and per-run limits; cursor inputs are accepted internally but not persisted as resumable state yet
-
-## Hacker News collector (M2-T6) — complete
-
-- HN collector is now fully wired end-to-end in the CLI: `signalforge collect --sources hackernews --since 30d`
-- No API keys required — HN uses the free Firebase API (no auth, no rate limits, no ETags)
-- Supported feeds: `askstories`, `showstories`, `newstories`, `topstories`, `beststories` (default: `askstories`, `showstories`, `newstories`)
-- Filtering: minimum score threshold, since-window for story age, max items cap per run, max comments per item
-- Comment flattening via BFS (max depth 50, configurable max comments cap)
-- Bounded concurrency: 5 workers via buffered channel semaphore for item fetching
-- Caching: TTL-based on-disk cache (5 min for feeds, 24h for items), no conditional requests
-- Dedup by item ID across feeds within a single run; content hash from title + body + sorted comment bodies
-- Stats tracking: request/cache-hit counters per run, persisted in `memory.json`
-
-## Running tests
-
-```bash
-# All tests (no API keys needed)
-go test ./...
-
-# With verbose output
-go test -v ./...
-
-# Specific package
-go test ./internal/storage/...
-
-# Run linter
-go vet ./...
-```
-
-### Linting
-
-This project uses **golangci-lint v1.64+** with strict rules.
-
-- Config: `.golangci.yml` at repo root
-- **Pre-push hook:** `.githooks/pre-push` runs `golangci-lint run ./...` automatically on every `git push` and blocks if lint fails. Enable with `git config core.hooksPath .githooks` (one-time setup after clone).
-- **Run locally:** `golangci-lint run ./...` before every commit
-- **Auto-fix:** `golangci-lint run --fix ./...` for formatting, imports, and simple fixes
-- **Install:** `go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest`
-
-## Project structure rules
-
-- `internal/` — not importable from outside the module
-- `cmd/signalforge/main.go` — only CLI entrypoint
-- `prompts/` — LLM prompt templates (loaded at runtime, not embedded)
-- `testdata/` — fixtures for tests (not loaded at runtime)
-
-## Kanban board
-
-All tasks tracked on the `signalforge` kanban board. See `hermes kanban list --board signalforge`.
-Tasks are organized by milestone (M1-M4). Post-MVP tasks are blocked.
-
-## Key constraints
-
-- Do NOT add database dependencies (no SQLite, no Postgres, no Redis)
-- Do NOT add embeddings or vector search in MVP
-- Do NOT calculate API costs or token prices
-- Do NOT scrape private pages or require authentication for sources
-- All HTTP clients must have timeouts, retries, and context cancellation
-- JSON writes must be atomic (temp file → sync → rename)
-- Cache keys must not include secrets
-- Never store API tokens in logs, exports, or JSON data
-
-## Architecture patterns
-
-Each external source implements `SourceCollector` interface:
-```go
-type SourceCollector interface {
-    Name() string
-    Collect(ctx context.Context, req CollectRequest) ([]RawSignal, error)
-}
-```
-
-Each source has its own package under `internal/sources/` with:
-- `client.go` — HTTP client
-- `parser.go` — response parsing
-- `errors.go` — typed errors
-
-LLM operations go through `OpenRouter` package with:
-- Free model support (`:free` suffix)
-- Fallback models
+### LLM calls
+- Go through `internal/openrouter/` package
+- Support free models (`:free` suffix)
+- Implement fallback models
 - Retry with exponential backoff
-- JSON validation + repair (max 1 repair attempt)
+- JSON validation + repair (max 1 attempt, then error)
 
-## Scoring model
+### JSON file I/O
+- **Atomic writes only** — write to temp file → `Sync()` → rename over target
+- Never write directly to the target path
+- Cache keys must not include secrets
 
-ProblemScore: weighted average of 8 dimensions (0-10 scale), multiplied by 10.
-SolutionScore: weighted average of 9 dimensions (0-10 scale), multiplied by 10.
-Confidence: 0-100, calculated separately from scores.
-Recommendation: rules-based from ProblemScore + SolutionScore + confidence + risks.
+## Linting (MANDATORY — pre-push hook blocks pushes)
+
+```bash
+golangci-lint run ./...          # before every commit
+golangci-lint run --fix ./...    # auto-fix formatting/imports
+golangci-lint run ./...          # verify fix didn't break anything
+```
+
+- **Pre-push hook** at `.githooks/pre-push` — runs linter, blocks on failure.
+- Enable: `git config core.hooksPath .githooks` (one-time after clone).
+- **Never add `//nolint` without a comment explaining why.**
+- **Lint fix order:** typecheck errors first → auto-fix → structural fixes → nolint for intentional patterns → tests pass.
+
+## Testing
+
+- `go test ./...` — must pass without API keys
+- **Never use real API calls in tests** — fake implementations for all external APIs
+- Sources: use `fakeTransport` (registered responses per URL pattern), NOT `httptest.NewServer`
+- E2E tests use fake clients
+- `t.Parallel()` where safe
+- Test fixtures go in `testdata/<source-name>/`
+
+## Git Workflow (MANDATORY)
+
+1. Every code change starts with a GitHub issue
+2. Branch from issue: `feat/issue-N-description` or `fix/issue-N-description`
+3. Conventional Commits for commit messages
+4. PR body: `Closes #N` to auto-close issue on merge
+5. Code review before merge
+6. No direct commits to main
+
+## Common Gotchas (read before coding)
+
+### Pre-push hook traps
+- First push of a PR that ADDS the hook itself: use `git push --no-verify -u origin HEAD` once. After that, every push runs the hook.
+- `golangci-lint run --fix` can remove needed imports (e.g. drops `fmt` when `fmt.Errorf` becomes `errors.New`). Always run `go test ./...` after `--fix`.
+
+### OpenRouter auth
+- `OPENROUTER_API_KEY` must be set before any LLM call. Source `.env` at session start.
+- The `.env` file is NOT auto-sourced by the shell. Always `source /home/app/.hermes/profiles/pm/.env` before running.
+
+### Codex CLI auth
+- ChatGPT session tokens expire ~2 days. If codex fails with "stream disconnected", use pi profile instead.
+- Codex profiles use `codex_sandbox = workspace-write` (stable sandbox). Do NOT set `danger-full-access`.
+- Direct codex CLI: always pass `--sandbox workspace-write` (or `--dangerously-bypass-approvals-and-sandbox` if sandbox is broken).
+
+### Ralphex execution
+- **Plan creation:** `ralphex-headless-plan --profile-dir /opt/ralphex-profiles/<executor>-planning "<query>"`
+- **Plan execution:** `ralphex --config-dir /opt/ralphex-profiles/<executor> docs/plans/<plan>.md`
+- Always use kanban workspace as working directory (not manual clone) — sandbox-safe.
+- Always push branch before ralphex run to avoid losing work on sandbox cleanup.
+
+### Scoring model reminder
+- ProblemScore: weighted avg of 8 dimensions (0-10) × 10
+- SolutionScore: weighted avg of 9 dimensions (0-10) × 10
+- Confidence: 0-100 (separate from scores)
+- Recommendation: rules-based from scores + confidence + risks
