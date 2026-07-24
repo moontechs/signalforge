@@ -17,7 +17,7 @@
 
 ### Task 2: Implement OpenRouter client with retry, fallback, validation, and repair
 
-- [ ] Create `internal/openrouter/client.go`:
+- [x] Create `internal/openrouter/client.go`:
   - `type Client struct` with `*http.Client`, `config.OpenRouterConfig`, `apiKey string`, `stats Stats`
   - `func New(cfg config.OpenRouterConfig, apiKey string) (*Client, error)` — validates apiKey non-empty
   - `func (c *Client) Complete(ctx context.Context, req domain.CompletionRequest) (domain.CompletionResponse, error)` — implements `domain.LLMClient`
@@ -26,23 +26,23 @@
   - Model resolution order: `req.Model` → `cfg.Model` → `cfg.FallbackModels[0]` → ... → `cfg.FallbackModels[N]`
   - Remove empty model strings and duplicates
   - Never include API key in logs or errors
-- [ ] Create `internal/openrouter/fallback.go`:
+- [x] Create `internal/openrouter/fallback.go`:
   - `func (c *Client) tryModel(ctx, model, system, prompt string, schema any) (CompletionResponse, error)` 
   - Retry loop: exponential backoff with jitter, max 30s, capped at `cfg.MaxRetries`
   - 429 handling: read `Retry-After` header (numeric seconds or HTTP-date), wait that duration
   - 5xx / transport errors: retry with backoff
   - Non-429 4xx: fail immediately, try next fallback model
   - After all models exhausted: return `ErrAllModelsFailed`
-- [ ] Create `internal/openrouter/validation.go`:
+- [x] Create `internal/openrouter/validation.go`:
   - `func (c *Client) validateResponse(content string, schema any) ([]byte, error)` 
   - Check content is valid JSON via `json.Valid` or `json.Unmarshal`
   - When `schema != nil`: validate required fields present, ranges in bounds (0-10 for hints, 0-1 for relevance)
-- [ ] Create `internal/openrouter/repair.go`:
+- [x] Create `internal/openrouter/repair.go`:
   - `func (c *Client) repairJSON(ctx, model, invalidContent string) ([]byte, error)`
   - Send repair request with `cfg.RepairTemp` (0), same model, including invalid content + schema instructions
   - Validate repaired output once
   - If repair fails or output invalid: return `ErrRepairFailed`, do NOT retry repair
-- [ ] Expose `func (c *Client) Stats() Stats` with Attempts count for CLI reporting
+- [x] Expose `func (c *Client) Stats() Stats` with Attempts count for CLI reporting
 
 ### Task 3: OpenRouter client tests with fake HTTP server
 
