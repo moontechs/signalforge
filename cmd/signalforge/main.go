@@ -49,6 +49,7 @@ func init() {
 	rootCmd.AddCommand(cli.AnalyzeCmd)
 	rootCmd.AddCommand(cli.BrainstormCmd)
 	rootCmd.AddCommand(cli.ClassifyCmd)
+	rootCmd.AddCommand(cli.ClusterCmd)
 }
 
 func main() {

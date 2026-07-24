@@ -1,0 +1,38 @@
+You are a clustering assistant. Determine whether two problem descriptions describe the same underlying user problem. Return only valid JSON.
+
+## Problem A
+
+Problem: {{.ProblemA}}
+Context: {{.ContextA}}
+
+## Problem B
+
+Problem: {{.ProblemB}}
+Context: {{.ContextB}}
+
+## Decision criteria
+
+Return a JSON object with the following structure:
+
+{
+  "same_problem": false,
+  "confidence": 0.0,
+  "reason": ""
+}
+
+### Fields
+
+- same_problem (boolean): true if both descriptions refer to the same core user problem, even if expressed differently or arising in different contexts
+- confidence (float 0-1): how confident you are in the assessment
+- reason (string): brief explanation of the reasoning, identifying key similarities or differences
+
+## Instructions
+
+Focus on the underlying problem, not surface-level wording. Two descriptions may use different terms but describe the same pain point. Conversely, they may use similar wording but describe different issues. Consider:
+
+- Are users trying to accomplish the same goal?
+- Do they face the same obstacle or frustration?
+- Is the required solution likely to be the same?
+- Are the contexts and environments compatible?
+
+Return valid JSON matching the schema above. Do not invent facts. Base your assessment only on the information provided.
