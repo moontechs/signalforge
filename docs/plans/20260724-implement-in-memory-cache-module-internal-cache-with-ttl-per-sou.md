@@ -12,12 +12,12 @@
 
 ### Task 2: Implement cache operations — Get, Set, Delete, Clear
 
-- [ ] Implement `Get(namespace, key string) (any, bool)` — read-lock, lookup namespace→key, check expiry, return nil+false if absent or expired, value+true if fresh. Remove expired entries before returning.
-- [ ] Implement `Set(namespace, key string, value any)` — write-lock, store value with expiry = now + namespace's TTL.
-- [ ] Implement `Delete(namespace, key string)` — write-lock, remove entry from one namespace only.
-- [ ] Implement `Clear(namespace string)` — write-lock, remove all entries for one namespace.
-- [ ] Run lazy expiration cleanup on every Get/Set/Delete/Clear — scan and remove expired entries under the held lock.
-- [ ] Keep source namespaces fully isolated — same key in different namespaces cannot collide.
+- [x] Implement `Get(namespace, key string) (any, bool)` — read-lock, lookup namespace→key, check expiry, return nil+false if absent or expired, value+true if fresh. Remove expired entries before returning.
+- [x] Implement `Set(namespace, key string, value any)` — write-lock, store value with expiry = now + namespace's TTL.
+- [x] Implement `Delete(namespace, key string)` — write-lock, remove entry from one namespace only.
+- [x] Implement `Clear(namespace string)` — write-lock, remove all entries for one namespace.
+- [x] Run lazy expiration cleanup on every Get/Set/Delete/Clear — scan and remove expired entries under the held lock.
+- [x] Keep source namespaces fully isolated — same key in different namespaces cannot collide.
 
 ### Task 3: Add comprehensive tests
 

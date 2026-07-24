@@ -54,3 +54,69 @@ func New(cfg Config) (*Cache, error) {
 	}
 	return &Cache{entries: make(map[string]map[string]entry), ttls: ttls}, nil
 }
+
+// Get returns the fresh value stored under key in namespace. An absent,
+// expired, or unconfigured namespace returns false.
+func (c *Cache) Get(namespace, key string) (any, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.cleanup(time.Now())
+
+	entries, ok := c.entries[namespace]
+	if !ok {
+		return nil, false
+	}
+	item, ok := entries[key]
+	if !ok {
+		return nil, false
+	}
+	return item.value, true
+}
+
+// Set stores value under key in namespace. Writes to unconfigured namespaces
+// are ignored because no expiration policy exists for them.
+func (c *Cache) Set(namespace, key string, value any) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	now := time.Now()
+	c.cleanup(now)
+	ttl, ok := c.ttls[namespace]
+	if !ok {
+		return
+	}
+	if c.entries[namespace] == nil {
+		c.entries[namespace] = make(map[string]entry)
+	}
+	c.entries[namespace][key] = entry{value: value, expiresAt: now.Add(ttl)}
+}
+
+// Delete removes key from namespace.
+func (c *Cache) Delete(namespace, key string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.cleanup(time.Now())
+	if entries := c.entries[namespace]; entries != nil {
+		delete(entries, key)
+	}
+}
+
+// Clear removes all entries from namespace.
+func (c *Cache) Clear(namespace string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.cleanup(time.Now())
+	delete(c.entries, namespace)
+}
+
+func (c *Cache) cleanup(now time.Time) {
+	for namespace, entries := range c.entries {
+		for key, item := range entries {
+			if !now.Before(item.expiresAt) {
+				delete(entries, key)
+			}
+		}
+		if len(entries) == 0 {
+			delete(c.entries, namespace)
+		}
+	}
+}
