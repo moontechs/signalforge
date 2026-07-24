@@ -21,17 +21,17 @@
 
 ### Task 3: Add comprehensive tests
 
-- [ ] Add `internal/cache/cache_test.go` with proper package name `cache_test` (external test package).
-- [ ] Test: New with valid config returns no error.
-- [ ] Test: New with invalid namespace returns error.
-- [ ] Test: New with zero/negative TTL returns error.
-- [ ] Test: Set + Get returns stored value within TTL.
-- [ ] Test: Get returns nil+false for missing key.
-- [ ] Test: Get returns nil+false for expired entry (use short TTL + time.Sleep or time-based mock).
-- [ ] Test: Identical keys in different namespaces return independent values.
-- [ ] Test: Delete removes only the specified key.
-- [ ] Test: Clear removes all entries from one namespace, leaves others intact.
-- [ ] Test: Concurrent access with goroutines and race detector.
+- [x] Add `internal/cache/cache_test.go` with proper package name `cache_test` (external test package).
+- [x] Test: New with valid config returns no error.
+- [x] Test: New with invalid namespace returns error.
+- [x] Test: New with zero/negative TTL returns error.
+- [x] Test: Set + Get returns stored value within TTL.
+- [x] Test: Get returns nil+false for missing key.
+- [x] Test: Get returns nil+false for expired entry (use short TTL + time.Sleep or time-based mock).
+- [x] Test: Identical keys in different namespaces return independent values.
+- [x] Test: Delete removes only the specified key.
+- [x] Test: Clear removes all entries from one namespace, leaves others intact.
+- [x] Test: Concurrent access with goroutines and race detector.
 
 ## Validation Commands
 

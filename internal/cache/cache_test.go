@@ -1,4 +1,4 @@
-package cache
+package cache_test
 
 import (
 	"os"
@@ -7,18 +7,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/moontechs/signalforge/internal/cache"
 	"github.com/moontechs/signalforge/internal/storage"
 )
 
-func testCache(t *testing.T, namespace string) *Cache {
+func testCache(t *testing.T, namespace string) *cache.Cache {
 	t.Helper()
-	return NewCache(storage.New(t.TempDir()), namespace)
+	return cache.NewCache(storage.New(t.TempDir()), namespace)
 }
 
 func TestCacheRoundTripExpiryAndCopy(t *testing.T) {
 	c := testCache(t, "tests")
 	stored := time.Now().Add(-time.Millisecond)
-	if err := c.Set("key", CacheEntry{Body: []byte("body"), TTL: time.Hour, StoredAt: stored}); err != nil {
+	if err := c.Set("key", cache.CacheEntry{Body: []byte("body"), TTL: time.Hour, StoredAt: stored}); err != nil {
 		t.Fatal(err)
 	}
 	body, ok := c.Get("key")
@@ -30,13 +31,13 @@ func TestCacheRoundTripExpiryAndCopy(t *testing.T) {
 	if string(body) != "body" {
 		t.Fatal("Get did not return a defensive copy")
 	}
-	if err := c.Set("zero", CacheEntry{Body: []byte("x"), TTL: time.Hour}); err != nil {
+	if err := c.Set("zero", cache.CacheEntry{Body: []byte("x"), TTL: time.Hour}); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := c.Get("zero"); !ok {
 		t.Fatal("zero StoredAt entry was not readable")
 	}
-	if err := c.Set("old", CacheEntry{Body: []byte("x"), TTL: time.Millisecond, StoredAt: time.Now().Add(-time.Hour)}); err != nil {
+	if err := c.Set("old", cache.CacheEntry{Body: []byte("x"), TTL: time.Millisecond, StoredAt: time.Now().Add(-time.Hour)}); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := c.Get("old"); ok {
@@ -46,11 +47,11 @@ func TestCacheRoundTripExpiryAndCopy(t *testing.T) {
 
 func TestCacheDeleteNamespacesAndHashedKeys(t *testing.T) {
 	root := t.TempDir()
-	a, b := NewCache(storage.New(root), "one"), NewCache(storage.New(root), "two")
-	if err := a.Set("same", CacheEntry{Body: []byte("a"), TTL: time.Hour}); err != nil {
+	a, b := cache.NewCache(storage.New(root), "one"), cache.NewCache(storage.New(root), "two")
+	if err := a.Set("same", cache.CacheEntry{Body: []byte("a"), TTL: time.Hour}); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Set("same", CacheEntry{Body: []byte("b"), TTL: time.Hour}); err != nil {
+	if err := b.Set("same", cache.CacheEntry{Body: []byte("b"), TTL: time.Hour}); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ := b.Get("same"); string(got) != "b" {
@@ -81,14 +82,14 @@ func TestCacheValidationAndConcurrency(t *testing.T) {
 					t.Errorf("namespace %q did not panic", ns)
 				}
 			}()
-			NewCache(storage.New(t.TempDir()), ns)
+			cache.NewCache(storage.New(t.TempDir()), ns)
 		}()
 	}
 	c := testCache(t, "concurrent")
-	if err := c.Set("", CacheEntry{TTL: time.Hour}); err == nil {
+	if err := c.Set("", cache.CacheEntry{TTL: time.Hour}); err == nil {
 		t.Fatal("empty key accepted")
 	}
-	if err := c.Set("bad", CacheEntry{TTL: 0}); err == nil {
+	if err := c.Set("bad", cache.CacheEntry{TTL: 0}); err == nil {
 		t.Fatal("invalid TTL accepted")
 	}
 	var wg sync.WaitGroup
@@ -97,7 +98,7 @@ func TestCacheValidationAndConcurrency(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for j := 0; j < 20; j++ {
-				_ = c.Set("k", CacheEntry{Body: []byte("v"), TTL: time.Hour})
+				_ = c.Set("k", cache.CacheEntry{Body: []byte("v"), TTL: time.Hour})
 				c.Get("k")
 				_ = c.Delete("k")
 			}
