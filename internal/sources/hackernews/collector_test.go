@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/moontechs/signalforge/internal/cache"
 	"github.com/moontechs/signalforge/internal/domain"
 	"github.com/moontechs/signalforge/internal/storage"
 )
@@ -496,7 +497,7 @@ func TestCollector_cachedRepeat(t *testing.T) {
 		MinimumScore:       0,
 		MaxRequests:        100,
 	}, fake)
-	c.WithCache(store)
+	c.WithCache(cache.NewCache(store, "hackernews"))
 
 	// First call: 2 requests (1 feed + 1 item).
 	signals1, err := c.Collect(context.Background(), domain.CollectRequest{})

@@ -12,6 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/moontechs/signalforge/internal/cache"
 	"github.com/moontechs/signalforge/internal/config"
 	"github.com/moontechs/signalforge/internal/domain"
 	"github.com/moontechs/signalforge/internal/memory"
@@ -693,7 +694,7 @@ func buildCollector(source string, cfg *config.Config, store *storage.Storage) (
 			return nil, fmt.Errorf("create hackernews collector: %w", err)
 		}
 
-		collector.WithCache(store)
+		collector.WithCache(cache.NewCache(store, "hackernews"))
 		return collector, nil
 
 	case "stackexchange":

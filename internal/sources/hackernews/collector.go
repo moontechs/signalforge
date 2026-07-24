@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/moontechs/signalforge/internal/cache"
 	"github.com/moontechs/signalforge/internal/domain"
-	"github.com/moontechs/signalforge/internal/storage"
 )
 
 // Collector implements domain.SourceCollector for Hacker News.
@@ -77,8 +77,8 @@ func (c *Collector) WithNow(now func() time.Time) *Collector {
 }
 
 // WithCache attaches an on-disk response cache.
-func (c *Collector) WithCache(store *storage.Storage) *Collector {
-	c.client.WithCache(store)
+func (c *Collector) WithCache(value *cache.Cache) *Collector {
+	c.client.WithCache(value)
 	return c
 }
 

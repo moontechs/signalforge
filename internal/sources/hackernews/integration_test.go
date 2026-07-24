@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/moontechs/signalforge/internal/cache"
 	"github.com/moontechs/signalforge/internal/domain"
 	"github.com/moontechs/signalforge/internal/storage"
 )
@@ -227,7 +228,7 @@ func TestIntegration_withCache(t *testing.T) {
 		MinimumScore:       5,
 		MaxRequests:        100,
 	}, fixture.fake)
-	c.WithCache(fixture.store)
+	c.WithCache(cache.NewCache(fixture.store, "hackernews"))
 
 	// First collection: should use HTTP for everything.
 	signals1, err := c.Collect(context.Background(), domain.CollectRequest{})

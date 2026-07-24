@@ -41,12 +41,12 @@
 
 ### Task 4: Migrate Hacker News inline cache usage
 
-- [ ] Replace HN's `WithCache(s *storage.Storage)` with `WithCache(c *cache.Cache)` — accept a shared cache instance instead of raw storage.
-- [ ] Wire the shared cache into HN client/collector initialization with `cache.NewCache(store, "hackernews")`.
-- [ ] Replace HN’s local `cached()` reads with shared-cache `Get` calls while preserving current cache-key inputs and cache-hit statistics.
-- [ ] Replace HN’s local `save()` writes with shared-cache `Set` calls, preserving the existing feed and item TTL policy.
-- [ ] Remove obsolete HN cache-path, serialization, `cached()`, and `save()` code once all call sites use `internal/cache`.
-- [ ] Update HN tests to assert the existing caching behavior through the shared module without changing request/cache-hit semantics.
+- [x] Replace HN's `WithCache(s *storage.Storage)` with `WithCache(c *cache.Cache)` — accept a shared cache instance instead of raw storage.
+- [x] Wire the shared cache into HN client/collector initialization with `cache.NewCache(store, "hackernews")`.
+- [x] Replace HN's local `cached()` reads with shared-cache `Get` calls while preserving current cache-key inputs and cache-hit statistics.
+- [x] Replace HN's local `save()` writes with shared-cache `Set` calls, preserving the existing feed and item TTL policy.
+- [x] Remove obsolete HN cache-path, serialization, `cached()`, and `save()` code once all call sites use `internal/cache`.
+- [x] Update HN tests to assert the existing caching behavior through the shared module without changing request/cache-hit semantics.
 
 ### Task 5: Migrate Stack Exchange inline cache usage
 
