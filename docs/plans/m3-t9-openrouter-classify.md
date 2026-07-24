@@ -60,7 +60,7 @@
 
 ### Task 4: Implement classification engine
 
-- [ ] Create `internal/classify/classify.go`:
+- [x] Create `internal/classify/classify.go`:
   - `type Config struct { Model string; BatchSize int; Temperature float64; MaxTokens int; PromptPath string }`
   - `type Classifier struct { client domain.LLMClient; cfg Config }`
   - `func New(client domain.LLMClient, cfg Config) *Classifier`
@@ -73,7 +73,7 @@
   - Set `ID = storage.GenerateID("ps")`, `RawSignalID`, `Source`, `URL`, `ClassificationModel`, `ClassifiedAt = time.Now()`
   - Non-problem signals: `IsProblemSignal: false` (still saved so not re-classified)
   - Partial failure: log error, continue to next signal, return failures list
-- [ ] Create `internal/classify/classify_test.go`:
+- [x] Create `internal/classify/classify_test.go`:
   - Test prompt rendering with fake raw signal
   - Test full field mapping (valid JSON → ProblemSignal)
   - Test noise mapping (is_problem_signal=false)
