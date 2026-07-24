@@ -175,8 +175,8 @@ A prompt template that asks the LLM whether two problem descriptions describe th
 - [x] Tests should cover all edge cases: empty, single, identical, different, boundary
 
 ### Task 4: Create CLI command
-- [ ] Create `internal/cli/cluster.go` with the cluster command
-- [ ] Wire the command into `cmd/signalforge/main.go`
+- [x] Create `internal/cli/cluster.go` with the cluster command
+- [x] Wire the command into `cmd/signalforge/main.go`
 
 ### Task 5: Verify everything compiles and tests pass
 - [ ] `go build ./...`
