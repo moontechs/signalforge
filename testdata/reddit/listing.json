@@ -1,0 +1,45 @@
+{
+  "kind": "Listing",
+  "data": {
+    "after": "t3_post3",
+    "dist": 2,
+    "children": [
+      {
+        "kind": "t3",
+        "data": {
+          "id": "abc123",
+          "name": "t3_abc123",
+          "title": "Test Post One: Learning Go in 2025",
+          "selftext": "I have been trying to learn Go for the past month. The standard library is amazing but the error handling can be verbose. Any tips?",
+          "permalink": "/r/golang/comments/abc123/test_post_one_learning_go_in_2025/",
+          "subreddit": "golang",
+          "author": "gopher_user",
+          "score": 150,
+          "num_comments": 42,
+          "created_utc": 1700000000.0,
+          "url": "https://www.reddit.com/r/golang/comments/abc123/test_post_one_learning_go_in_2025/",
+          "stickied": false,
+          "over_18": false
+        }
+      },
+      {
+        "kind": "t3",
+        "data": {
+          "id": "def456",
+          "name": "t3_def456",
+          "title": "Show HN: My new CLI tool for data processing",
+          "selftext": "",
+          "permalink": "/r/golang/comments/def456/show_hn_my_new_cli_tool_for_data_processing/",
+          "subreddit": "golang",
+          "author": "cli_master",
+          "score": 89,
+          "num_comments": 15,
+          "created_utc": 1700010000.0,
+          "url": "https://github.com/example/cli-tool",
+          "stickied": false,
+          "over_18": false
+        }
+      }
+    ]
+  }
+}

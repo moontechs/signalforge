@@ -18,6 +18,7 @@ import (
 	"github.com/moontechs/signalforge/internal/memory"
 	"github.com/moontechs/signalforge/internal/sources/github"
 	"github.com/moontechs/signalforge/internal/sources/hackernews"
+	"github.com/moontechs/signalforge/internal/sources/reddit"
 	"github.com/moontechs/signalforge/internal/sources/stackexchange"
 	"github.com/moontechs/signalforge/internal/storage"
 )
@@ -31,11 +32,15 @@ func newCollectCmd() *cobra.Command {
 		Short: "Collect raw signals from configured sources",
 		Long: `Collects raw signals from public sources and stores them in the SignalForge data directory.
 
-For the current MVP CLI flow, GitHub, Hacker News, and Stack Exchange collection are wired end-to-end.
+For the current MVP CLI flow, GitHub, Hacker News, Stack Exchange, and Reddit collection are wired end-to-end.
+
+Reddit is opt-in (disabled by default) and requires REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET environment variables.
 
 Example:
   signalforge collect --sources github --since 30d
-  signalforge collect --sources stackexchange --since 30d`,
+  signalforge collect --sources stackexchange --since 30d
+  signalforge collect --sources reddit --since 30d
+  signalforge collect --sources github,hackernews,stackexchange,reddit --since 7d`,
 		RunE: runCollect,
 	}
 
@@ -169,10 +174,10 @@ func setupCollectEnv(sourceFlag, sinceFlag, untilFlag string, maxItems int, lang
 }
 
 // sourceOrder defines the deterministic execution order for collectors.
-var sourceOrder = []string{"github", "hackernews", "stackexchange"}
+var sourceOrder = []string{"github", "hackernews", "stackexchange", "reddit"}
 
 // orderSourcesDeterministically reorders the given source names to the fixed
-// order: GitHub, Hacker News, Stack Exchange. Sources not in the known set
+// order: GitHub, Hacker News, Stack Exchange, Reddit. Sources not in the known set
 // are appended at the end in their original relative order.
 func orderSourcesDeterministically(sources []string) []string {
 	requested := make(map[string]bool, len(sources))
@@ -251,6 +256,9 @@ func buildDryRunPlans(env *collectEnv, cfg *config.Config) []dryRunPlan {
 		case "stackexchange":
 			plan.Targets = buildSETargets(cfg)
 			plan.EstimatedReqs = estimateSERequests(cfg, env)
+		case "reddit":
+			plan.Targets = buildRedditTargets(cfg)
+			plan.EstimatedReqs = estimateRedditRequests(cfg, env)
 		default:
 			plan.Targets = []string{src}
 			plan.EstimatedReqs = 1
@@ -331,6 +339,35 @@ func estimateHNRequests(cfg *config.Config, env *collectEnv) int {
 	if cfg.Sources.HackerNews.MaxCommentsPerItem > 0 {
 		total += maxItems
 	}
+	if total < 1 {
+		total = 1
+	}
+	return total
+}
+
+func buildRedditTargets(cfg *config.Config) []string {
+	subreddits := cfg.Sources.Reddit.Subreddits
+	if len(subreddits) == 0 {
+		return []string{"default subreddit"}
+	}
+	targets := make([]string, len(subreddits))
+	for i, s := range subreddits {
+		targets[i] = "subreddit: " + s
+	}
+	return targets
+}
+
+func estimateRedditRequests(cfg *config.Config, env *collectEnv) int {
+	subreddits := len(cfg.Sources.Reddit.Subreddits)
+	if subreddits == 0 {
+		subreddits = 1
+	}
+	maxPosts := cfg.Sources.Reddit.MaxPostsPerRun
+	if env.maxItems > 0 && env.maxItems < maxPosts {
+		maxPosts = env.maxItems
+	}
+	// 1 OAuth token request + (subreddits * listing requests) + (maxPosts * comment requests).
+	total := 1 + subreddits + maxPosts
 	if total < 1 {
 		total = 1
 	}
@@ -518,7 +555,7 @@ func deduplicateSignals(signals []domain.RawSignal, env *collectEnv) []domain.Ra
 	return filtered
 }
 
-// trackCollectorStats records HN or Stack Exchange request/cache-hit stats into memory.
+// trackCollectorStats records HN, Stack Exchange, or Reddit request/cache-hit stats into memory.
 func trackCollectorStats(env *collectEnv, collector domain.SourceCollector) {
 	if hnCol, ok := collector.(*hackernews.Collector); ok {
 		stats := hnCol.Stats()
@@ -529,6 +566,11 @@ func trackCollectorStats(env *collectEnv, collector domain.SourceCollector) {
 		stats := seCol.Stats()
 		env.mem.AddStackExchangeRequests(stats.Requests)
 		env.mem.AddStackExchangeCacheHits(stats.CacheHits)
+	}
+	if rdCol, ok := collector.(*reddit.Collector); ok {
+		stats := rdCol.Stats()
+		env.mem.AddRedditRequests(stats.Requests)
+		env.mem.AddRedditCacheHits(stats.CacheHits)
 	}
 }
 
@@ -715,6 +757,37 @@ func buildCollector(source string, cfg *config.Config, store *storage.Storage) (
 		}
 		collector := stackexchange.New(seCfg, nil)
 		collector.WithCache(cache.NewCache(store, "stackexchange"))
+		return collector, nil
+
+	case "reddit":
+		if !cfg.Sources.Reddit.Enabled {
+			return nil, errors.New("reddit collection is disabled in config")
+		}
+		clientID := strings.TrimSpace(os.Getenv("REDDIT_CLIENT_ID"))
+		clientSecret := strings.TrimSpace(os.Getenv("REDDIT_CLIENT_SECRET"))
+		if clientID == "" {
+			return nil, errors.New("REDDIT_CLIENT_ID is required for reddit collection")
+		}
+		if clientSecret == "" {
+			return nil, errors.New("REDDIT_CLIENT_SECRET is required for reddit collection")
+		}
+
+		rCfg := &reddit.ConfigValues{
+			Enabled:            cfg.Sources.Reddit.Enabled,
+			Subreddits:         cfg.Sources.Reddit.Subreddits,
+			MaxPostsPerRun:     cfg.Sources.Reddit.MaxPostsPerRun,
+			MaxCommentsPerPost: cfg.Sources.Reddit.MaxCommentsPerPost,
+			Sort:               cfg.Sources.Reddit.Sort,
+			Time:               cfg.Sources.Reddit.Time,
+			MaxRequests:        cfg.Limits.MaxRedditRequests,
+		}
+
+		collector, err := reddit.New(rCfg, clientID, clientSecret)
+		if err != nil {
+			return nil, fmt.Errorf("create reddit collector: %w", err)
+		}
+
+		collector.WithCache(cache.NewCache(store, "reddit"))
 		return collector, nil
 
 	default:

@@ -1,0 +1,101 @@
+[
+  {
+    "kind": "Listing",
+    "data": {
+      "children": [
+        {
+          "kind": "t3",
+          "data": {
+            "id": "nested1",
+            "name": "t3_nested1",
+            "title": "Deeply nested test",
+            "selftext": "Testing deep nesting.",
+            "permalink": "/r/test/comments/nested1/deeply_nested/",
+            "subreddit": "test",
+            "author": "depth_tester",
+            "score": 20,
+            "num_comments": 6,
+            "created_utc": 1700040000.0,
+            "stickied": false,
+            "over_18": false
+          }
+        }
+      ]
+    }
+  },
+  {
+    "kind": "Listing",
+    "data": {
+      "children": [
+        {
+          "kind": "t1",
+          "data": {
+            "id": "n1",
+            "name": "t1_n1",
+            "body": "Level 1 comment.",
+            "author": "user_a",
+            "score": 10,
+            "created_utc": 1700040100.0,
+            "parent_id": "t3_nested1",
+            "link_id": "t3_nested1",
+            "replies": {
+              "kind": "Listing",
+              "data": {
+                "children": [
+                  {
+                    "kind": "t1",
+                    "data": {
+                      "id": "n1_1",
+                      "name": "t1_n1_1",
+                      "body": "Level 2 reply.",
+                      "author": "user_b",
+                      "score": 5,
+                      "created_utc": 1700040200.0,
+                      "parent_id": "t1_n1",
+                      "link_id": "t3_nested1",
+                      "replies": {
+                        "kind": "Listing",
+                        "data": {
+                          "children": [
+                            {
+                              "kind": "t1",
+                              "data": {
+                                "id": "n1_1_1",
+                                "name": "t1_n1_1_1",
+                                "body": "Level 3 reply.",
+                                "author": "user_c",
+                                "score": 3,
+                                "created_utc": 1700040300.0,
+                                "parent_id": "t1_n1_1",
+                                "link_id": "t3_nested1",
+                                "stickied": false
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "kind": "t1",
+                    "data": {
+                      "id": "n1_2",
+                      "name": "t1_n1_2",
+                      "body": "Another level 2 reply.",
+                      "author": "user_d",
+                      "score": 2,
+                      "created_utc": 1700040400.0,
+                      "parent_id": "t1_n1",
+                      "link_id": "t3_nested1",
+                      "stickied": false
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+]

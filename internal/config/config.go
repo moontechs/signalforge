@@ -142,12 +142,78 @@ func IsValidStackExchangeSite(site string) bool {
 	return ok
 }
 
+// ValidRedditSortValues returns the supported Reddit listing sort values.
+func ValidRedditSortValues() []string {
+	return []string{"hot", "new", "top", "rising"}
+}
+
+// ValidRedditTimeValues returns the supported Reddit time filter values.
+func ValidRedditTimeValues() []string {
+	return []string{"hour", "day", "week", "month", "year", "all"}
+}
+
+// IsValidRedditSort checks if a sort value is in the supported set.
+func IsValidRedditSort(sort string) bool {
+	for _, valid := range ValidRedditSortValues() {
+		if strings.EqualFold(sort, valid) {
+			return true
+		}
+	}
+	return false
+}
+
+// IsValidRedditTime checks if a time filter value is in the supported set.
+func IsValidRedditTime(time string) bool {
+	for _, valid := range ValidRedditTimeValues() {
+		if strings.EqualFold(time, valid) {
+			return true
+		}
+	}
+	return false
+}
+
 // RedditConfig holds Reddit-specific configuration.
 type RedditConfig struct {
 	Enabled            bool     `json:"enabled"`
 	Subreddits         []string `json:"subreddits"`
 	MaxPostsPerRun     int      `json:"max_posts_per_run"`
 	MaxCommentsPerPost int      `json:"max_comments_per_post"`
+	Sort               string   `json:"sort"`
+	Time               string   `json:"time"`
+}
+
+// Validate checks the Reddit collector configuration.
+func (c *RedditConfig) Validate() error {
+	if !c.Enabled {
+		return nil
+	}
+	if len(c.Subreddits) == 0 {
+		return errors.New("at least one subreddit must be specified")
+	}
+	for _, sub := range c.Subreddits {
+		if strings.TrimSpace(sub) == "" {
+			return errors.New("subreddits must not contain empty values")
+		}
+	}
+	if c.MaxPostsPerRun <= 0 {
+		return errors.New("max_posts_per_run must be greater than zero")
+	}
+	if c.MaxCommentsPerPost < 0 {
+		return errors.New("max_comments_per_post must be zero or greater")
+	}
+	if c.Sort == "" {
+		return errors.New("sort must not be empty")
+	}
+	if !IsValidRedditSort(c.Sort) {
+		return fmt.Errorf("unsupported sort %q: must be one of %v", c.Sort, ValidRedditSortValues())
+	}
+	if c.Time == "" {
+		return errors.New("time must not be empty")
+	}
+	if !IsValidRedditTime(c.Time) {
+		return fmt.Errorf("unsupported time %q: must be one of %v", c.Time, ValidRedditTimeValues())
+	}
+	return nil
 }
 
 // BrightDataConfig holds Bright Data-specific configuration.
@@ -241,6 +307,8 @@ func DefaultConfig() *Config {
 				Subreddits:         []string{},
 				MaxPostsPerRun:     200,
 				MaxCommentsPerPost: 20,
+				Sort:               "new",
+				Time:               "week",
 			},
 		},
 		BrightData: BrightDataConfig{
@@ -323,6 +391,9 @@ func (c *Config) Validate() error {
 	}
 	if err := c.Sources.StackExchange.Validate(); err != nil {
 		return fmt.Errorf("validate stackexchange config: %w", err)
+	}
+	if err := c.Sources.Reddit.Validate(); err != nil {
+		return fmt.Errorf("validate reddit config: %w", err)
 	}
 	return nil
 }

@@ -1,0 +1,97 @@
+[
+  {
+    "kind": "Listing",
+    "data": {
+      "children": [
+        {
+          "kind": "t3",
+          "data": {
+            "id": "def456",
+            "name": "t3_def456",
+            "title": "Post with deleted comments",
+            "selftext": "Testing deleted comment handling.",
+            "permalink": "/r/test/comments/def456/post_with_deleted/",
+            "subreddit": "test",
+            "author": "tester",
+            "score": 10,
+            "num_comments": 5,
+            "created_utc": 1700020000.0,
+            "stickied": false,
+            "over_18": false
+          }
+        }
+      ]
+    }
+  },
+  {
+    "kind": "Listing",
+    "data": {
+      "children": [
+        {
+          "kind": "t1",
+          "data": {
+            "id": "d1",
+            "name": "t1_d1",
+            "body": "This is a normal comment.",
+            "author": "user1",
+            "score": 5,
+            "created_utc": 1700020100.0,
+            "parent_id": "t3_def456",
+            "link_id": "t3_def456",
+            "stickied": false
+          }
+        },
+        {
+          "kind": "t1",
+          "data": {
+            "id": "d2",
+            "name": "t1_d2",
+            "body": "[deleted]",
+            "author": "[deleted]",
+            "score": 3,
+            "created_utc": 1700020200.0,
+            "parent_id": "t3_def456",
+            "link_id": "t3_def456",
+            "stickied": false
+          }
+        },
+        {
+          "kind": "t1",
+          "data": {
+            "id": "d3",
+            "name": "t1_d3",
+            "body": "[removed]",
+            "author": "[deleted]",
+            "score": 1,
+            "created_utc": 1700020300.0,
+            "parent_id": "t3_def456",
+            "link_id": "t3_def456",
+            "stickied": false
+          }
+        },
+        {
+          "kind": "t1",
+          "data": {
+            "id": "d4",
+            "name": "t1_d4",
+            "body": "",
+            "author": "empty_user",
+            "score": 0,
+            "created_utc": 1700020400.0,
+            "parent_id": "t3_def456",
+            "link_id": "t3_def456",
+            "stickied": false
+          }
+        },
+        {
+          "kind": "more",
+          "data": {
+            "count": 1,
+            "parent_id": "t3_def456",
+            "children": ["d5"]
+          }
+        }
+      ]
+    }
+  }
+]

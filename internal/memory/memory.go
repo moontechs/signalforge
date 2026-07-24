@@ -299,6 +299,28 @@ func (m *DefaultMemory) AddStackExchangeCacheHits(count int) {
 	m.mem.Stats.StackExchangeCacheHits += count
 }
 
+// AddRedditRequests increments the Reddit request count.
+func (m *DefaultMemory) AddRedditRequests(count int) {
+	if count <= 0 {
+		return
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.mem.Stats.RedditRequests += count
+}
+
+// AddRedditCacheHits increments the Reddit cache hit count.
+func (m *DefaultMemory) AddRedditCacheHits(count int) {
+	if count <= 0 {
+		return
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.mem.Stats.RedditCacheHits += count
+}
+
 // GetMemory returns the full memory struct (for serialization).
 func (m *DefaultMemory) GetMemory() *domain.Memory {
 	m.mu.RLock()
