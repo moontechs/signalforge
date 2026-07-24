@@ -83,7 +83,7 @@
 
 ### Task 5: Implement CLI classify command
 
-- [ ] Create `internal/cli/classify.go`:
+- [x] Create `internal/cli/classify.go`:
   - `ClassifyCmd` with `Use: "classify"`, `Short: "Classify raw signals using LLM"`
   - Flags: `--limit` (0 = all), `--batch-size` (default from config), `--model` (override), `--resume`, `--force`, `--dry-run`
   - `runClassify(cmd, args)`:
@@ -99,11 +99,11 @@
     10. Update memory stats (LLMRequests, ProblemSignalsFound, NoiseSignals)
     11. Save memory atomically
     12. Print summary: N classified, M failures, K noise
-- [ ] Add CLI tests: use temp `SIGNALFORGE_HOME`, inject fake client, test dry-run, force, limit, partial failures
+- [x] Add CLI tests: use temp `SIGNALFORGE_HOME`, inject fake client, test dry-run, force, limit, partial failures
 
 ### Task 6: Wire command, push, PR, and verify
 
-- [ ] Modify `cmd/signalforge/main.go` — add `cli.ClassifyCmd` to `init()` alongside existing commands
+- [x] Modify `cmd/signalforge/main.go` — add `cli.ClassifyCmd` to `init()` alongside existing commands
 - [ ] Create GitHub issue for M3-T9 from kanban task
 - [ ] Verify: `signalforge classify --help` shows all flags
 - [ ] Push branch: `git push -u origin HEAD`
