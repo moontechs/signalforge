@@ -27,12 +27,12 @@
 
 ### Task 3: Parse Reddit listings and comment trees into raw signals
 
-- [ ] Create `internal/sources/reddit/parser.go` to convert Reddit listing children (`kind: "t3"`) into `domain.RawSignal` values with stable IDs such as `reddit:<post-id>`.
-- [ ] Map each post’s permalink into an absolute `https://www.reddit.com/...` URL, title, selftext body, subreddit community, score, comment count, author/subreddit metadata, UTC creation time, collection time, and deterministic content hash using `storage.ContentHash`.
-- [ ] Use a source type consistent with Hacker News (`discussion`), and distinguish the configured listing sort in metadata or category only if it is stable and useful to downstream consumers.
-- [ ] Parse `/comments/{post-id}.json` listing responses, recursively flatten comment nodes (`kind: "t1"`) in deterministic order, skip deleted/removed/empty bodies and `more` placeholders, and stop at `MaxCommentsPerPost`.
-- [ ] Map retained comments to `domain.Comment` with Reddit comment ID, body, score, and UTC creation time; include safe parent/depth metadata conventions only where supported by the existing `RawSignal.Metadata` shape.
-- [ ] Add parser tests using `testdata/reddit/` fixtures for post mapping, permalink construction, Unicode/escaped content, deleted/removed nodes, nested replies, `more` children, comment caps, timestamp conversion, metadata, and content-hash stability. Create `testdata/reddit/` directory with sample JSON fixtures.
+- [x] Create `internal/sources/reddit/parser.go` to convert Reddit listing children (`kind: "t3"`) into `domain.RawSignal` values with stable IDs such as `reddit:<post-id>`.
+- [x] Map each post's permalink into an absolute `https://www.reddit.com/...` URL, title, selftext body, subreddit community, score, comment count, author/subreddit metadata, UTC creation time, collection time, and deterministic content hash using `storage.ContentHash`.
+- [x] Use a source type consistent with Hacker News (`discussion`), and distinguish the configured listing sort in metadata or category only if it is stable and useful to downstream consumers.
+- [x] Parse `/comments/{post-id}.json` listing responses, recursively flatten comment nodes (`kind: "t1"`) in deterministic order, skip deleted/removed/empty bodies and `more` placeholders, and stop at `MaxCommentsPerPost`.
+- [x] Map retained comments to `domain.Comment` with Reddit comment ID, body, score, and UTC creation time; include safe parent/depth metadata conventions only where supported by the existing `RawSignal.Metadata` shape.
+- [x] Add parser tests using `testdata/reddit/` fixtures for post mapping, permalink construction, Unicode/escaped content, deleted/removed nodes, nested replies, `more` children, comment caps, timestamp conversion, metadata, and content-hash stability. Create `testdata/reddit/` directory with sample JSON fixtures.
 
 ### Task 4: Implement collector orchestration
 
