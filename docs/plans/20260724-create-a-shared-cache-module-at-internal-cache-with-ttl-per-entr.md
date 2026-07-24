@@ -50,12 +50,12 @@
 
 ### Task 5: Migrate Stack Exchange inline cache usage
 
-- [ ] Replace SE's `WithCache(s *storage.Storage)` with `WithCache(c *cache.Cache)` — accept a shared cache instance instead of raw storage.
-- [ ] Wire the shared cache into SE client/collector initialization with `cache.NewCache(store, "stackexchange")`.
-- [ ] Replace Stack Exchange `cached()` and `save()` call sites with shared-cache `Get` and `Set`.
-- [ ] Preserve current Stack Exchange cache keys, TTL selection, response decoding, cache-hit accounting, and network fallback behavior.
-- [ ] Remove obsolete Stack Exchange cache helpers and source-local cache serialization/path code.
-- [ ] Update Stack Exchange tests to cover cache hits, expiry behavior, and source-specific namespace usage.
+- [x] Replace SE's `WithCache(s *storage.Storage)` with `WithCache(c *cache.Cache)` — accept a shared cache instance instead of raw storage.
+- [x] Wire the shared cache into SE client/collector initialization with `cache.NewCache(store, "stackexchange")`.
+- [x] Replace Stack Exchange `cached()` and `save()` call sites with shared-cache `Get` and `Set`.
+- [x] Preserve current Stack Exchange cache keys, TTL selection, response decoding, cache-hit accounting, and network fallback behavior.
+- [x] Remove obsolete Stack Exchange cache helpers and source-local cache serialization/path code.
+- [x] Update Stack Exchange tests to cover cache hits, expiry behavior, and source-specific namespace usage.
 
 ### Task 6: Validate integration and repository quality
 

@@ -32,6 +32,10 @@ type Cache struct {
 	prefix    string
 }
 
+// Storage returns the backing storage for components that share the cache's
+// data directory, such as persistent signal memory.
+func (c *Cache) Storage() *storage.Storage { return c.store }
+
 // NewCache creates a cache for namespace. Invalid namespaces panic because a
 // cache cannot function safely without a valid, isolated storage path.
 func NewCache(store *storage.Storage, namespace string) *Cache {

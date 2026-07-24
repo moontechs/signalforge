@@ -714,7 +714,7 @@ func buildCollector(source string, cfg *config.Config, store *storage.Storage) (
 			MaxRequests:     cfg.Limits.MaxStackExchangeReqs,
 		}
 		collector := stackexchange.New(seCfg, nil)
-		collector.WithCache(store)
+		collector.WithCache(cache.NewCache(store, "stackexchange"))
 		return collector, nil
 
 	default:
