@@ -50,6 +50,8 @@ func init() {
 	rootCmd.AddCommand(cli.DiscoverCmd)
 	rootCmd.AddCommand(cli.ClassifyCmd)
 	rootCmd.AddCommand(cli.ClusterCmd)
+	rootCmd.AddCommand(cli.RankCmd)
+	rootCmd.AddCommand(cli.PipelineCmd)
 }
 
 func main() {
