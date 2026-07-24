@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/moontechs/signalforge/internal/cache"
 	"github.com/moontechs/signalforge/internal/domain"
 	"github.com/moontechs/signalforge/internal/memory"
-	"github.com/moontechs/signalforge/internal/storage"
 )
 
 // Collector fetches questions from configured Stack Exchange sites.
@@ -37,7 +37,7 @@ func (c *Collector) Name() string { return SourceName }
 func (c *Collector) WithTransport(t transport) *Collector { c.client.transport = t; return c }
 
 // WithCache attaches response caching and persistent signal memory.
-func (c *Collector) WithCache(store *storage.Storage) *Collector { c.client.WithCache(store); return c }
+func (c *Collector) WithCache(value *cache.Cache) *Collector { c.client.WithCache(value); return c }
 
 // Stats returns this collector's most recent run counters.
 func (c *Collector) Stats() Stats { return c.stats }
@@ -129,8 +129,8 @@ func (c *Collector) Collect(ctx context.Context, req domain.CollectRequest) ([]d
 		maxPages = 1
 	}
 	var mem *memory.DefaultMemory
-	if c.client.store != nil {
-		mem = memory.New(c.client.store)
+	if c.client.cache != nil {
+		mem = memory.New(c.client.cache.Storage())
 		_ = mem.Load()
 	}
 	var signals []domain.RawSignal

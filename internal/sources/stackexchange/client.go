@@ -2,8 +2,6 @@ package stackexchange
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,13 +9,12 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/moontechs/signalforge/internal/storage"
+	"github.com/moontechs/signalforge/internal/cache"
 )
 
 // transport is the pluggable HTTP round-tripper for testability.
@@ -48,7 +45,7 @@ type client struct {
 	backoff               func(attempt int) time.Duration
 	mu                    sync.Mutex
 	requests, cacheHits   int
-	store                 *storage.Storage
+	cache                 *cache.Cache
 	forcedBackoff         time.Time
 }
 
@@ -111,8 +108,8 @@ func newClient(t transport, cfg *ConfigValues) *client {
 }
 
 // WithCache attaches an on-disk cache.
-func (c *client) WithCache(s *storage.Storage) {
-	c.store = s
+func (c *client) WithCache(value *cache.Cache) {
+	c.cache = value
 }
 
 // Stats returns the current request and cache-hit counters.
@@ -122,35 +119,25 @@ func (c *client) Stats() Stats {
 	return Stats{Requests: c.requests, CacheHits: c.cacheHits}
 }
 
-// cachePath returns the on-disk cache path for a given cache key.
-func (c *client) cachePath(key string) string {
-	sum := sha256.Sum256([]byte(key))
-	base := ""
-	if c.store != nil {
-		base = c.store.BaseDir()
-	}
-	return filepath.Join(base, "cache", "stackexchange", hex.EncodeToString(sum[:])+".json")
-}
-
 // cached retrieves a cached response. Returns (body, true) on fresh hit.
 func (c *client) cached(key string, ttl time.Duration) ([]byte, bool) {
-	if c.store == nil {
+	if c.cache == nil {
 		return nil, false
 	}
-	var e cachedResponse
-	if c.store.LoadJSON(c.cachePath(key), &e) != nil || time.Since(e.CollectedAt) >= ttl {
+	body, ok := c.cache.Get(key)
+	if !ok {
 		return nil, false
 	}
 	c.mu.Lock()
 	c.cacheHits++
 	c.mu.Unlock()
-	return e.Body, true
+	return body, true
 }
 
 // save persists a response body to the on-disk cache. Errors are non-fatal.
-func (c *client) save(key string, body []byte) {
-	if c.store != nil {
-		_ = c.store.SaveJSON(c.cachePath(key), cachedResponse{Body: body, CollectedAt: time.Now()})
+func (c *client) save(key string, body []byte, ttl time.Duration) {
+	if c.cache != nil {
+		_ = c.cache.Set(key, cache.CacheEntry{Body: body, TTL: ttl})
 	}
 }
 
@@ -187,7 +174,7 @@ func (c *client) readBody(resp *http.Response) ([]byte, error) {
 // process2xxResponse handles an HTTP 2xx response from the SE API.
 // It unmarshals the JSON, checks for API-level errors, applies forced backoff,
 // handles quota exhaustion, and caches the response body.
-func (c *client) process2xxResponse(body []byte, path string) (*apiResponse, error) {
+func (c *client) process2xxResponse(body []byte, path string, ttl time.Duration) (*apiResponse, error) {
 	var wrapper apiResponse
 	if err := json.Unmarshal(body, &wrapper); err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrMalformedResponse, err)
@@ -206,7 +193,7 @@ func (c *client) process2xxResponse(body []byte, path string) (*apiResponse, err
 	c.setForcedBackoff(wrapper.Backoff)
 
 	c.incrementRequests()
-	c.save(path, body)
+	c.save(path, body, ttl)
 
 	// Check quota exhaustion.
 	if wrapper.QuotaRemaining <= 0 {
@@ -269,7 +256,7 @@ func (c *client) get(ctx context.Context, path string, ttl time.Duration) (*apiR
 		}
 
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			return c.process2xxResponse(body, path)
+			return c.process2xxResponse(body, path, ttl)
 		}
 
 		lastErr = fmt.Errorf("status %d", resp.StatusCode)

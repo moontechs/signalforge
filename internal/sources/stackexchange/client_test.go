@@ -1,19 +1,15 @@
 package stackexchange
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/moontechs/signalforge/internal/cache"
 	"github.com/moontechs/signalforge/internal/storage"
 )
 
@@ -224,7 +220,7 @@ func TestClient_cacheHit(t *testing.T) {
 		fakeResponse{statusCode: 200, body: body})
 
 	c := testClient(fake)
-	c.WithCache(store)
+	c.WithCache(cache.NewCache(store, "stackexchange"))
 
 	// First call: HTTP, cache miss.
 	resp1, err := c.getQuestions(t.Context(), "stackoverflow", 0, 0, 1, 100)
@@ -261,17 +257,11 @@ func TestClient_cacheExpiration(t *testing.T) {
 	store := storage.New(dir)
 	fake := newFakeTransport()
 
-	// Compute cache path for this questions query.
 	path := "/questions?filter=withbody&order=desc&pagesize=100&site=stackoverflow&sort=creation"
-	sum := sha256.Sum256([]byte(path))
-	cacheFile := filepath.Join(dir, "cache", "stackexchange", hex.EncodeToString(sum[:])+".json")
 
 	// Pre-write expired cache (TTL for questions is 5 min, use 10 min old).
-	oldResp := cachedResponse{
-		Body:        []byte(`{"items":[{"question_id":99,"title":"Stale"}],"has_more":false,"quota_remaining":98}`),
-		CollectedAt: time.Now().Add(-10 * time.Minute),
-	}
-	if err := store.SaveJSON(cacheFile, oldResp); err != nil {
+	oldResp := cache.CacheEntry{Body: []byte(`{"items":[{"question_id":99,"title":"Stale"}],"has_more":false,"quota_remaining":98}`), TTL: 5 * time.Minute, StoredAt: time.Now().Add(-10 * time.Minute)}
+	if err := cache.NewCache(store, "stackexchange").Set(path, oldResp); err != nil {
 		t.Fatalf("pre-write cache: %v", err)
 	}
 
@@ -280,7 +270,7 @@ func TestClient_cacheExpiration(t *testing.T) {
 		fakeResponse{statusCode: 200, body: freshBody})
 
 	c := testClient(fake)
-	c.WithCache(store)
+	c.WithCache(cache.NewCache(store, "stackexchange"))
 
 	resp, err := c.getQuestions(t.Context(), "stackoverflow", 0, 0, 1, 100)
 	if err != nil {
@@ -662,27 +652,6 @@ func TestClient_questionsFromDateToDate(t *testing.T) {
 	}
 	if q.Get("todate") != "2000000" {
 		t.Fatalf("expected todate=2000000, got %q", q.Get("todate"))
-	}
-}
-
-// ---- JSON serialization round-trip for cachedResponse ----.
-
-func TestClient_cachedResponseJSON(t *testing.T) {
-	t.Parallel()
-	cr := cachedResponse{
-		Body:        []byte(`{"items":[]}`),
-		CollectedAt: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
-	}
-	data, err := json.Marshal(cr)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	var cr2 cachedResponse
-	if err := json.Unmarshal(data, &cr2); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if !bytes.Equal(cr2.Body, cr.Body) {
-		t.Fatalf("body mismatch: %q vs %q", string(cr2.Body), string(cr.Body))
 	}
 }
 

@@ -2,16 +2,14 @@ package hackernews
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/moontechs/signalforge/internal/cache"
 	"github.com/moontechs/signalforge/internal/storage"
 )
 
@@ -67,7 +65,7 @@ func TestClient_feed_cacheHit(t *testing.T) {
 	fake.addResponse(url, fakeResponse{statusCode: 200, body: body})
 
 	c := testClient(fake)
-	c.WithCache(store)
+	c.WithCache(cache.NewCache(store, "hackernews"))
 
 	// First call: cache miss, HTTP request.
 	ids1, err := c.feed(t.Context(), "newstories")
@@ -103,7 +101,7 @@ func TestClient_item_cacheHit(t *testing.T) {
 	fake.addResponse(url, fakeResponse{statusCode: 200, body: item})
 
 	c := testClient(fake)
-	c.WithCache(store)
+	c.WithCache(cache.NewCache(store, "hackernews"))
 
 	got1, err := c.item(t.Context(), 42)
 	if err != nil {
@@ -135,17 +133,9 @@ func TestClient_cacheExpiration(t *testing.T) {
 	store := storage.New(dir)
 	fake := newFakeTransport()
 
-	// Compute the cache path for this key.
 	key := "/newstories.json"
-	sum := sha256.Sum256([]byte(key))
-	cacheFile := filepath.Join(dir, "cache", "hackernews", hex.EncodeToString(sum[:])+".json")
-
-	// Pre-write an expired cached entry (10 minutes old, TTL is 5 minutes).
-	oldResp := cachedResponse{
-		Body:        []byte("[99,98,97]"),
-		CollectedAt: time.Now().Add(-10 * time.Minute),
-	}
-	if err := store.SaveJSON(cacheFile, oldResp); err != nil {
+	oldCache := cache.NewCache(store, "hackernews")
+	if err := oldCache.Set(key, cache.CacheEntry{Body: []byte("[99,98,97]"), TTL: 5 * time.Minute, StoredAt: time.Now().Add(-10 * time.Minute)}); err != nil {
 		t.Fatalf("pre-write cache: %v", err)
 	}
 
@@ -154,7 +144,7 @@ func TestClient_cacheExpiration(t *testing.T) {
 	fake.addResponse(url, fakeResponse{statusCode: 200, body: freshBody})
 
 	c := testClient(fake)
-	c.WithCache(store)
+	c.WithCache(oldCache)
 
 	// Cache is expired, should fetch fresh.
 	ids, err := c.feed(t.Context(), "newstories")
@@ -423,7 +413,7 @@ func TestClient_requestCountTrackingWithCache(t *testing.T) {
 	fake.addResponse(url, fakeResponse{statusCode: 200, body: `[1,2]`})
 
 	c := testClient(fake)
-	c.WithCache(store)
+	c.WithCache(cache.NewCache(store, "hackernews"))
 
 	// First call: 1 request, 0 cache hits.
 	_, _ = c.feed(t.Context(), "newstories")
@@ -602,7 +592,7 @@ func TestClient_statsAfterCacheHit(t *testing.T) {
 	fake.addResponse(url, fakeResponse{statusCode: 200, body: `{"id":42}`})
 
 	c := testClient(fake)
-	c.WithCache(store)
+	c.WithCache(cache.NewCache(store, "hackernews"))
 
 	_, _ = c.item(t.Context(), 42)
 	_, _ = c.item(t.Context(), 42)

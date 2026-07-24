@@ -107,12 +107,6 @@ type commentDTO struct {
 	Score        int      `json:"score"`
 }
 
-// cachedResponse stores a response body and its collection timestamp for caching.
-type cachedResponse struct {
-	Body        []byte    `json:"body"`
-	CollectedAt time.Time `json:"collected_at"`
-}
-
 // SiteConfig describes collection settings for one Stack Exchange site.
 type SiteConfig struct {
 	Name         string

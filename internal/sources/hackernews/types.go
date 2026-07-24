@@ -123,16 +123,6 @@ func deriveScope(cfg *ConfigValues, since time.Time) collectionScope {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Cache types
-// ---------------------------------------------------------------------------
-
-// cachedResponse holds a cached API response body and its collection time.
-type cachedResponse struct {
-	Body        []byte    `json:"body"`
-	CollectedAt time.Time `json:"collected_at"`
-}
-
 // Stats holds per-run request and cache-hit counters exposed by the collector.
 type Stats struct {
 	Requests  int
