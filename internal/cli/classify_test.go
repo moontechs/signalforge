@@ -18,10 +18,10 @@ import (
 // newClassifyTestEnv creates a test environment for classify tests.
 // It sets up a temp directory as SIGNALFORGE_HOME, writes a default config,
 // and creates a raw-signals directory with optional pre-seeded signal files.
-func newClassifyTestEnv(t *testing.T, signals []domain.RawSignal) (*classifyEnv, string) {
+func newClassifyTestEnv(t *testing.T, signals []domain.RawSignal) (env *classifyEnv, homeDir string) {
 	t.Helper()
 
-	homeDir := t.TempDir()
+	homeDir = t.TempDir()
 	t.Setenv("SIGNALFORGE_HOME", homeDir)
 
 	// Create default config. Use OpenRouter config with a model.
@@ -53,7 +53,7 @@ func newClassifyTestEnv(t *testing.T, signals []domain.RawSignal) (*classifyEnv,
 
 	mem := memory.New(store)
 
-	env := &classifyEnv{
+	env = &classifyEnv{
 		store:     store,
 		mem:       mem,
 		cfg:       cfg,
@@ -70,10 +70,10 @@ func newClassifyTestEnv(t *testing.T, signals []domain.RawSignal) (*classifyEnv,
 }
 
 // testRawSignal creates a minimal RawSignal for testing.
-func testRawSignal(id, source string) domain.RawSignal {
+func testRawSignal(id string) domain.RawSignal {
 	return domain.RawSignal{
 		ID:          id,
-		Source:      source,
+		Source:      "test",
 		SourceID:    "src-" + id,
 		URL:         "https://example.com/post/" + id,
 		Title:       "Test signal " + id,
@@ -164,8 +164,8 @@ func TestLoadRawSignals_NoSignals(t *testing.T) {
 
 func TestLoadRawSignals_WithSignals(t *testing.T) {
 	signals := []domain.RawSignal{
-		testRawSignal("sig-1", "test"),
-		testRawSignal("sig-2", "test"),
+		testRawSignal("sig-1"),
+		testRawSignal("sig-2"),
 	}
 
 	env, _ := newClassifyTestEnv(t, signals)
@@ -181,8 +181,8 @@ func TestLoadRawSignals_WithSignals(t *testing.T) {
 
 func TestFilterClassifiedSignals_NoProblemSignals(t *testing.T) {
 	signals := []domain.RawSignal{
-		testRawSignal("sig-1", "test"),
-		testRawSignal("sig-2", "test"),
+		testRawSignal("sig-1"),
+		testRawSignal("sig-2"),
 	}
 
 	env, _ := newClassifyTestEnv(t, signals)
@@ -195,8 +195,8 @@ func TestFilterClassifiedSignals_NoProblemSignals(t *testing.T) {
 
 func TestFilterClassifiedSignals_WithClassified(t *testing.T) {
 	signals := []domain.RawSignal{
-		testRawSignal("sig-1", "test"),
-		testRawSignal("sig-2", "test"),
+		testRawSignal("sig-1"),
+		testRawSignal("sig-2"),
 	}
 
 	env, homeDir := newClassifyTestEnv(t, signals)
@@ -227,8 +227,8 @@ func TestFilterClassifiedSignals_WithClassified(t *testing.T) {
 
 func TestFilterClassifiedSignals_ForceReclassifies(t *testing.T) {
 	signals := []domain.RawSignal{
-		testRawSignal("sig-1", "test"),
-		testRawSignal("sig-2", "test"),
+		testRawSignal("sig-1"),
+		testRawSignal("sig-2"),
 	}
 
 	env, homeDir := newClassifyTestEnv(t, signals)
@@ -254,9 +254,9 @@ func TestFilterClassifiedSignals_ForceReclassifies(t *testing.T) {
 
 func TestFilterClassifiedSignals_Limit(t *testing.T) {
 	signals := []domain.RawSignal{
-		testRawSignal("sig-1", "test"),
-		testRawSignal("sig-2", "test"),
-		testRawSignal("sig-3", "test"),
+		testRawSignal("sig-1"),
+		testRawSignal("sig-2"),
+		testRawSignal("sig-3"),
 	}
 
 	env, _ := newClassifyTestEnv(t, signals)
@@ -278,8 +278,8 @@ func TestFilterClassifiedSignals_Limit(t *testing.T) {
 
 func TestClassifyDryRun_Output(t *testing.T) {
 	signals := []domain.RawSignal{
-		testRawSignal("sig-1", "test"),
-		testRawSignal("sig-2", "test"),
+		testRawSignal("sig-1"),
+		testRawSignal("sig-2"),
 	}
 
 	env, _ := newClassifyTestEnv(t, signals)
@@ -330,7 +330,7 @@ func TestExecuteClassify_NoSignals(t *testing.T) {
 
 func TestExecuteClassify_DryRun(t *testing.T) {
 	signals := []domain.RawSignal{
-		testRawSignal("sig-1", "test"),
+		testRawSignal("sig-1"),
 	}
 
 	env, _ := newClassifyTestEnv(t, signals)
@@ -356,9 +356,9 @@ func TestExecuteClassify_DryRun(t *testing.T) {
 
 func TestExecuteClassify_DryRunWithLimit(t *testing.T) {
 	signals := []domain.RawSignal{
-		testRawSignal("sig-1", "test"),
-		testRawSignal("sig-2", "test"),
-		testRawSignal("sig-3", "test"),
+		testRawSignal("sig-1"),
+		testRawSignal("sig-2"),
+		testRawSignal("sig-3"),
 	}
 
 	env, _ := newClassifyTestEnv(t, signals)
@@ -382,7 +382,7 @@ func TestExecuteClassify_DryRunWithLimit(t *testing.T) {
 
 func TestExecuteClassify_ForceDryRun(t *testing.T) {
 	signals := []domain.RawSignal{
-		testRawSignal("sig-1", "test"),
+		testRawSignal("sig-1"),
 	}
 
 	env, homeDir := newClassifyTestEnv(t, signals)
@@ -418,7 +418,7 @@ func TestExecuteClassify_ForceDryRun(t *testing.T) {
 func TestExecuteClassify_WithAPIClientFailsNoKey(t *testing.T) {
 	// This test verifies that without OPENROUTER_API_KEY, the command fails.
 	signals := []domain.RawSignal{
-		testRawSignal("sig-1", "test"),
+		testRawSignal("sig-1"),
 	}
 
 	env, _ := newClassifyTestEnv(t, signals)
@@ -526,7 +526,7 @@ func TestLoadRawSignals_InvalidFile(t *testing.T) {
 
 	// Also write a valid file to ensure it's not affected.
 	store := storage.New(homeDir)
-	validSignal := testRawSignal("valid-1", "test")
+	validSignal := testRawSignal("valid-1")
 	if err := store.SaveJSON(filepath.Join(homeDir, "raw-signals", "valid-1.json"), validSignal); err != nil {
 		t.Fatalf("save valid signal: %v", err)
 	}
@@ -547,8 +547,8 @@ func TestLoadRawSignals_InvalidFile(t *testing.T) {
 func TestExecuteClassify_WithoutAPIKey(t *testing.T) {
 	// This test verifies the classify command fails cleanly without an API key.
 	signals := []domain.RawSignal{
-		testRawSignal("sig-1", "test"),
-		testRawSignal("sig-2", "test"),
+		testRawSignal("sig-1"),
+		testRawSignal("sig-2"),
 	}
 
 	env, _ := newClassifyTestEnv(t, signals)

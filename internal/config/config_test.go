@@ -26,6 +26,52 @@ func TestDefaultConfigGitHubDefaults(t *testing.T) {
 	}
 }
 
+func TestRedditConfigValidate(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		cfg  RedditConfig
+		want string
+	}{
+		{"disabled defaults", RedditConfig{}, ""},
+		{"valid opt in", RedditConfig{Enabled: true, Subreddits: []string{"saas"}, MaxPostsPerRun: 1}, ""},
+		{"empty subreddits", RedditConfig{Enabled: true, MaxPostsPerRun: 1}, "at least one"},
+		{"blank subreddit", RedditConfig{Enabled: true, Subreddits: []string{" "}, MaxPostsPerRun: 1}, "subreddits"},
+		{"invalid posts", RedditConfig{Enabled: true, Subreddits: []string{"saas"}}, "max_posts_per_run"},
+		{"invalid comments", RedditConfig{Enabled: true, Subreddits: []string{"saas"}, MaxPostsPerRun: 1, MaxCommentsPerPost: -1}, "max_comments_per_post"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.cfg.Validate()
+			if tt.want == "" && err != nil {
+				t.Fatalf("Validate() = %v", err)
+			}
+			if tt.want != "" && (err == nil || !strings.Contains(err.Error(), tt.want)) {
+				t.Fatalf("Validate() = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestConfigValidateIncludesRedditContext(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Sources.Reddit.Enabled = true
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "validate reddit config") {
+		t.Fatalf("Validate() = %v, want Reddit context", err)
+	}
+}
+
+func TestLoadConfigValidatesRedditConfig(t *testing.T) {
+	dir := t.TempDir()
+	data := []byte(`{"sources":{"reddit":{"enabled":true,"subreddits":[],"max_posts_per_run":1}}}`)
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadConfig(dir); err == nil || !strings.Contains(err.Error(), "validate reddit config") {
+		t.Fatalf("LoadConfig() = %v", err)
+	}
+}
+
 func TestGitHubConfigValidate(t *testing.T) {
 	t.Parallel()
 	valid := DefaultConfig().Sources.GitHub

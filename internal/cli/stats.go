@@ -79,14 +79,14 @@ func executeStats(cmd *cobra.Command, env *statsEnv) error {
 	stats := env.mem.GetStats()
 
 	if env.json {
-		return printStatsJSON(cmd, stats)
+		return printStatsJSON(cmd, &stats)
 	}
 
-	printStatsHuman(cmd, stats)
+	printStatsHuman(cmd, &stats)
 	return nil
 }
 
-func printStatsHuman(cmd *cobra.Command, stats domain.ResearchStats) {
+func printStatsHuman(cmd *cobra.Command, stats *domain.ResearchStats) {
 	w := cmd.OutOrStdout()
 
 	_, _ = fmt.Fprintln(w, "=== Research Statistics ===")
@@ -123,7 +123,7 @@ func printStatsHuman(cmd *cobra.Command, stats domain.ResearchStats) {
 	_, _ = fmt.Fprintf(w, "  Unlocker cache hits:      %d\n", stats.UnlockerCacheHits)
 }
 
-func printStatsJSON(cmd *cobra.Command, stats domain.ResearchStats) error {
+func printStatsJSON(cmd *cobra.Command, stats *domain.ResearchStats) error {
 	output := map[string]any{
 		"stats": stats,
 	}

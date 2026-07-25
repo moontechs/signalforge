@@ -41,12 +41,6 @@ type apiResponse struct {
 	ErrorMessage   string          `json:"error_message,omitempty"`
 }
 
-// questionsResponse wraps apiResponse for the /questions endpoint.
-type questionsResponse struct {
-	apiResponse
-	Questions []questionDTO
-}
-
 // answersResponse wraps apiResponse for the /questions/{id}/answers endpoint.
 type answersResponse struct {
 	apiResponse

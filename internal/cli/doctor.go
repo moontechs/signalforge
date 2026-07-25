@@ -235,6 +235,21 @@ func checkEnvVars(cfg *config.Config) []checkResult {
 		})
 	}
 
+	if cfg.Sources.Reddit.Enabled {
+		for _, name := range []string{"REDDIT_CLIENT_ID", "REDDIT_CLIENT_SECRET"} {
+			if strings.TrimSpace(os.Getenv(name)) != "" {
+				results = append(results, checkResult{Name: name, Status: "✅", Detail: "Set"})
+			} else {
+				results = append(results, checkResult{Name: name, Status: "❌", Detail: "Not set (required for Reddit collection)"})
+			}
+		}
+	} else {
+		results = append(results,
+			checkResult{Name: "REDDIT_CLIENT_ID", Status: "ℹ️", Detail: "Not required while Reddit collection is disabled"},
+			checkResult{Name: "REDDIT_CLIENT_SECRET", Status: "ℹ️", Detail: "Not required while Reddit collection is disabled"},
+		)
+	}
+
 	// Optional.
 	if os.Getenv("OPENROUTER_API_KEY") != "" {
 		results = append(results, checkResult{

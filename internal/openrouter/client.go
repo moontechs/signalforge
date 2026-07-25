@@ -31,9 +31,12 @@ type Client struct {
 
 // New creates a new OpenRouter client. It returns ErrNoAPIKey if apiKey
 // is empty. The client uses cfg.RequestTimeoutSeconds for its HTTP timeout.
-func New(cfg config.OpenRouterConfig, apiKey string) (*Client, error) {
+func New(cfg *config.OpenRouterConfig, apiKey string) (*Client, error) {
 	if apiKey == "" {
 		return nil, ErrNoAPIKey
+	}
+	if cfg == nil {
+		return nil, errors.New("openrouter config is nil")
 	}
 
 	timeout := time.Duration(cfg.RequestTimeoutSeconds) * time.Second
@@ -45,7 +48,7 @@ func New(cfg config.OpenRouterConfig, apiKey string) (*Client, error) {
 		httpClient: &http.Client{
 			Timeout: timeout,
 		},
-		cfg:    cfg,
+		cfg:    *cfg,
 		apiKey: apiKey,
 	}, nil
 }
@@ -58,7 +61,10 @@ func (c *Client) Stats() Stats {
 // Complete implements domain.LLMClient. It resolves the model chain,
 // builds chat messages from the request, and tries each model in order
 // until one succeeds or all models are exhausted.
-func (c *Client) Complete(ctx any, req domain.CompletionRequest) (domain.CompletionResponse, error) {
+func (c *Client) Complete(
+	ctx any,
+	req domain.CompletionRequest, //nolint:gocritic // Value signature is required by domain.LLMClient.
+) (domain.CompletionResponse, error) {
 	requestCtx, ok := ctx.(context.Context)
 	if !ok {
 		requestCtx = context.Background()

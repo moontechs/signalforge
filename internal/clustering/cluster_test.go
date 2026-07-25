@@ -14,7 +14,10 @@ type stubLLM struct {
 	err      error
 }
 
-func (s *stubLLM) Complete(ctx any, req domain.CompletionRequest) (domain.CompletionResponse, error) {
+func (s *stubLLM) Complete(
+	_ any,
+	_ domain.CompletionRequest, //nolint:gocritic // Value signature is required by domain.LLMClient.
+) (domain.CompletionResponse, error) {
 	if s.err != nil {
 		return domain.CompletionResponse{}, s.err
 	}
@@ -116,7 +119,7 @@ func TestComputeSimilarity_Identical(t *testing.T) {
 		entities: EntityFingerprints([]string{"npm", "node"}),
 		keywords: []string{"package", "manager", "install"},
 	}
-	sim := c.computeSimilarity(fp1, fp2)
+	sim := c.computeSimilarity(&fp1, &fp2)
 	if sim != 1.0 {
 		t.Errorf("identical signals should have similarity 1.0, got %f", sim)
 	}
@@ -136,7 +139,7 @@ func TestComputeSimilarity_Different(t *testing.T) {
 		entities: EntityFingerprints([]string{"react-native"}),
 		keywords: []string{"ui", "mobile", "alignment"},
 	}
-	sim := c.computeSimilarity(fp1, fp2)
+	sim := c.computeSimilarity(&fp1, &fp2)
 	if sim > 0.5 {
 		t.Errorf("different signals should have low similarity, got %f", sim)
 	}
@@ -156,7 +159,7 @@ func TestComputeSimilarity_PartialOverlap(t *testing.T) {
 		entities: EntityFingerprints([]string{"pip"}),
 		keywords: []string{"install", "package"},
 	}
-	sim := c.computeSimilarity(fp1, fp2)
+	sim := c.computeSimilarity(&fp1, &fp2)
 	if sim < 0.3 || sim > 0.95 {
 		t.Errorf("partial overlap should have moderate similarity, got %f", sim)
 	}
@@ -273,24 +276,24 @@ func TestComputeProblemScore(t *testing.T) {
 
 	signals := []domain.ProblemSignal{
 		{
-			IsProblemSignal: true,
-			Relevance:       0.9,
-			Recurring:       true,
-			SeverityHint:    8,
-			ProductSolvable: true,
-			Source:          "github",
+			IsProblemSignal:   true,
+			Relevance:         0.9,
+			Recurring:         true,
+			SeverityHint:      8,
+			ProductSolvable:   true,
+			Source:            "github",
 			CurrentWorkaround: "Manual workaround",
-			ClassifiedAt:    now,
+			ClassifiedAt:      now,
 		},
 		{
-			IsProblemSignal: true,
-			Relevance:       0.7,
-			Recurring:       false,
-			SeverityHint:    5,
-			ProductSolvable: false,
-			Source:          "hackernews",
+			IsProblemSignal:   true,
+			Relevance:         0.7,
+			Recurring:         false,
+			SeverityHint:      5,
+			ProductSolvable:   false,
+			Source:            "hackernews",
 			CurrentWorkaround: "",
-			ClassifiedAt:    now.Add(48 * time.Hour),
+			ClassifiedAt:      now.Add(48 * time.Hour),
 		},
 	}
 
@@ -365,7 +368,7 @@ func TestCheckSemanticBoundary_LlmsaysYes(t *testing.T) {
 	a := domain.ProblemSignal{Problem: "Cannot login to app", Context: "Web app"}
 	b := domain.ProblemSignal{Problem: "Unable to sign in", Context: "Mobile app"}
 
-	same, err := c.checkSemanticBoundary(context.Background(), a, b)
+	same, err := c.checkSemanticBoundary(context.Background(), &a, &b)
 	if err != nil {
 		t.Fatalf("checkSemanticBoundary error: %v", err)
 	}
@@ -381,7 +384,7 @@ func TestCheckSemanticBoundary_LlmSaysNo(t *testing.T) {
 	a := domain.ProblemSignal{Problem: "Cannot login to app"}
 	b := domain.ProblemSignal{Problem: "Printer is out of paper"}
 
-	same, err := c.checkSemanticBoundary(context.Background(), a, b)
+	same, err := c.checkSemanticBoundary(context.Background(), &a, &b)
 	if err != nil {
 		t.Fatalf("checkSemanticBoundary error: %v", err)
 	}
@@ -396,7 +399,7 @@ func TestCheckSemanticBoundary_NoLLM(t *testing.T) {
 	a := domain.ProblemSignal{Problem: "Cannot login to app"}
 	b := domain.ProblemSignal{Problem: "Unable to sign in"}
 
-	same, err := c.checkSemanticBoundary(context.Background(), a, b)
+	same, err := c.checkSemanticBoundary(context.Background(), &a, &b)
 	if err != nil {
 		t.Fatalf("checkSemanticBoundary error: %v", err)
 	}

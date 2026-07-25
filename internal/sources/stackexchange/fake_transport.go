@@ -42,10 +42,11 @@ func (f *fakeTransport) addResponse(url string, resp fakeResponse) {
 }
 
 // addSequentialResponses registers ordered responses for the same URL.
-func (f *fakeTransport) addSequentialResponses(url string, resp ...fakeResponse) {
+func (f *fakeTransport) addSequentialResponses(resp ...fakeResponse) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.responses[url] = append(f.responses[url], resp...)
+	const searchPattern = "https://api.stackexchange.com/2.3/search/advanced*"
+	f.responses[searchPattern] = append(f.responses[searchPattern], resp...)
 }
 
 // findResponse locates the next response for a URL, trying exact match

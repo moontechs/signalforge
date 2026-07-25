@@ -150,6 +150,29 @@ type RedditConfig struct {
 	MaxCommentsPerPost int      `json:"max_comments_per_post"`
 }
 
+// Validate checks the Reddit collector configuration. Disabled Reddit sources
+// intentionally accept the zero-value settings used by the default config.
+func (c *RedditConfig) Validate() error {
+	if !c.Enabled {
+		return nil
+	}
+	if len(c.Subreddits) == 0 {
+		return errors.New("at least one subreddit is required")
+	}
+	for _, subreddit := range c.Subreddits {
+		if strings.TrimSpace(subreddit) == "" {
+			return errors.New("subreddits must not contain empty values")
+		}
+	}
+	if c.MaxPostsPerRun <= 0 {
+		return errors.New("max_posts_per_run must be greater than zero")
+	}
+	if c.MaxCommentsPerPost < 0 {
+		return errors.New("max_comments_per_post must be zero or greater")
+	}
+	return nil
+}
+
 // BrightDataConfig holds Bright Data-specific configuration.
 type BrightDataConfig struct {
 	Endpoint          string `json:"endpoint"`
@@ -323,6 +346,9 @@ func (c *Config) Validate() error {
 	}
 	if err := c.Sources.StackExchange.Validate(); err != nil {
 		return fmt.Errorf("validate stackexchange config: %w", err)
+	}
+	if err := c.Sources.Reddit.Validate(); err != nil {
+		return fmt.Errorf("validate reddit config: %w", err)
 	}
 	return nil
 }

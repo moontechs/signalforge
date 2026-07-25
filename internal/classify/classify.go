@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"os"
 	"strings"
 	"text/template"
@@ -14,6 +13,8 @@ import (
 	"github.com/moontechs/signalforge/internal/domain"
 	"github.com/moontechs/signalforge/internal/storage"
 )
+
+const noCommentsText = "none"
 
 // Config holds configuration for the classifier.
 type Config struct {
@@ -30,8 +31,8 @@ type Classifier struct {
 	cfg    Config
 }
 
-// ClassifyFailure represents a signal that failed to classify.
-type ClassifyFailure struct {
+// Failure represents a signal that failed to classify.
+type Failure struct {
 	RawSignalID string
 	Err         error
 }
@@ -101,18 +102,18 @@ type classifyResponse struct {
 //
 // Partial failures are collected and returned; a failure for one signal does
 // not cancel the entire batch.
-func (c *Classifier) Classify(ctx context.Context, raw []domain.RawSignal) ([]domain.ProblemSignal, []ClassifyFailure) {
+func (c *Classifier) Classify(ctx context.Context, raw []domain.RawSignal) ([]domain.ProblemSignal, []Failure) {
 	promptTmpl, err := c.loadPrompt()
 	if err != nil {
-		failures := make([]ClassifyFailure, len(raw))
-		for i, s := range raw {
-			failures[i] = ClassifyFailure{RawSignalID: s.ID, Err: fmt.Errorf("load prompt: %w", err)}
+		failures := make([]Failure, len(raw))
+		for index := range raw {
+			failures[index] = Failure{RawSignalID: raw[index].ID, Err: fmt.Errorf("load prompt: %w", err)}
 		}
 		return nil, failures
 	}
 
 	signals := make([]domain.ProblemSignal, 0, len(raw))
-	var failures []ClassifyFailure
+	var failures []Failure
 
 	for i := 0; i < len(raw); i += c.cfg.BatchSize {
 		end := i + c.cfg.BatchSize
@@ -121,15 +122,11 @@ func (c *Classifier) Classify(ctx context.Context, raw []domain.RawSignal) ([]do
 		}
 		batch := raw[i:end]
 
-		for _, s := range batch {
-			ps, err := c.classifyOne(ctx, s, promptTmpl)
+		for index := range batch {
+			signal := &batch[index]
+			ps, err := c.classifyOne(ctx, signal, promptTmpl)
 			if err != nil {
-				slog.Warn("classification failed",
-					"signal_id", s.ID,
-					"source", s.Source,
-					"error", err,
-				)
-				failures = append(failures, ClassifyFailure{RawSignalID: s.ID, Err: err})
+				failures = append(failures, Failure{RawSignalID: signal.ID, Err: err})
 				continue
 			}
 			signals = append(signals, ps)
@@ -141,7 +138,7 @@ func (c *Classifier) Classify(ctx context.Context, raw []domain.RawSignal) ([]do
 
 // classifyOne classifies a single raw signal by rendering the prompt template
 // and calling the LLM client.
-func (c *Classifier) classifyOne(ctx context.Context, raw domain.RawSignal, promptTmpl *template.Template) (domain.ProblemSignal, error) {
+func (c *Classifier) classifyOne(ctx context.Context, raw *domain.RawSignal, promptTmpl *template.Template) (domain.ProblemSignal, error) {
 	data := templateData{
 		Title:    raw.Title,
 		Body:     raw.Body,
@@ -229,7 +226,7 @@ func (c *Classifier) loadPrompt() (*template.Template, error) {
 // suitable for inclusion in the prompt template.
 func formatComments(comments []domain.Comment) string {
 	if len(comments) == 0 {
-		return "none"
+		return noCommentsText
 	}
 
 	var sb strings.Builder

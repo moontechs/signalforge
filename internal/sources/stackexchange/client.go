@@ -80,8 +80,8 @@ func (c *client) questions(ctx context.Context, site string, fromUnix, toUnix in
 
 // getQuestions is retained for package-level tests and callers while the
 // active endpoint implementation is named questions.
-func (c *client) getQuestions(ctx context.Context, site string, fromUnix, toUnix int64, page, pageSize int, filters ...string) (*searchResponse, error) {
-	return c.questions(ctx, site, fromUnix, toUnix, page, pageSize, filters...)
+func (c *client) getQuestions(ctx context.Context, site string, fromUnix, toUnix int64, page, pageSize int) (*searchResponse, error) {
+	return c.questions(ctx, site, fromUnix, toUnix, page, pageSize)
 }
 
 // newClient creates a Stack Exchange API client with the given transport and config.
@@ -120,7 +120,7 @@ func (c *client) Stats() Stats {
 }
 
 // cached retrieves a cached response. Returns (body, true) on fresh hit.
-func (c *client) cached(key string, ttl time.Duration) ([]byte, bool) {
+func (c *client) cached(key string, _ time.Duration) ([]byte, bool) {
 	if c.cache == nil {
 		return nil, false
 	}
@@ -137,7 +137,7 @@ func (c *client) cached(key string, ttl time.Duration) ([]byte, bool) {
 // save persists a response body to the on-disk cache. Errors are non-fatal.
 func (c *client) save(key string, body []byte, ttl time.Duration) {
 	if c.cache != nil {
-		_ = c.cache.Set(key, cache.CacheEntry{Body: body, TTL: ttl})
+		_ = c.cache.Set(key, cache.Entry{Body: body, TTL: ttl})
 	}
 }
 

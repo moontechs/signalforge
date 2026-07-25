@@ -37,6 +37,8 @@ go build ./cmd/signalforge/
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `GITHUB_TOKEN` | Yes | GitHub personal access token (repo scope) |
+| `REDDIT_CLIENT_ID` | For enabled Reddit collection | Reddit application client ID |
+| `REDDIT_CLIENT_SECRET` | For enabled Reddit collection | Reddit application client secret |
 | `OPENROUTER_API_KEY` | No (for collection) | OpenRouter API key (required for classification) |
 | `OPENROUTER_MODEL` | No | OpenRouter model override (default: from config) |
 | `BRIGHTDATA_API_KEY` | No (post-MVP) | Bright Data API key |
@@ -61,6 +63,17 @@ go build ./cmd/signalforge/
 - Caching: TTL-based on-disk cache (5 min for feeds, 24h for items), no conditional requests
 - Dedup by item ID across feeds within a single run; content hash from title + body + sorted comment bodies
 - Stats tracking: request/cache-hit counters per run, persisted in `memory.json`
+
+## Reddit collector — optional
+
+- Reddit collection is fully wired through `signalforge collect --sources reddit --since 30d`
+- It is disabled by default and requires explicit subreddits plus `REDDIT_CLIENT_ID` and `REDDIT_CLIENT_SECRET`
+- Dry-run planning does not require credentials or make HTTP requests
+- OAuth tokens are cached in memory and refreshed before expiry
+- Listings are cached for 5 minutes; comments are cached for 24 hours
+- Posts are deduplicated across pages/subreddits and filtered by the since-window before the run item cap
+- Comment fetching uses at most five concurrent requests and BFS flattening to depth 50
+- Request/cache-hit deltas are per-run and persisted in `memory.json`
 
 ## Running tests
 

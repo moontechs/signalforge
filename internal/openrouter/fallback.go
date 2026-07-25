@@ -3,11 +3,11 @@ package openrouter
 import (
 	"bytes"
 	"context"
+	cryptorand "crypto/rand"
 	"encoding/json"
 	"fmt"
 	"io"
-	"math"
-	"math/rand"
+	"math/big"
 	"net/http"
 	"strconv"
 	"strings"
@@ -29,7 +29,6 @@ func (c *Client) tryModel(
 	maxTokens int,
 	schema any,
 ) (domain.CompletionResponse, error) {
-	// Build request body.
 	reqBody := ChatCompletionRequest{
 		Model:       model,
 		Messages:    messages,
@@ -42,142 +41,165 @@ func (c *Client) tryModel(
 		return domain.CompletionResponse{}, fmt.Errorf("marshal request: %w", err)
 	}
 
-	// Build URL: ensure trailing slash isn't doubled.
-	baseURL := strings.TrimRight(c.cfg.BaseURL, "/")
-	url := baseURL + "/chat/completions"
-
+	endpoint := strings.TrimRight(c.cfg.BaseURL, "/") + "/chat/completions"
 	maxRetries := c.cfg.MaxRetries
 	if maxRetries <= 0 {
 		maxRetries = 3
 	}
 
 	var lastErr error
+	var delay time.Duration
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		if attempt > 0 {
-			// Exponential backoff with jitter, capped at 30 s.
-			backoff := time.Duration(math.Pow(2, float64(attempt))) * time.Second
-			jitter := time.Duration(rand.Intn(1000)) * time.Millisecond
-			backoff += jitter
-			if backoff > 30*time.Second {
-				backoff = 30*time.Second + jitter
-			}
-
-			select {
-			case <-ctx.Done():
-				return domain.CompletionResponse{}, ctx.Err()
-			case <-time.After(backoff):
+			if err := waitForRetry(ctx, delay); err != nil {
+				return domain.CompletionResponse{}, err
 			}
 		}
 
-		req, rErr := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(bodyBytes))
-		if rErr != nil {
-			return domain.CompletionResponse{}, fmt.Errorf("create request: %w", rErr)
+		response, retry, retryAfter, err := c.modelAttempt(ctx, endpoint, bodyBytes, model, schema)
+		if err == nil {
+			return response, nil
 		}
-
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Authorization", "Bearer "+c.apiKey)
-
-		resp, rErr := c.httpClient.Do(req)
-		if rErr != nil {
-			lastErr = fmt.Errorf("request failed: %w", rErr)
-			continue
+		if !retry {
+			return domain.CompletionResponse{}, err
 		}
-
-		body, rErr := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if rErr != nil {
-			lastErr = fmt.Errorf("read response: %w", rErr)
-			continue
-		}
-
-		// 429 rate limit — respect Retry-After, then retry.
-		if resp.StatusCode == http.StatusTooManyRequests {
-			delay := parseRetryAfter(resp.Header.Get("Retry-After"))
-			select {
-			case <-ctx.Done():
-				return domain.CompletionResponse{}, ctx.Err()
-			case <-time.After(delay):
-			}
-			continue
-		}
-
-		// Non-429 4xx — fail immediately for this model.
-		if resp.StatusCode >= 400 && resp.StatusCode < 500 {
-			var apiErr APIError
-			if uErr := json.Unmarshal(body, &apiErr); uErr == nil && apiErr.Err.Message != "" {
-				return domain.CompletionResponse{}, fmt.Errorf(
-					"api error (status %d): %s", resp.StatusCode, apiErr.Err.Message,
-				)
-			}
-			return domain.CompletionResponse{}, fmt.Errorf(
-				"api error (status %d): %s", resp.StatusCode, truncateBody(string(body)),
-			)
-		}
-
-		// 5xx — retry with backoff.
-		if resp.StatusCode >= 500 {
-			lastErr = fmt.Errorf("server error (status %d): %s", resp.StatusCode, truncateBody(string(body)))
-			continue
-		}
-
-		// Non-2xx unexpected status.
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			lastErr = fmt.Errorf("unexpected status %d: %s", resp.StatusCode, truncateBody(string(body)))
-			continue
-		}
-
-		// 2xx — parse response.
-		var chatResp ChatCompletionResponse
-		if pErr := json.Unmarshal(body, &chatResp); pErr != nil {
-			lastErr = fmt.Errorf("%w: %s", ErrInvalidResponse, pErr)
-			continue
-		}
-
-		if len(chatResp.Choices) == 0 {
-			lastErr = fmt.Errorf("%w: empty choices", ErrInvalidResponse)
-			continue
-		}
-
-		content := chatResp.Choices[0].Message.Content
-
-		// Validate the response content.
-		validated, vErr := c.validateResponse(content, schema)
-		if vErr != nil {
-			// Attempt single repair.
-			repaired, repErr := c.repairJSON(ctx, model, content)
-			if repErr != nil {
-				return domain.CompletionResponse{}, repErr
-			}
-			// Re-validate repaired content against schema.
-			if _, vErr2 := c.validateResponse(string(repaired), schema); vErr2 != nil {
-				return domain.CompletionResponse{}, ErrRepairFailed
-			}
-			content = string(repaired)
+		lastErr = err
+		if retryAfter != nil {
+			delay = *retryAfter
 		} else {
-			content = string(validated)
+			delay = retryBackoff(attempt + 1)
 		}
-
-		// Map usage.
-		var usage *domain.Usage
-		if chatResp.Usage != nil {
-			usage = &domain.Usage{
-				PromptTokens:     chatResp.Usage.PromptTokens,
-				CompletionTokens: chatResp.Usage.CompletionTokens,
-				TotalTokens:      chatResp.Usage.TotalTokens,
-			}
-		}
-
-		c.stats.Attempts++
-
-		return domain.CompletionResponse{
-			Content: content,
-			Model:   chatResp.Model,
-			Usage:   usage,
-		}, nil
 	}
 
-	// All retries exhausted.
+	if lastErr == nil {
+		lastErr = ErrAllModelsFailed
+	}
 	return domain.CompletionResponse{}, fmt.Errorf("%w: %w", ErrAllModelsFailed, lastErr)
+}
+
+func (c *Client) modelAttempt(
+	ctx context.Context,
+	endpoint string,
+	bodyBytes []byte,
+	model string,
+	schema any,
+) (domain.CompletionResponse, bool, *time.Duration, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return domain.CompletionResponse{}, false, nil, fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return domain.CompletionResponse{}, true, nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return domain.CompletionResponse{}, true, nil, fmt.Errorf("read response: %w", err)
+	}
+
+	switch {
+	case resp.StatusCode == http.StatusTooManyRequests:
+		delay := parseRetryAfter(resp.Header.Get("Retry-After"))
+		return domain.CompletionResponse{}, true, &delay, fmt.Errorf("%w: status %d", ErrRateLimited, resp.StatusCode)
+	case resp.StatusCode >= 400 && resp.StatusCode < 500:
+		return domain.CompletionResponse{}, false, nil, apiStatusError(resp.StatusCode, body)
+	case resp.StatusCode >= 500:
+		return domain.CompletionResponse{}, true, nil,
+			fmt.Errorf("server error (status %d): %s", resp.StatusCode, truncateBody(string(body)))
+	case resp.StatusCode < 200 || resp.StatusCode >= 300:
+		return domain.CompletionResponse{}, true, nil,
+			fmt.Errorf("unexpected status %d: %s", resp.StatusCode, truncateBody(string(body)))
+	default:
+		response, retry, err := c.parseModelResponse(ctx, model, body, schema)
+		return response, retry, nil, err
+	}
+}
+
+func apiStatusError(status int, body []byte) error {
+	var apiErr APIError
+	if err := json.Unmarshal(body, &apiErr); err == nil && apiErr.Err.Message != "" {
+		return fmt.Errorf("api error (status %d): %s", status, apiErr.Err.Message)
+	}
+	return fmt.Errorf("api error (status %d): %s", status, truncateBody(string(body)))
+}
+
+func (c *Client) parseModelResponse(
+	ctx context.Context,
+	model string,
+	body []byte,
+	schema any,
+) (domain.CompletionResponse, bool, error) {
+	var chatResp ChatCompletionResponse
+	if err := json.Unmarshal(body, &chatResp); err != nil {
+		return domain.CompletionResponse{}, true, fmt.Errorf("%w: %w", ErrInvalidResponse, err)
+	}
+	if len(chatResp.Choices) == 0 {
+		return domain.CompletionResponse{}, true, fmt.Errorf("%w: empty choices", ErrInvalidResponse)
+	}
+
+	content := chatResp.Choices[0].Message.Content
+	validated, err := c.validateResponse(content, schema)
+	if err != nil {
+		repaired, repairErr := c.repairJSON(ctx, model, content)
+		if repairErr != nil {
+			return domain.CompletionResponse{}, false, repairErr
+		}
+		if _, validationErr := c.validateResponse(string(repaired), schema); validationErr != nil {
+			return domain.CompletionResponse{}, false, ErrRepairFailed
+		}
+		content = string(repaired)
+	} else {
+		content = string(validated)
+	}
+
+	var usage *domain.Usage
+	if chatResp.Usage != nil {
+		usage = &domain.Usage{
+			PromptTokens:     chatResp.Usage.PromptTokens,
+			CompletionTokens: chatResp.Usage.CompletionTokens,
+			TotalTokens:      chatResp.Usage.TotalTokens,
+		}
+	}
+
+	c.stats.Attempts++
+	return domain.CompletionResponse{
+		Content: content,
+		Model:   chatResp.Model,
+		Usage:   usage,
+	}, false, nil
+}
+
+func waitForRetry(ctx context.Context, delay time.Duration) error {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+func retryBackoff(attempt int) time.Duration {
+	const maximum = 30 * time.Second
+	if attempt >= 5 {
+		return maximum
+	}
+	delay := (time.Second << attempt) + randomJitter()
+	return min(delay, maximum)
+}
+
+func randomJitter() time.Duration {
+	value, err := cryptorand.Int(cryptorand.Reader, big.NewInt(1000))
+	if err != nil {
+		return 0
+	}
+	return time.Duration(value.Int64()) * time.Millisecond
 }
 
 // parseRetryAfter parses the Retry-After header value which can be

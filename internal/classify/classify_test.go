@@ -38,7 +38,10 @@ func (m *mockLLMClient) addErr(err error) {
 	m.results = append(m.results, mockResult{err: err})
 }
 
-func (m *mockLLMClient) Complete(ctx any, req domain.CompletionRequest) (domain.CompletionResponse, error) {
+func (m *mockLLMClient) Complete(
+	_ any,
+	req domain.CompletionRequest, //nolint:gocritic // Value signature is required by domain.LLMClient.
+) (domain.CompletionResponse, error) {
 	m.requests = append(m.requests, req)
 	idx := m.callIndex
 	m.callIndex++

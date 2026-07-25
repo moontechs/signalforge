@@ -141,7 +141,7 @@ func executeCluster(cmd *cobra.Command, env *clusterEnv) error {
 	if !env.noSemantic {
 		apiKey := strings.TrimSpace(os.Getenv("OPENROUTER_API_KEY"))
 		if apiKey != "" {
-			orClient, err := openrouter.New(env.cfg.OpenRouter, apiKey)
+			orClient, err := openrouter.New(&env.cfg.OpenRouter, apiKey)
 			if err == nil {
 				llmClient = orClient
 			}
@@ -217,9 +217,9 @@ func loadProblemSignals(store *storage.Storage) ([]domain.ProblemSignal, error) 
 // filterProblemSignals returns only signals with IsProblemSignal == true.
 func filterProblemSignals(signals []domain.ProblemSignal) []domain.ProblemSignal {
 	filtered := make([]domain.ProblemSignal, 0, len(signals))
-	for _, s := range signals {
-		if s.IsProblemSignal {
-			filtered = append(filtered, s)
+	for index := range signals {
+		if signals[index].IsProblemSignal {
+			filtered = append(filtered, signals[index])
 		}
 	}
 	return filtered

@@ -15,13 +15,6 @@ import (
 	"github.com/moontechs/signalforge/internal/domain"
 )
 
-// fakeClock is a minimal clock interface for testing timeouts.
-type fakeClock struct {
-	now time.Time
-}
-
-func (f *fakeClock) Now() time.Time { return f.now }
-
 // testRequest represents a recorded HTTP request for test assertions.
 type testRequest struct {
 	Method string
@@ -31,8 +24,8 @@ type testRequest struct {
 }
 
 // newTestServer creates an httptest.Server that records requests and
-// responds with the given status code and body.
-func newTestServer(t *testing.T, status int, body string) (*httptest.Server, *[]testRequest) {
+// responds with the given body.
+func newTestServer(t *testing.T, body string) (*httptest.Server, *[]testRequest) {
 	t.Helper()
 	var requests []testRequest
 	var mu sync.Mutex
@@ -59,7 +52,7 @@ func newTestServer(t *testing.T, status int, body string) (*httptest.Server, *[]
 		mu.Unlock()
 
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(status)
+		w.WriteHeader(http.StatusOK)
 		_, _ = fmt.Fprint(w, body)
 	}))
 
@@ -88,7 +81,7 @@ func TestNew(t *testing.T) {
 				BaseURL:               "https://openrouter.ai/api/v1",
 				RequestTimeoutSeconds: 30,
 			}
-			client, err := New(cfg, tt.apiKey)
+			client, err := New(&cfg, tt.apiKey)
 			if !errors.Is(err, tt.wantErr) {
 				t.Errorf("New() error = %v, want %v", err, tt.wantErr)
 			}
@@ -103,7 +96,7 @@ func TestNew(t *testing.T) {
 func TestStats(t *testing.T) {
 	t.Parallel()
 
-	ts, _ := newTestServer(t, http.StatusOK, `{"id":"1","object":"chat.completion","created":123,"model":"test-model","choices":[{"index":0,"message":{"role":"assistant","content":"{\"is_problem_signal\":false}"}}],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}`)
+	ts, _ := newTestServer(t, `{"id":"1","object":"chat.completion","created":123,"model":"test-model","choices":[{"index":0,"message":{"role":"assistant","content":"{\"is_problem_signal\":false}"}}],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}`)
 	cfg := config.OpenRouterConfig{
 		BaseURL:               ts.URL,
 		Model:                 "test-model",
@@ -113,7 +106,7 @@ func TestStats(t *testing.T) {
 		ClassificationTemp:    0.1,
 	}
 
-	client, err := New(cfg, "sk-test")
+	client, err := New(&cfg, "sk-test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -140,7 +133,7 @@ func TestStats(t *testing.T) {
 func TestCompleteSuccess(t *testing.T) {
 	t.Parallel()
 
-	ts, requests := newTestServer(t, http.StatusOK, `{
+	ts, requests := newTestServer(t, `{
 		"id":"chatcmpl-123",
 		"object":"chat.completion",
 		"created":1234567890,
@@ -161,7 +154,7 @@ func TestCompleteSuccess(t *testing.T) {
 		ClassificationTemp:    0.1,
 	}
 
-	client, err := New(cfg, "sk-test")
+	client, err := New(&cfg, "sk-test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +206,7 @@ func TestCompleteSuccess(t *testing.T) {
 func TestFreeModelSuffix(t *testing.T) {
 	t.Parallel()
 
-	ts, requests := newTestServer(t, http.StatusOK, `{
+	ts, requests := newTestServer(t, `{
 		"id":"1","object":"chat.completion","created":123,"model":"mistral:free",
 		"choices":[{"index":0,"message":{"role":"assistant","content":"{}"}}],
 		"usage":{"prompt_tokens":5,"completion_tokens":2,"total_tokens":7}
@@ -228,7 +221,7 @@ func TestFreeModelSuffix(t *testing.T) {
 		ClassificationTemp:    0.1,
 	}
 
-	client, err := New(cfg, "sk-test")
+	client, err := New(&cfg, "sk-test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -256,7 +249,7 @@ func TestModelFallback(t *testing.T) {
 	t.Parallel()
 
 	callCount := 0
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		callCount++
 		w.Header().Set("Content-Type", "application/json")
 
@@ -287,7 +280,7 @@ func TestModelFallback(t *testing.T) {
 		ClassificationTemp:    0.1,
 	}
 
-	client, err := New(cfg, "sk-test")
+	client, err := New(&cfg, "sk-test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -311,7 +304,7 @@ func TestModelFallback(t *testing.T) {
 func TestAllModelsFail(t *testing.T) {
 	t.Parallel()
 
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		_, _ = fmt.Fprint(w, `{"error":{"message":"bad request","type":"invalid"}}`)
@@ -328,7 +321,7 @@ func TestAllModelsFail(t *testing.T) {
 		ClassificationTemp:    0.1,
 	}
 
-	client, err := New(cfg, "sk-test")
+	client, err := New(&cfg, "sk-test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -345,7 +338,7 @@ func TestAllModelsFail(t *testing.T) {
 func TestContextCancellation(t *testing.T) {
 	t.Parallel()
 
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		// Wait for context cancellation.
 		<-r.Context().Done()
 	}))
@@ -360,7 +353,7 @@ func TestContextCancellation(t *testing.T) {
 		ClassificationTemp:    0.1,
 	}
 
-	client, err := New(cfg, "sk-test")
+	client, err := New(&cfg, "sk-test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -380,7 +373,7 @@ func TestContextCancellation(t *testing.T) {
 func TestMalformedJSONResponse(t *testing.T) {
 	t.Parallel()
 
-	ts, _ := newTestServer(t, http.StatusOK, `{invalid json`)
+	ts, _ := newTestServer(t, `{invalid json`)
 	cfg := config.OpenRouterConfig{
 		BaseURL:               ts.URL,
 		Model:                 "test-model",
@@ -390,7 +383,7 @@ func TestMalformedJSONResponse(t *testing.T) {
 		ClassificationTemp:    0.1,
 	}
 
-	client, err := New(cfg, "sk-test")
+	client, err := New(&cfg, "sk-test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -460,7 +453,7 @@ func TestSchemaValidation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			ts, _ := newTestServer(t, http.StatusOK, fmt.Sprintf(`{
+			ts, _ := newTestServer(t, fmt.Sprintf(`{
 				"id":"1","object":"chat.completion","created":123,"model":"test",
 				"choices":[{"index":0,"message":{"role":"assistant","content":%s}}],
 				"usage":{"prompt_tokens":5,"completion_tokens":2,"total_tokens":7}
@@ -475,7 +468,7 @@ func TestSchemaValidation(t *testing.T) {
 				ClassificationTemp:    0.1,
 			}
 
-			client, err := New(cfg, "sk-test")
+			client, err := New(&cfg, "sk-test")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -496,7 +489,7 @@ func TestSchemaValidation(t *testing.T) {
 func TestAPIKeyNotLeaked(t *testing.T) {
 	t.Parallel()
 
-	ts, _ := newTestServer(t, http.StatusOK, `{"id":"1","object":"chat.completion","created":123,"model":"test","choices":[{"index":0,"message":{"role":"assistant","content":"ok"}}],"usage":{}}`)
+	ts, _ := newTestServer(t, `{"id":"1","object":"chat.completion","created":123,"model":"test","choices":[{"index":0,"message":{"role":"assistant","content":"ok"}}],"usage":{}}`)
 	cfg := config.OpenRouterConfig{
 		BaseURL:               ts.URL,
 		Model:                 "test-model",
@@ -507,14 +500,14 @@ func TestAPIKeyNotLeaked(t *testing.T) {
 	}
 
 	// Cause a 4xx error to check error messages.
-	ts2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		_, _ = fmt.Fprint(w, `{"error":{"message":"invalid_api_key","type":"auth_error"}}`)
 	}))
 	t.Cleanup(ts2.Close)
 
-	client2, err := New(cfg, "sk-secret-key-value")
+	client2, err := New(&cfg, "sk-secret-key-value")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -542,7 +535,7 @@ func TestNoModel(t *testing.T) {
 		RequestTimeoutSeconds: 30,
 	}
 
-	client, err := New(cfg, "sk-test")
+	client, err := New(&cfg, "sk-test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -689,7 +682,7 @@ func Test429RetryWithRetryAfter(t *testing.T) {
 	var mu sync.Mutex
 	callCount := 0
 
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		mu.Lock()
 		callCount++
 		count := callCount
@@ -724,7 +717,7 @@ func Test429RetryWithRetryAfter(t *testing.T) {
 		ClassificationTemp:    0.1,
 	}
 
-	client, err := New(cfg, "sk-test")
+	client, err := New(&cfg, "sk-test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -755,7 +748,7 @@ func Test5xxFallback(t *testing.T) {
 	// Track calls per model path (we can distinguish by reading the body).
 	callCount := 0
 
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		mu.Lock()
 		callCount++
 		mu.Unlock()
@@ -778,7 +771,7 @@ func Test5xxFallback(t *testing.T) {
 		ClassificationTemp:    0.1,
 	}
 
-	client, err := New(cfg, "sk-test")
+	client, err := New(&cfg, "sk-test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -808,7 +801,7 @@ func TestRepair(t *testing.T) {
 	t.Run("valid JSON passes without repair", func(t *testing.T) {
 		t.Parallel()
 
-		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			_, _ = fmt.Fprint(w, `{
@@ -828,7 +821,7 @@ func TestRepair(t *testing.T) {
 			ClassificationTemp:    0.1,
 		}
 
-		client, err := New(cfg, "sk-test")
+		client, err := New(&cfg, "sk-test")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -893,7 +886,7 @@ func TestRepair(t *testing.T) {
 			ClassificationTemp:    0.1,
 		}
 
-		client, err := New(cfg, "sk-test")
+		client, err := New(&cfg, "sk-test")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -960,7 +953,7 @@ func TestRepair(t *testing.T) {
 			ClassificationTemp:    0.1,
 		}
 
-		client, err := New(cfg, "sk-test")
+		client, err := New(&cfg, "sk-test")
 		if err != nil {
 			t.Fatal(err)
 		}

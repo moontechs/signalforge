@@ -18,6 +18,7 @@ import (
 	"github.com/moontechs/signalforge/internal/memory"
 	"github.com/moontechs/signalforge/internal/sources/github"
 	"github.com/moontechs/signalforge/internal/sources/hackernews"
+	"github.com/moontechs/signalforge/internal/sources/reddit"
 	"github.com/moontechs/signalforge/internal/sources/stackexchange"
 	"github.com/moontechs/signalforge/internal/storage"
 )
@@ -31,7 +32,7 @@ func newCollectCmd() *cobra.Command {
 		Short: "Collect raw signals from configured sources",
 		Long: `Collects raw signals from public sources and stores them in the SignalForge data directory.
 
-For the current MVP CLI flow, GitHub, Hacker News, and Stack Exchange collection are wired end-to-end.
+For the current MVP CLI flow, GitHub, Hacker News, Stack Exchange, and Reddit collection are wired end-to-end. Reddit is available only after configuration opt-in.
 
 Example:
   signalforge collect --sources github --since 30d
@@ -143,12 +144,14 @@ func setupCollectEnv(sourceFlag, sinceFlag, untilFlag string, maxItems int, lang
 	beforeStats := mem.GetStats()
 
 	collectors := make([]domain.SourceCollector, 0, len(selectedSources))
-	for _, source := range selectedSources {
-		collector, err := buildCollector(source, cfg, store)
-		if err != nil {
-			return nil, err
+	if !dryRun {
+		for _, source := range selectedSources {
+			collector, err := buildCollector(source, cfg, store)
+			if err != nil {
+				return nil, err
+			}
+			collectors = append(collectors, collector)
 		}
-		collectors = append(collectors, collector)
 	}
 
 	return &collectEnv{
@@ -169,10 +172,10 @@ func setupCollectEnv(sourceFlag, sinceFlag, untilFlag string, maxItems int, lang
 }
 
 // sourceOrder defines the deterministic execution order for collectors.
-var sourceOrder = []string{"github", "hackernews", "stackexchange"}
+var sourceOrder = []string{"github", "hackernews", "stackexchange", "reddit"}
 
 // orderSourcesDeterministically reorders the given source names to the fixed
-// order: GitHub, Hacker News, Stack Exchange. Sources not in the known set
+// order: GitHub, Hacker News, Stack Exchange, Reddit. Sources not in the known set
 // are appended at the end in their original relative order.
 func orderSourcesDeterministically(sources []string) []string {
 	requested := make(map[string]bool, len(sources))
@@ -251,6 +254,9 @@ func buildDryRunPlans(env *collectEnv, cfg *config.Config) []dryRunPlan {
 		case "stackexchange":
 			plan.Targets = buildSETargets(cfg)
 			plan.EstimatedReqs = estimateSERequests(cfg, env)
+		case "reddit":
+			plan.Targets = buildRedditTargets(cfg)
+			plan.EstimatedReqs = estimateRedditRequests(cfg, env)
 		default:
 			plan.Targets = []string{src}
 			plan.EstimatedReqs = 1
@@ -260,6 +266,35 @@ func buildDryRunPlans(env *collectEnv, cfg *config.Config) []dryRunPlan {
 	}
 
 	return plans
+}
+
+func buildRedditTargets(cfg *config.Config) []string {
+	targets := make([]string, 0, len(cfg.Sources.Reddit.Subreddits))
+	for _, subreddit := range cfg.Sources.Reddit.Subreddits {
+		targets = append(targets, "subreddit: "+strings.TrimSpace(subreddit))
+	}
+	return targets
+}
+
+func estimateRedditRequests(cfg *config.Config, env *collectEnv) int {
+	const redditListingPageSize = 100
+	posts := cfg.Sources.Reddit.MaxPostsPerRun
+	if env.maxItems > 0 {
+		posts = env.maxItems
+	}
+	listings := len(cfg.Sources.Reddit.Subreddits)
+	if listings < 1 {
+		listings = 1
+	}
+	pagesPerSubreddit := max(1, (posts+redditListingPageSize-1)/redditListingPageSize)
+	total := 1 + listings*pagesPerSubreddit
+	if cfg.Sources.Reddit.MaxCommentsPerPost > 0 {
+		total += posts
+	}
+	if total < 1 {
+		return 1
+	}
+	return total
 }
 
 func buildGitHubTargets(cfg *config.Config) []string {
@@ -424,6 +459,7 @@ func executeCollect(cmd *cobra.Command, env *collectEnv) error {
 
 	sourceResults := make([]sourceCollectionResult, 0, len(env.collectors))
 	var totalSignals int
+	var collectErrs []error
 
 	for _, collector := range env.collectors {
 		req := buildCollectRequest(env, collector)
@@ -440,25 +476,17 @@ func executeCollect(cmd *cobra.Command, env *collectEnv) error {
 		sr.skipped = sr.attempted - sr.collected
 		totalSignals += len(signals)
 		trackCollectorStats(env, collector)
+		recordSignals(env, signals)
 
 		if err != nil {
 			sr.failed = true
 			sr.err = err
-			sourceResults = append(sourceResults, sr)
-			afterStats := env.mem.GetStats()
-			delta := statsDelta(env.before, &afterStats)
-			delta.force = env.force
-			delta.resume = env.resume
-			delta.sources = sourceResults
-			if outputErr := reportCollectSummary(cmd, totalSignals, &delta); outputErr != nil {
-				return fmt.Errorf("write collection summary: %w", outputErr)
-			}
-			return fmt.Errorf("%s collection completed with errors: %w", collector.Name(), err)
+			collectErrs = append(collectErrs, fmt.Errorf("%s collection: %w", collector.Name(), err))
+		} else {
+			persistCursor(env, collector)
 		}
 
 		sourceResults = append(sourceResults, sr)
-		persistCursor(env, collector)
-		recordSignals(env, signals)
 	}
 
 	if err := env.mem.Save(); err != nil {
@@ -470,7 +498,13 @@ func executeCollect(cmd *cobra.Command, env *collectEnv) error {
 	delta.force = env.force
 	delta.resume = env.resume
 	delta.sources = sourceResults
-	return reportCollectSummary(cmd, totalSignals, &delta)
+	if err := reportCollectSummary(cmd, totalSignals, &delta); err != nil {
+		return err
+	}
+	if err := errors.Join(collectErrs...); err != nil {
+		return fmt.Errorf("collection completed with errors: %w", err)
+	}
+	return nil
 }
 
 // buildCollectRequest constructs a CollectRequest for the given collector from the environment.
@@ -518,7 +552,7 @@ func deduplicateSignals(signals []domain.RawSignal, env *collectEnv) []domain.Ra
 	return filtered
 }
 
-// trackCollectorStats records HN or Stack Exchange request/cache-hit stats into memory.
+// trackCollectorStats records source request/cache-hit stats into memory.
 func trackCollectorStats(env *collectEnv, collector domain.SourceCollector) {
 	if hnCol, ok := collector.(*hackernews.Collector); ok {
 		stats := hnCol.Stats()
@@ -529,6 +563,11 @@ func trackCollectorStats(env *collectEnv, collector domain.SourceCollector) {
 		stats := seCol.Stats()
 		env.mem.AddStackExchangeRequests(stats.Requests)
 		env.mem.AddStackExchangeCacheHits(stats.CacheHits)
+	}
+	if redditCol, ok := collector.(*reddit.Collector); ok {
+		stats := redditCol.Stats()
+		env.mem.AddRedditRequests(stats.Requests)
+		env.mem.AddRedditCacheHits(stats.CacheHits)
 	}
 }
 
@@ -546,6 +585,9 @@ func persistCursor(env *collectEnv, collector domain.SourceCollector) {
 func recordSignals(env *collectEnv, signals []domain.RawSignal) {
 	for i := range signals {
 		env.mem.AddRawSignal(signals[i].Source, signals[i].SourceID)
+		if signals[i].ContentHash != "" {
+			env.mem.AddContentHash(signals[i].ContentHash, signals[i].ID)
+		}
 	}
 }
 
@@ -647,79 +689,114 @@ func ensureStorageLayout(dir string) error {
 func buildCollector(source string, cfg *config.Config, store *storage.Storage) (domain.SourceCollector, error) { //nolint:ireturn // factory function intentionally returns interface
 	switch source {
 	case "github":
-		if !cfg.Sources.GitHub.Enabled {
-			return nil, errors.New("github collection is disabled in config")
-		}
-		if strings.TrimSpace(os.Getenv("GITHUB_TOKEN")) == "" {
-			return nil, errors.New("GITHUB_TOKEN is required for github collection")
-		}
-
-		ghCfg := github.CollectorConfig{
-			Enabled:            cfg.Sources.GitHub.Enabled,
-			SearchIssues:       cfg.Sources.GitHub.SearchIssues,
-			SearchDiscussions:  cfg.Sources.GitHub.SearchDiscussions,
-			MaxItemsPerRun:     cfg.Sources.GitHub.MaxItemsPerRun,
-			MaxCommentsPerItem: cfg.Sources.GitHub.MaxCommentsPerItem,
-			Repositories:       cfg.Sources.GitHub.Repositories,
-			Languages:          cfg.Sources.GitHub.Languages,
-			Labels:             cfg.Sources.GitHub.Labels,
-			MaxRequests:        cfg.Limits.MaxGitHubRequests,
-		}
-
-		collector, err := github.New(&ghCfg)
-		if err != nil {
-			return nil, fmt.Errorf("create github collector: %w", err)
-		}
-
-		// Attach disk cache.
-		collector.WithCache(store)
-		return collector, nil
-
+		return buildGitHubCollector(cfg, store)
 	case "hackernews":
-		if !cfg.Sources.HackerNews.Enabled {
-			return nil, errors.New("hackernews collection is disabled in config")
-		}
-
-		hnCfg := &hackernews.ConfigValues{
-			Enabled:            cfg.Sources.HackerNews.Enabled,
-			Feeds:              cfg.Sources.HackerNews.Feeds,
-			MaxItemsPerRun:     cfg.Sources.HackerNews.MaxItemsPerRun,
-			MaxCommentsPerItem: cfg.Sources.HackerNews.MaxCommentsPerItem,
-			MinimumScore:       cfg.Sources.HackerNews.MinimumScore,
-			MaxRequests:        cfg.Limits.MaxHNRequests,
-		}
-
-		collector, err := hackernews.New(hnCfg)
-		if err != nil {
-			return nil, fmt.Errorf("create hackernews collector: %w", err)
-		}
-
-		collector.WithCache(cache.NewCache(store, "hackernews"))
-		return collector, nil
-
+		return buildHackerNewsCollector(cfg, store)
 	case "stackexchange":
-		if !cfg.Sources.StackExchange.Enabled {
-			return nil, errors.New("stackexchange collection is disabled in config")
-		}
-
-		seCfg := &stackexchange.ConfigValues{
-			Enabled:         cfg.Sources.StackExchange.Enabled,
-			APIKey:          strings.TrimSpace(os.Getenv("STACKEXCHANGE_API_KEY")),
-			Sites:           cfg.Sources.StackExchange.Sites,
-			MaxItemsPerSite: cfg.Sources.StackExchange.MaxItemsPerSite,
-			MinimumScore:    cfg.Sources.StackExchange.MinimumScore,
-			MinimumViews:    cfg.Sources.StackExchange.MinimumViews,
-			PageSize:        cfg.Sources.StackExchange.PageSize,
-			MaxPagesPerSite: cfg.Sources.StackExchange.MaxPagesPerSite,
-			MaxRequests:     cfg.Limits.MaxStackExchangeReqs,
-		}
-		collector := stackexchange.New(seCfg, nil)
-		collector.WithCache(cache.NewCache(store, "stackexchange"))
-		return collector, nil
-
+		return buildStackExchangeCollector(cfg, store)
+	case "reddit":
+		return buildRedditCollector(cfg, store)
 	default:
 		return nil, fmt.Errorf("source %q is not supported by the collect command yet", source)
 	}
+}
+
+func buildGitHubCollector(cfg *config.Config, store *storage.Storage) (*github.Collector, error) {
+	if !cfg.Sources.GitHub.Enabled {
+		return nil, errors.New("github collection is disabled in config")
+	}
+	if strings.TrimSpace(os.Getenv("GITHUB_TOKEN")) == "" {
+		return nil, errors.New("GITHUB_TOKEN is required for github collection")
+	}
+
+	collectorCfg := github.CollectorConfig{
+		Enabled:            cfg.Sources.GitHub.Enabled,
+		SearchIssues:       cfg.Sources.GitHub.SearchIssues,
+		SearchDiscussions:  cfg.Sources.GitHub.SearchDiscussions,
+		MaxItemsPerRun:     cfg.Sources.GitHub.MaxItemsPerRun,
+		MaxCommentsPerItem: cfg.Sources.GitHub.MaxCommentsPerItem,
+		Repositories:       cfg.Sources.GitHub.Repositories,
+		Languages:          cfg.Sources.GitHub.Languages,
+		Labels:             cfg.Sources.GitHub.Labels,
+		MaxRequests:        cfg.Limits.MaxGitHubRequests,
+	}
+	collector, err := github.New(&collectorCfg)
+	if err != nil {
+		return nil, fmt.Errorf("create github collector: %w", err)
+	}
+	collector.WithCache(store)
+	return collector, nil
+}
+
+func buildHackerNewsCollector(cfg *config.Config, store *storage.Storage) (*hackernews.Collector, error) {
+	if !cfg.Sources.HackerNews.Enabled {
+		return nil, errors.New("hackernews collection is disabled in config")
+	}
+
+	collectorCfg := &hackernews.ConfigValues{
+		Enabled:            cfg.Sources.HackerNews.Enabled,
+		Feeds:              cfg.Sources.HackerNews.Feeds,
+		MaxItemsPerRun:     cfg.Sources.HackerNews.MaxItemsPerRun,
+		MaxCommentsPerItem: cfg.Sources.HackerNews.MaxCommentsPerItem,
+		MinimumScore:       cfg.Sources.HackerNews.MinimumScore,
+		MaxRequests:        cfg.Limits.MaxHNRequests,
+	}
+	collector, err := hackernews.New(collectorCfg)
+	if err != nil {
+		return nil, fmt.Errorf("create hackernews collector: %w", err)
+	}
+	collector.WithCache(cache.NewCache(store, "hackernews"))
+	return collector, nil
+}
+
+func buildStackExchangeCollector(cfg *config.Config, store *storage.Storage) (*stackexchange.Collector, error) {
+	if !cfg.Sources.StackExchange.Enabled {
+		return nil, errors.New("stackexchange collection is disabled in config")
+	}
+
+	collectorCfg := &stackexchange.ConfigValues{
+		Enabled:         cfg.Sources.StackExchange.Enabled,
+		APIKey:          strings.TrimSpace(os.Getenv("STACKEXCHANGE_API_KEY")),
+		Sites:           cfg.Sources.StackExchange.Sites,
+		MaxItemsPerSite: cfg.Sources.StackExchange.MaxItemsPerSite,
+		MinimumScore:    cfg.Sources.StackExchange.MinimumScore,
+		MinimumViews:    cfg.Sources.StackExchange.MinimumViews,
+		PageSize:        cfg.Sources.StackExchange.PageSize,
+		MaxPagesPerSite: cfg.Sources.StackExchange.MaxPagesPerSite,
+		MaxRequests:     cfg.Limits.MaxStackExchangeReqs,
+	}
+	collector := stackexchange.New(collectorCfg, nil)
+	collector.WithCache(cache.NewCache(store, "stackexchange"))
+	return collector, nil
+}
+
+func buildRedditCollector(cfg *config.Config, store *storage.Storage) (*reddit.Collector, error) {
+	if !cfg.Sources.Reddit.Enabled {
+		return nil, errors.New("reddit collection is disabled in config")
+	}
+	clientID := strings.TrimSpace(os.Getenv("REDDIT_CLIENT_ID"))
+	clientSecret := strings.TrimSpace(os.Getenv("REDDIT_CLIENT_SECRET"))
+	if clientID == "" || clientSecret == "" {
+		return nil, errors.New("REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET are required for reddit collection")
+	}
+
+	collectorCfg := &reddit.ConfigValues{
+		Enabled:            cfg.Sources.Reddit.Enabled,
+		Subreddits:         cfg.Sources.Reddit.Subreddits,
+		MaxPostsPerRun:     cfg.Sources.Reddit.MaxPostsPerRun,
+		MaxCommentsPerPost: cfg.Sources.Reddit.MaxCommentsPerPost,
+		MaxRequests:        cfg.Limits.MaxRedditRequests,
+		Sort:               "new",
+		TimeRange:          "all",
+		ClientID:           clientID,
+		ClientSecret:       clientSecret,
+	}
+	collector, err := reddit.New(collectorCfg)
+	if err != nil {
+		return nil, fmt.Errorf("create reddit collector: %w", err)
+	}
+	collector.WithCache(cache.NewCache(store, "reddit"))
+	return collector, nil
 }
 
 // sourceCollectionResult captures per-source collection results for summary reporting.
@@ -733,13 +810,15 @@ type sourceCollectionResult struct {
 }
 
 type collectStatsDelta struct {
-	collected   int
-	skipped     int
-	requests    int
-	hnRequests  int
-	hnCacheHits int
-	seRequests  int
-	seCacheHits int
+	collected       int
+	skipped         int
+	requests        int
+	hnRequests      int
+	hnCacheHits     int
+	seRequests      int
+	seCacheHits     int
+	redditRequests  int
+	redditCacheHits int
 
 	// New per-source and mode tracking.
 	force   bool
@@ -749,13 +828,15 @@ type collectStatsDelta struct {
 
 func statsDelta(before, after *domain.ResearchStats) collectStatsDelta {
 	return collectStatsDelta{
-		collected:   after.RawSignalsCollected - before.RawSignalsCollected,
-		skipped:     after.RawSignalsSkipped - before.RawSignalsSkipped,
-		requests:    after.GitHubRequests - before.GitHubRequests,
-		hnRequests:  after.HackerNewsRequests - before.HackerNewsRequests,
-		hnCacheHits: after.HackerNewsCacheHits - before.HackerNewsCacheHits,
-		seRequests:  after.StackExchangeRequests - before.StackExchangeRequests,
-		seCacheHits: after.StackExchangeCacheHits - before.StackExchangeCacheHits,
+		collected:       after.RawSignalsCollected - before.RawSignalsCollected,
+		skipped:         after.RawSignalsSkipped - before.RawSignalsSkipped,
+		requests:        after.GitHubRequests - before.GitHubRequests,
+		hnRequests:      after.HackerNewsRequests - before.HackerNewsRequests,
+		hnCacheHits:     after.HackerNewsCacheHits - before.HackerNewsCacheHits,
+		seRequests:      after.StackExchangeRequests - before.StackExchangeRequests,
+		seCacheHits:     after.StackExchangeCacheHits - before.StackExchangeCacheHits,
+		redditRequests:  after.RedditRequests - before.RedditRequests,
+		redditCacheHits: after.RedditCacheHits - before.RedditCacheHits,
 	}
 }
 
@@ -811,6 +892,11 @@ func reportCollectSummary(cmd *cobra.Command, totalSignals int, delta *collectSt
 	}
 	if delta.seRequests > 0 {
 		if _, err := fmt.Fprintf(w, "  Stack Exchange requests: %d (cache hits: %d)\n", delta.seRequests, delta.seCacheHits); err != nil {
+			return fmt.Errorf("write summary: %w", err)
+		}
+	}
+	if delta.redditRequests > 0 {
+		if _, err := fmt.Fprintf(w, "  Reddit requests: %d (cache hits: %d)\n", delta.redditRequests, delta.redditCacheHits); err != nil {
 			return fmt.Errorf("write summary: %w", err)
 		}
 	}

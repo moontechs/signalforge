@@ -1,6 +1,6 @@
 # SignalForge
 
-SignalForge — automated problem discovery engine. Collects public signals from GitHub, Hacker News, and Stack Exchange, classifies them, clusters recurring problems, and generates evidence-backed product hypotheses.
+SignalForge — automated problem discovery engine. Collects public signals from GitHub, Hacker News, Stack Exchange, and optionally Reddit, classifies them, clusters recurring problems, and generates evidence-backed product hypotheses.
 
 ## Architecture
 
@@ -93,11 +93,11 @@ testdata/                        — Test fixtures
 ### Source collectors
 - Each external source implements `SourceCollector` interface under `internal/sources/<name>/`
 - Package structure follows: `client.go` (HTTP), `parser.go` (response→domain mapping), `errors.go` (typed errors), `collector.go` (orchestration)
-- **Collection strategy:** If `Config.GitHub.Repositories` is non-empty, use per-repo API (`GET /repos/{owner}/{repo}/issues`) for precise collection; if empty, use search API (`GET /search/issues`) for broader coverage
-- **Sort order:** Collect in ascending update time (`sort=updated&direction=asc`) so repeated runs pick up only new/updated items since the last cursor
-- **Rate-limit tracking:** REST and GraphQL have separate rate-limit counters. Both check `x-ratelimit-remaining` headers before making requests. Secondary rate limits (HTTP 403 + `Retry-After`) are handled identically to primary limits (backoff + retry)
-- **Conditional requests:** Store `ETag` / `Last-Modified` headers per endpoint. Send `If-None-Match` / `If-Modified-Since` on subsequent requests. HTTP 304 extends cache TTL without replacing content
-- **Comments pagination:** Fetch comments via paginated endpoints (`per_page=100`) with a configurable `MaxCommentsPerItem` cap, ordered by `created_at` asc
+- **GitHub collection strategy:** If `Config.GitHub.Repositories` is non-empty, use per-repo API (`GET /repos/{owner}/{repo}/issues`) for precise collection; if empty, use search API (`GET /search/issues`) for broader coverage
+- **GitHub sort order:** Collect in ascending update time (`sort=updated&direction=asc`) so repeated runs pick up only new/updated items since the last cursor
+- **GitHub rate-limit tracking:** REST and GraphQL have separate rate-limit counters. Both check `x-ratelimit-remaining` headers before making requests. Secondary rate limits (HTTP 403 + `Retry-After`) are handled identically to primary limits (backoff + retry)
+- **GitHub conditional requests:** Store `ETag` / `Last-Modified` headers per endpoint. Send `If-None-Match` / `If-Modified-Since` on subsequent requests. HTTP 304 extends cache TTL without replacing content
+- **GitHub comments pagination:** Fetch comments via paginated endpoints (`per_page=100`) with a configurable `MaxCommentsPerItem` cap, ordered by `created_at` asc
 - **Fake transport for tests:** Clients accept a `transport` interface; tests inject `fakeTransport` with registered responses, avoiding httptest.NewServer overhead and external credentials
 
 ## Pipeline stages
@@ -133,6 +133,18 @@ Each stage is resumable. The `pipeline` command runs all stages sequentially.
 - **Stats:** `Stats{Requests, CacheHits}` exposed by both `client` and `Collector`. Tracked in memory via `AddHNRequests`/`AddHNCacheHits`
 - **Test patterns:** `fakeTransport` with sequential responses per URL, `testClient()` helper, `testCollector()` helper. All tests use `t.Parallel()` where safe. Test fixtures in `testdata/hackernews/`
 
+## Reddit collector
+
+- Reddit is fully wired but disabled by default: `signalforge collect --sources reddit --since 30d`
+- Enabling it requires configured subreddits plus `REDDIT_CLIENT_ID` and `REDDIT_CLIENT_SECRET`; dry-run planning does not require credentials
+- The client uses OAuth client credentials, refreshes expiring access tokens in memory, retries transient failures, and enforces an atomic per-run request cap
+- Listing responses use a 5-minute cache; post-comment responses use a 24-hour cache
+- The collector filters unusable/old posts before applying the item cap, deduplicates across pages and subreddits, and fetches comments with at most five concurrent requests
+- Comments are flattened breadth-first to depth 50; deleted/removed nodes are skipped while usable descendants remain eligible
+- Results are sorted newest-first. Partial comment failures retain posts without comments and are returned as joined typed errors
+- Per-run request/cache-hit deltas are exposed through `Stats` and persisted in `memory.json`
+- Tests use realistic listing/comment fixtures under `testdata/reddit/` and injected transports; no Reddit credentials or network access are required
+
 ## MVP scope (4 milestones)
 
 | Milestone | What | Status |
@@ -142,7 +154,7 @@ Each stage is resumable. The `pipeline` command runs all stages sequentially.
 | M3: Intelligence | OpenRouter classification, clustering, JTBD, solutions | Todo |
 | M4: Pipeline | pipeline command, export, rank, stats, e2e tests, README | Todo |
 
-Post-MVP: Reddit collector, Bright Data SERP/Unlocker, competitor research, solution scoring, brainstorm command.
+Post-MVP: Bright Data SERP/Unlocker, competitor research, solution scoring, brainstorm command.
 
 ## Key design decisions
 

@@ -5,6 +5,8 @@ package clustering
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -40,14 +42,14 @@ type fpEntry struct {
 
 // Config holds clustering parameters.
 type Config struct {
-	JaccardThreshold  float64 // default 0.3
-	EntityWeight      float64 // default 0.25
-	ActionWeight      float64 // default 0.25
-	KeywordWeight     float64 // default 0.25
-	TextWeight        float64 // default 0.25
-	SemanticThreshold float64 // Jaccard below this triggers semantic check (default 0.15)
-	MinClusterSize    int     // default 1
-	MaxClusters       int     // default 0 (unlimited)
+	JaccardThreshold  float64 // Default: 0.3.
+	EntityWeight      float64 // Default: 0.25.
+	ActionWeight      float64 // Default: 0.25.
+	KeywordWeight     float64 // Default: 0.25.
+	TextWeight        float64 // Default: 0.25.
+	SemanticThreshold float64 // Jaccard below this triggers a semantic check. Default: 0.15.
+	MinClusterSize    int     // Default: 1.
+	MaxClusters       int     // Default: 0 (unlimited).
 }
 
 // setDefaults fills zero-valued fields with sensible defaults.
@@ -79,8 +81,8 @@ func (c *Config) setDefaults() {
 // matching, canonical action matching, and optional semantic boundary checks.
 type Clusterer struct {
 	cfg     Config
-	llm     domain.LLMClient // optional, for semantic edge checks
-	storage *storage.Storage // for loading/saving clusters
+	llm     domain.LLMClient // Optional, for semantic edge checks.
+	storage *storage.Storage // Used for loading and saving clusters.
 }
 
 // New creates a new Clusterer with the given config, optional LLM client, and
@@ -98,6 +100,9 @@ func New(cfg Config, llm domain.LLMClient, store *storage.Storage) *Clusterer {
 // with IsProblemSignal == true are considered. Returns clusters sorted by
 // ProblemTotal descending.
 func (c *Clusterer) Cluster(ctx context.Context, signals []domain.ProblemSignal) ([]domain.ProblemCluster, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	// Filter to only problem signals.
 	problemSignals := filterProblemSignals(signals)
 	if len(problemSignals) == 0 {
@@ -106,10 +111,10 @@ func (c *Clusterer) Cluster(ctx context.Context, signals []domain.ProblemSignal)
 
 	// Precompute fingerprints for each signal.
 	entries := make([]fpEntry, len(problemSignals))
-	for i, s := range problemSignals {
-		entries[i] = fpEntry{
-			signal: s,
-			fp:     c.signalFingerprint(s),
+	for index := range problemSignals {
+		entries[index] = fpEntry{
+			signal: problemSignals[index],
+			fp:     c.signalFingerprint(&problemSignals[index]),
 		}
 	}
 
@@ -119,7 +124,7 @@ func (c *Clusterer) Cluster(ctx context.Context, signals []domain.ProblemSignal)
 	for i := range similarity {
 		similarity[i] = make([]float64, n)
 		for j := range similarity[i] {
-			similarity[i][j] = c.computeSimilarity(entries[i].fp, entries[j].fp)
+			similarity[i][j] = c.computeSimilarity(&entries[i].fp, &entries[j].fp)
 		}
 	}
 
@@ -161,7 +166,7 @@ func (c *Clusterer) Cluster(ctx context.Context, signals []domain.ProblemSignal)
 
 // signalFingerprint returns the normalized tokens, canonical actions, entity
 // fingerprints, and keywords for a problem signal.
-func (c *Clusterer) signalFingerprint(sig domain.ProblemSignal) signalFP {
+func (c *Clusterer) signalFingerprint(sig *domain.ProblemSignal) signalFP {
 	// Combine title-like fields for text tokens.
 	textParts := []string{sig.Problem, sig.Context, sig.DesiredOutcome, sig.CurrentWorkaround}
 	text := strings.Join(textParts, " ")
@@ -183,7 +188,7 @@ func (c *Clusterer) signalFingerprint(sig domain.ProblemSignal) signalFP {
 // computeSimilarity returns a weighted combination of Jaccard similarity on
 // normalized text tokens, and FingerprintOverlap on keywords, entity
 // fingerprints, and canonical actions. Returns a value in [0.0, 1.0].
-func (c *Clusterer) computeSimilarity(a, b signalFP) float64 {
+func (c *Clusterer) computeSimilarity(a, b *signalFP) float64 {
 	textSim := jaccardTokens(a.tokens, b.tokens)
 	keywordSim := FingerprintOverlap(a.keywords, b.keywords)
 	entitySim := FingerprintOverlap(a.entities, b.entities)
@@ -214,120 +219,41 @@ func (c *Clusterer) buildCluster(signals []domain.ProblemSignal) domain.ProblemC
 		return domain.ProblemCluster{}
 	}
 
-	// Determine the most common problem text as the title.
-	titleCounts := make(map[string]int)
-	for _, s := range signals {
-		titleCounts[s.Problem]++
-	}
-	title := signals[0].Problem
-	maxCount := 0
-	for t, count := range titleCounts {
-		if count > maxCount {
-			title = t
-			maxCount = count
-		}
-	}
+	title := mostCommonProblem(signals)
+	keywords := collectUniqueStrings(signals, func(s *domain.ProblemSignal) []string { return s.Keywords })
+	entities := collectUniqueStrings(signals, func(s *domain.ProblemSignal) []string { return s.Entities })
+	actions := collectUniqueStrings(signals, func(s *domain.ProblemSignal) []string { return s.Actions })
+	contexts := collectUniqueFields(signals, func(s *domain.ProblemSignal) string { return s.Context })
+	targetUsers := collectUniqueFields(signals, func(s *domain.ProblemSignal) string { return s.TargetUser })
+	workarounds := collectUniqueFields(signals, func(s *domain.ProblemSignal) string { return s.CurrentWorkaround })
+	outcomes := collectUniqueFields(signals, func(s *domain.ProblemSignal) string { return s.DesiredOutcome })
+	constraints := collectUniqueStrings(signals, func(s *domain.ProblemSignal) []string { return s.Constraints })
 
-	// Collect all unique values.
-	keywords := collectUniqueStrings(signals, func(s domain.ProblemSignal) []string { return s.Keywords })
-	entities := collectUniqueStrings(signals, func(s domain.ProblemSignal) []string { return s.Entities })
-	actions := collectUniqueStrings(signals, func(s domain.ProblemSignal) []string { return s.Actions })
-	contexts := collectUniqueFields(signals, func(s domain.ProblemSignal) string { return s.Context })
-	targetUsers := collectUniqueFields(signals, func(s domain.ProblemSignal) string { return s.TargetUser })
-	workarounds := collectUniqueFields(signals, func(s domain.ProblemSignal) string { return s.CurrentWorkaround })
-	outcomes := collectUniqueFields(signals, func(s domain.ProblemSignal) string { return s.DesiredOutcome })
-	constraints := collectUniqueStrings(signals, func(s domain.ProblemSignal) []string { return s.Constraints })
-
-	// Build summary from combined signals.
-	summary := buildSummary(signals)
-
-	// Signal IDs and time bounds.
-	signalIDs := make([]string, len(signals))
-	sourceTypes := make(map[string]struct{})
-	var firstObserved, lastObserved time.Time
-	representativeIDs := make([]string, 0, len(signals))
-
-	for i, s := range signals {
-		signalIDs[i] = s.ID
-		sourceTypes[s.Source] = struct{}{}
-
-		if s.ClassifiedAt.Before(firstObserved) || firstObserved.IsZero() {
-			firstObserved = s.ClassifiedAt
-		}
-		if s.ClassifiedAt.After(lastObserved) {
-			lastObserved = s.ClassifiedAt
-		}
-
-		// Representative signals: those with highest relevance.
-		if len(representativeIDs) < 5 {
-			representativeIDs = append(representativeIDs, s.ID)
-		}
-	}
-
-	// Sort representative IDs by relevance (descending) and take top.
-	type repCandidate struct {
-		id        string
-		relevance float64
-	}
-	candidates := make([]repCandidate, len(signals))
-	for i, s := range signals {
-		candidates[i] = repCandidate{id: s.ID, relevance: s.Relevance}
-	}
-	// Simple bubble sort by relevance descending, limited to top 5.
-	for i := 0; i < len(candidates) && i < 5; i++ {
-		for j := i + 1; j < len(candidates); j++ {
-			if candidates[j].relevance > candidates[i].relevance {
-				candidates[i], candidates[j] = candidates[j], candidates[i]
-			}
-		}
-	}
-	repLimit := 5
-	if len(candidates) < repLimit {
-		repLimit = len(candidates)
-	}
-	representativeIDs = make([]string, repLimit)
-	for i := 0; i < repLimit; i++ {
-		representativeIDs[i] = candidates[i].id
-	}
-
-	// Unique sources.
-	uniqueSources := make(map[string]struct{})
-	for _, s := range signals {
-		uniqueSources[s.Source] = struct{}{}
-	}
-
-	sourceTypesList := make([]string, 0, len(sourceTypes))
-	for st := range sourceTypes {
-		sourceTypesList = append(sourceTypesList, st)
-	}
-
-	// Compute scorecard.
+	evidence := summarizeEvidence(signals)
 	scorecard := c.computeProblemScore(signals)
 	confidence := c.computeConfidence(signals, scorecard)
-
-	// Generate a stable cluster ID based on first signal's ID.
-	clusterID := fmt.Sprintf("cluster_%s", signalIDs[0][:min(16, len(signalIDs[0]))])
+	now := time.Now()
 
 	return domain.ProblemCluster{
-		ID:                      clusterID,
-		CreatedAt:               time.Now(),
-		UpdatedAt:               time.Now(),
+		ID:                      "cluster_" + evidence.signalIDs[0][:min(16, len(evidence.signalIDs[0]))],
+		CreatedAt:               now,
+		UpdatedAt:               now,
 		Title:                   title,
-		Summary:                 summary,
+		Summary:                 buildSummary(signals),
 		Problem:                 title,
 		TargetUsers:             targetUsers,
 		Contexts:                contexts,
 		CurrentWorkarounds:      workarounds,
 		DesiredOutcomes:         outcomes,
 		Constraints:             constraints,
-		SignalIDs:               signalIDs,
-		RepresentativeSignalIDs: representativeIDs,
+		SignalIDs:               evidence.signalIDs,
+		RepresentativeSignalIDs: evidence.representativeIDs,
 		SignalCount:             len(signals),
-		IndependentSources:      len(uniqueSources),
+		IndependentSources:      len(evidence.sourceTypes),
 		IndependentDomains:      countDomains(signals),
-		SourceTypes:             sourceTypesList,
-		FirstObservedAt:         firstObserved,
-		LastObservedAt:          lastObserved,
+		SourceTypes:             evidence.sourceTypes,
+		FirstObservedAt:         evidence.firstObserved,
+		LastObservedAt:          evidence.lastObserved,
 		Keywords:                keywords,
 		Entities:                entities,
 		Actions:                 actions,
@@ -338,6 +264,69 @@ func (c *Clusterer) buildCluster(signals []domain.ProblemSignal) domain.ProblemC
 	}
 }
 
+type clusterEvidence struct {
+	signalIDs         []string
+	representativeIDs []string
+	sourceTypes       []string
+	firstObserved     time.Time
+	lastObserved      time.Time
+}
+
+type representativeCandidate struct {
+	id        string
+	relevance float64
+}
+
+func mostCommonProblem(signals []domain.ProblemSignal) string {
+	counts := make(map[string]int)
+	for index := range signals {
+		counts[signals[index].Problem]++
+	}
+
+	title := signals[0].Problem
+	for index := range signals {
+		if counts[signals[index].Problem] > counts[title] {
+			title = signals[index].Problem
+		}
+	}
+	return title
+}
+
+func summarizeEvidence(signals []domain.ProblemSignal) clusterEvidence {
+	evidence := clusterEvidence{
+		signalIDs: make([]string, len(signals)),
+	}
+	sources := make(map[string]struct{})
+	candidates := make([]representativeCandidate, len(signals))
+	for index := range signals {
+		signal := &signals[index]
+		evidence.signalIDs[index] = signal.ID
+		candidates[index] = representativeCandidate{id: signal.ID, relevance: signal.Relevance}
+		sources[signal.Source] = struct{}{}
+		if evidence.firstObserved.IsZero() || signal.ClassifiedAt.Before(evidence.firstObserved) {
+			evidence.firstObserved = signal.ClassifiedAt
+		}
+		if signal.ClassifiedAt.After(evidence.lastObserved) {
+			evidence.lastObserved = signal.ClassifiedAt
+		}
+	}
+
+	sort.SliceStable(candidates, func(i, j int) bool {
+		return candidates[i].relevance > candidates[j].relevance
+	})
+	limit := min(5, len(candidates))
+	evidence.representativeIDs = make([]string, limit)
+	for index := range evidence.representativeIDs {
+		evidence.representativeIDs[index] = candidates[index].id
+	}
+	evidence.sourceTypes = make([]string, 0, len(sources))
+	for source := range sources {
+		evidence.sourceTypes = append(evidence.sourceTypes, source)
+	}
+	sort.Strings(evidence.sourceTypes)
+	return evidence
+}
+
 // computeProblemScore computes the 8-dimension ProblemScorecard for a group
 // of related signals.
 func (c *Clusterer) computeProblemScore(signals []domain.ProblemSignal) domain.ProblemScorecard {
@@ -346,113 +335,64 @@ func (c *Clusterer) computeProblemScore(signals []domain.ProblemSignal) domain.P
 	}
 
 	n := float64(len(signals))
-
-	// EvidenceStrength: average of relevance scores across signals.
-	var totalRelevance float64
-	for _, s := range signals {
-		totalRelevance += s.Relevance
-	}
-	evidenceStrength := totalRelevance / n
-
-	// Recurrence: proportion of signals with Recurring == true.
-	var recurringCount float64
-	for _, s := range signals {
-		if s.Recurring {
+	var totalRelevance, recurringCount, totalSeverity, workaroundCount, solvableCount float64
+	uniqueSources := make(map[string]struct{})
+	uniqueUsers := make(map[string]struct{})
+	var firstObserved, lastObserved time.Time
+	for index := range signals {
+		signal := &signals[index]
+		totalRelevance += signal.Relevance
+		totalSeverity += signal.SeverityHint
+		if signal.Recurring {
 			recurringCount++
 		}
-	}
-	recurrence := recurringCount / n
-
-	// Severity: average of SeverityHint / 10 across signals.
-	var totalSeverity float64
-	for _, s := range signals {
-		totalSeverity += s.SeverityHint
-	}
-	severity := totalSeverity / (n * 10)
-
-	// WorkaroundCost: average of non-empty CurrentWorkaround signals.
-	var workaroundTotal float64
-	var workaroundCount float64
-	for _, s := range signals {
-		if s.CurrentWorkaround != "" {
-			workaroundTotal += 1.0
+		if signal.CurrentWorkaround != "" {
 			workaroundCount++
 		}
-	}
-	workaroundCost := 0.0
-	if workaroundCount > 0 {
-		workaroundCost = workaroundTotal / n
-	}
-
-	// SourceDiversity: based on number of unique sources.
-	uniqueSources := make(map[string]struct{})
-	for _, s := range signals {
-		uniqueSources[s.Source] = struct{}{}
-	}
-	sourceDiversity := float64(len(uniqueSources)) / n
-	if sourceDiversity > 1.0 {
-		sourceDiversity = 1.0
-	}
-
-	// Longevity: based on time span between first and last observed.
-	var firstObserved, lastObserved time.Time
-	for _, s := range signals {
-		if s.ClassifiedAt.Before(firstObserved) || firstObserved.IsZero() {
-			firstObserved = s.ClassifiedAt
-		}
-		if s.ClassifiedAt.After(lastObserved) {
-			lastObserved = s.ClassifiedAt
-		}
-	}
-	longevity := 0.0
-	if !firstObserved.IsZero() && !lastObserved.IsZero() && lastObserved.After(firstObserved) {
-		span := lastObserved.Sub(firstObserved)
-		// Scale: 1 day = 0.25, 7 days = 0.5, 30 days = 0.75, 90+ days = 1.0
-		days := span.Hours() / 24
-		switch {
-		case days >= 90:
-			longevity = 1.0
-		case days >= 30:
-			longevity = 0.75
-		case days >= 7:
-			longevity = 0.5
-		case days >= 1:
-			longevity = 0.25
-		default:
-			longevity = 0.1
-		}
-	}
-
-	// UserSpecificity: based on diversity of TargetUser values.
-	uniqueUsers := make(map[string]struct{})
-	for _, s := range signals {
-		if s.TargetUser != "" {
-			uniqueUsers[s.TargetUser] = struct{}{}
-		}
-	}
-	userSpecificity := float64(len(uniqueUsers)) / n
-	if userSpecificity > 1.0 {
-		userSpecificity = 1.0
-	}
-
-	// ProductSolvability: proportion of signals with ProductSolvable == true.
-	var solvableCount float64
-	for _, s := range signals {
-		if s.ProductSolvable {
+		if signal.ProductSolvable {
 			solvableCount++
 		}
+		uniqueSources[signal.Source] = struct{}{}
+		if signal.TargetUser != "" {
+			uniqueUsers[signal.TargetUser] = struct{}{}
+		}
+		if signal.ClassifiedAt.Before(firstObserved) || firstObserved.IsZero() {
+			firstObserved = signal.ClassifiedAt
+		}
+		if signal.ClassifiedAt.After(lastObserved) {
+			lastObserved = signal.ClassifiedAt
+		}
 	}
-	productSolvability := solvableCount / n
 
 	return domain.ProblemScorecard{
-		EvidenceStrength:   clamp01(evidenceStrength),
-		Recurrence:         clamp01(recurrence),
-		Severity:           clamp01(severity),
-		WorkaroundCost:     clamp01(workaroundCost),
-		SourceDiversity:    clamp01(sourceDiversity),
-		Longevity:          clamp01(longevity),
-		UserSpecificity:    clamp01(userSpecificity),
-		ProductSolvability: clamp01(productSolvability),
+		EvidenceStrength:   clamp01(totalRelevance / n),
+		Recurrence:         clamp01(recurringCount / n),
+		Severity:           clamp01(totalSeverity / (n * 10)),
+		WorkaroundCost:     clamp01(workaroundCount / n),
+		SourceDiversity:    clamp01(float64(len(uniqueSources)) / n),
+		Longevity:          longevityScore(firstObserved, lastObserved),
+		UserSpecificity:    clamp01(float64(len(uniqueUsers)) / n),
+		ProductSolvability: clamp01(solvableCount / n),
+	}
+}
+
+func longevityScore(firstObserved, lastObserved time.Time) float64 {
+	if firstObserved.IsZero() || lastObserved.IsZero() || !lastObserved.After(firstObserved) {
+		return 0
+	}
+
+	days := lastObserved.Sub(firstObserved).Hours() / 24
+	switch {
+	case days >= 90:
+		return 1
+	case days >= 30:
+		return 0.75
+	case days >= 7:
+		return 0.5
+	case days >= 1:
+		return 0.25
+	default:
+		return 0.1
 	}
 }
 
@@ -470,8 +410,8 @@ func (c *Clusterer) computeConfidence(signals []domain.ProblemSignal, score doma
 
 	// Source diversity factor.
 	uniqueSources := make(map[string]struct{})
-	for _, s := range signals {
-		uniqueSources[s.Source] = struct{}{}
+	for index := range signals {
+		uniqueSources[signals[index].Source] = struct{}{}
 	}
 	sourceScore := float64(len(uniqueSources)) / 3.0
 	if sourceScore > 1.0 {
@@ -483,8 +423,8 @@ func (c *Clusterer) computeConfidence(signals []domain.ProblemSignal, score doma
 
 	// Recurrence evidence.
 	var recurringCount float64
-	for _, s := range signals {
-		if s.Recurring {
+	for index := range signals {
+		if signals[index].Recurring {
 			recurringCount++
 		}
 	}
@@ -508,7 +448,7 @@ func (c *Clusterer) computeConfidence(signals []domain.ProblemSignal, score doma
 // checkSemanticBoundary uses the LLM to determine whether two problem signals
 // describe the same underlying problem. Returns true if they should be in the
 // same cluster.
-func (c *Clusterer) checkSemanticBoundary(ctx context.Context, a, b domain.ProblemSignal) (bool, error) {
+func (c *Clusterer) checkSemanticBoundary(ctx context.Context, a, b *domain.ProblemSignal) (bool, error) {
 	if c.llm == nil {
 		return false, nil
 	}
@@ -551,9 +491,9 @@ Answer with exactly one word: "yes" if they describe the same problem, or "no" i
 // filterProblemSignals returns only signals with IsProblemSignal == true.
 func filterProblemSignals(signals []domain.ProblemSignal) []domain.ProblemSignal {
 	filtered := make([]domain.ProblemSignal, 0, len(signals))
-	for _, s := range signals {
-		if s.IsProblemSignal {
-			filtered = append(filtered, s)
+	for index := range signals {
+		if signals[index].IsProblemSignal {
+			filtered = append(filtered, signals[index])
 		}
 	}
 	return filtered
@@ -562,33 +502,7 @@ func filterProblemSignals(signals []domain.ProblemSignal) []domain.ProblemSignal
 // jaccardTokens computes the Jaccard similarity coefficient between two sorted,
 // deduplicated token slices. Returns 0 for empty sets.
 func jaccardTokens(a, b []string) float64 {
-	if len(a) == 0 || len(b) == 0 {
-		return 0
-	}
-
-	setA := make(map[string]struct{}, len(a))
-	for _, t := range a {
-		setA[t] = struct{}{}
-	}
-
-	intersection := 0
-	for _, t := range b {
-		if _, ok := setA[t]; ok {
-			intersection++
-		}
-	}
-
-	union := len(setA)
-	for _, t := range b {
-		if _, ok := setA[t]; !ok {
-			union++
-		}
-	}
-
-	if union == 0 {
-		return 0
-	}
-	return float64(intersection) / float64(union)
+	return FingerprintOverlap(a, b)
 }
 
 // agglomerate performs single-linkage agglomerative clustering. Each entry
@@ -600,31 +514,13 @@ func agglomerate(entries []fpEntry, similarity [][]float64, cfg Config) [][]int 
 		return nil
 	}
 
-	// Each entry starts in its own group.
-	parents := make([]int, n)
-	for i := range parents {
-		parents[i] = i
-	}
-
-	var find func(int) int
-	find = func(x int) int {
-		if parents[x] != x {
-			parents[x] = find(parents[x])
-		}
-		return parents[x]
-	}
-	union := func(a, b int) {
-		ra, rb := find(a), find(b)
-		if ra != rb {
-			parents[ra] = rb
-		}
-	}
+	set := newDisjointSet(n)
 
 	// Single-linkage: merge groups if any inter-group similarity >= threshold.
 	for i := 0; i < n; i++ {
 		for j := i + 1; j < n; j++ {
 			if similarity[i][j] >= cfg.JaccardThreshold {
-				union(i, j)
+				set.union(i, j)
 			}
 		}
 	}
@@ -632,7 +528,7 @@ func agglomerate(entries []fpEntry, similarity [][]float64, cfg Config) [][]int 
 	// Collect groups.
 	groupMap := make(map[int][]int)
 	for i := 0; i < n; i++ {
-		root := find(i)
+		root := set.find(i)
 		groupMap[root] = append(groupMap[root], i)
 	}
 
@@ -656,69 +552,21 @@ func (c *Clusterer) resolveEdgeCases(
 		return groups
 	}
 
-	// Build a map from original index to group index.
-	idxToGroup := make(map[int]int)
-	for g, members := range groups {
-		for _, idx := range members {
-			idxToGroup[idx] = g
-		}
-	}
-
-	merged := make([]bool, len(groups))
-	// Union-Find on groups.
-	groupParents := make([]int, len(groups))
-	for i := range groupParents {
-		groupParents[i] = i
-	}
-	var findGroup func(int) int
-	findGroup = func(x int) int {
-		if groupParents[x] != x {
-			groupParents[x] = findGroup(groupParents[x])
-		}
-		return groupParents[x]
-	}
-	unionGroup := func(a, b int) {
-		ra, rb := findGroup(a), findGroup(b)
-		if ra != rb {
-			groupParents[ra] = rb
-		}
-	}
-
-	// For each pair of groups, check if any cross-group pair falls in the
-	// edge zone and merge if semantic check passes.
+	merged := newDisjointSet(len(groups))
 	for g1 := 0; g1 < len(groups); g1++ {
 		for g2 := g1 + 1; g2 < len(groups); g2++ {
-			if merged[g1] && merged[g2] {
+			if merged.find(g1) == merged.find(g2) {
 				continue
 			}
-			shouldMerge := false
-			for _, i := range groups[g1] {
-				for _, j := range groups[g2] {
-					sim := similarity[i][j]
-					if sim >= c.cfg.SemanticThreshold && sim < c.cfg.JaccardThreshold {
-						same, err := c.checkSemanticBoundary(ctx, entries[i].signal, entries[j].signal)
-						if err == nil && same {
-							shouldMerge = true
-							break
-						}
-					}
-				}
-				if shouldMerge {
-					break
-				}
-			}
-			if shouldMerge {
-				unionGroup(g1, g2)
-				merged[g1] = true
-				merged[g2] = true
+			if c.groupsMatch(ctx, entries, similarity, groups[g1], groups[g2]) {
+				merged.union(g1, g2)
 			}
 		}
 	}
 
-	// Re-collect groups.
 	mergedGroups := make(map[int][]int)
 	for g := range groups {
-		root := findGroup(g)
+		root := merged.find(g)
 		mergedGroups[root] = append(mergedGroups[root], groups[g]...)
 	}
 
@@ -727,6 +575,51 @@ func (c *Clusterer) resolveEdgeCases(
 		result = append(result, members)
 	}
 	return result
+}
+
+func (c *Clusterer) groupsMatch(
+	ctx context.Context,
+	entries []fpEntry,
+	similarity [][]float64,
+	firstGroup, secondGroup []int,
+) bool {
+	for _, first := range firstGroup {
+		for _, second := range secondGroup {
+			score := similarity[first][second]
+			if score < c.cfg.SemanticThreshold || score >= c.cfg.JaccardThreshold {
+				continue
+			}
+			same, err := c.checkSemanticBoundary(ctx, &entries[first].signal, &entries[second].signal)
+			if err == nil && same {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+type disjointSet []int
+
+func newDisjointSet(size int) disjointSet {
+	set := make(disjointSet, size)
+	for index := range set {
+		set[index] = index
+	}
+	return set
+}
+
+func (s disjointSet) find(value int) int {
+	if s[value] != value {
+		s[value] = s.find(s[value])
+	}
+	return s[value]
+}
+
+func (s disjointSet) union(first, second int) {
+	firstRoot, secondRoot := s.find(first), s.find(second)
+	if firstRoot != secondRoot {
+		s[firstRoot] = secondRoot
+	}
 }
 
 // buildSummary creates a human-readable summary from a group of signals.
@@ -740,11 +633,12 @@ func buildSummary(signals []domain.ProblemSignal) string {
 
 	parts := make([]string, 0, len(signals))
 	seen := make(map[string]struct{})
-	for _, s := range signals {
-		if s.Problem != "" {
-			if _, ok := seen[s.Problem]; !ok {
-				seen[s.Problem] = struct{}{}
-				parts = append(parts, s.Problem)
+	for index := range signals {
+		problem := signals[index].Problem
+		if problem != "" {
+			if _, ok := seen[problem]; !ok {
+				seen[problem] = struct{}{}
+				parts = append(parts, problem)
 			}
 		}
 	}
@@ -755,7 +649,7 @@ func buildSummary(signals []domain.ProblemSignal) string {
 	if len(parts) == 1 {
 		return parts[0]
 	}
-	return parts[0] + " (and " + fmt.Sprintf("%d", len(parts)-1) + " related descriptions)"
+	return parts[0] + " (and " + strconv.Itoa(len(parts)-1) + " related descriptions)"
 }
 
 // sortClustersByTotal sorts clusters in descending order by ProblemTotal.
@@ -771,12 +665,12 @@ func sortClustersByTotal(clusters []domain.ProblemCluster) {
 
 // collectUniqueStrings collects unique non-empty strings from a getter that
 // returns a slice of strings for each signal.
-func collectUniqueStrings(signals []domain.ProblemSignal, getter func(domain.ProblemSignal) []string) []string {
+func collectUniqueStrings(signals []domain.ProblemSignal, getter func(*domain.ProblemSignal) []string) []string {
 	seen := make(map[string]struct{})
 	var result []string
 
-	for _, s := range signals {
-		for _, item := range getter(s) {
+	for index := range signals {
+		for _, item := range getter(&signals[index]) {
 			if item != "" {
 				if _, ok := seen[item]; !ok {
 					seen[item] = struct{}{}
@@ -790,12 +684,12 @@ func collectUniqueStrings(signals []domain.ProblemSignal, getter func(domain.Pro
 
 // collectUniqueFields collects unique non-empty strings from a getter that
 // returns a single string for each signal.
-func collectUniqueFields(signals []domain.ProblemSignal, getter func(domain.ProblemSignal) string) []string {
+func collectUniqueFields(signals []domain.ProblemSignal, getter func(*domain.ProblemSignal) string) []string {
 	seen := make(map[string]struct{})
 	var result []string
 
-	for _, s := range signals {
-		v := getter(s)
+	for index := range signals {
+		v := getter(&signals[index])
 		if v != "" {
 			if _, ok := seen[v]; !ok {
 				seen[v] = struct{}{}
@@ -810,9 +704,9 @@ func collectUniqueFields(signals []domain.ProblemSignal, getter func(domain.Prob
 // represented by the signals' sources.
 func countDomains(signals []domain.ProblemSignal) int {
 	domains := make(map[string]struct{})
-	for _, s := range signals {
+	for index := range signals {
 		// Use source as a proxy for domain.
-		domains[s.Source] = struct{}{}
+		domains[signals[index].Source] = struct{}{}
 	}
 	return len(domains)
 }
@@ -826,12 +720,4 @@ func clamp01(v float64) float64 {
 		return 1.0
 	}
 	return v
-}
-
-// min returns the smaller of two ints.
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

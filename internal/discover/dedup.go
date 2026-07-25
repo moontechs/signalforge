@@ -1,9 +1,10 @@
 package discover
 
 import (
-	"github.com/moontechs/signalforge/internal/domain"
 	"strings"
 	"unicode"
+
+	"github.com/moontechs/signalforge/internal/domain"
 )
 
 // Duplicate records an auditable duplicate relationship.
@@ -27,14 +28,15 @@ func Deduplicate(in []domain.SolutionHypothesis) ([]domain.SolutionHypothesis, [
 	out := make([]domain.SolutionHypothesis, 0, len(in))
 	rel := []Duplicate{}
 	seen := map[string]string{}
-	for _, x := range in {
+	for index := range in {
+		x := &in[index]
 		k := normalize(x.Title) + "|" + string(x.ProductType)
 		if id, ok := seen[k]; ok {
 			rel = append(rel, Duplicate{DuplicateID: x.ID, KeptID: id})
 			continue
 		}
 		seen[k] = x.ID
-		out = append(out, x)
+		out = append(out, *x)
 	}
 	return out, rel
 }

@@ -94,8 +94,8 @@ func runPipeline(cmd *cobra.Command, _ []string) error {
 
 func executePipeline(cmd *cobra.Command, env *pipelineEnv) error {
 	stages := []struct {
-		name     string
-		run      func(*cobra.Command, *pipelineEnv) (string, error)
+		name      string
+		run       func(*cobra.Command, *pipelineEnv) (string, error)
 		dataCheck func(*pipelineEnv) bool
 	}{
 		{
@@ -130,9 +130,9 @@ func executePipeline(cmd *cobra.Command, env *pipelineEnv) error {
 			},
 		},
 		{
-			name:     "rank",
-			run:      runPipelineRank,
-			dataCheck: nil, // rank always runs (no output data to check)
+			name:      "rank",
+			run:       runPipelineRank,
+			dataCheck: nil, // Rank always runs because it has no output data check.
 		},
 	}
 
@@ -180,7 +180,8 @@ func executePipeline(cmd *cobra.Command, env *pipelineEnv) error {
 
 // runPipelineCollect sets up and runs the collect stage.
 func runPipelineCollect(cmd *cobra.Command, env *pipelineEnv) (string, error) {
-	force, _ := cmd.Flags().GetBool("force") // pipeline-level force
+	// Read the pipeline-level force flag.
+	force, _ := cmd.Flags().GetBool("force")
 
 	collectEnv, err := setupCollectEnv(env.sources, env.since, "", 0, "", force, false, false)
 	if err != nil {
@@ -207,7 +208,8 @@ func runPipelineCollect(cmd *cobra.Command, env *pipelineEnv) (string, error) {
 
 // runPipelineClassify sets up and runs the classify stage.
 func runPipelineClassify(cmd *cobra.Command, env *pipelineEnv) (string, error) {
-	force, _ := cmd.Flags().GetBool("force") // pipeline-level force
+	// Read the pipeline-level force flag.
+	force, _ := cmd.Flags().GetBool("force")
 
 	beforeFiles, _ := env.store.ListFiles("problem-signals", ".json")
 	beforeCount := len(beforeFiles)
@@ -256,7 +258,8 @@ func runPipelineClassify(cmd *cobra.Command, env *pipelineEnv) (string, error) {
 
 // runPipelineCluster sets up and runs the cluster stage.
 func runPipelineCluster(cmd *cobra.Command, env *pipelineEnv) (string, error) {
-	force, _ := cmd.Flags().GetBool("force") // pipeline-level force
+	// Read the pipeline-level force flag.
+	force, _ := cmd.Flags().GetBool("force")
 
 	// Force means delete existing clusters and re-cluster.
 	if force {

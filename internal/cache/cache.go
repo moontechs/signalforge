@@ -17,15 +17,12 @@ import (
 
 var validNamespace = regexp.MustCompile(`^[A-Za-z0-9]+$`)
 
-// CacheEntry is a response body and its per-entry expiration policy.
-type CacheEntry struct {
+// Entry is a response body and its per-entry expiration policy.
+type Entry struct {
 	Body     []byte        `json:"body"`
 	TTL      time.Duration `json:"ttl"`
 	StoredAt time.Time     `json:"stored_at"`
 }
-
-// Entry is an alias for CacheEntry.
-type Entry = CacheEntry
 
 // Cache stores entries under cache/<namespace>. Keys are hashed before being
 // used as filenames, and an entry is reusable only until StoredAt+TTL.
@@ -63,7 +60,7 @@ func (c *Cache) Get(key string) ([]byte, bool) {
 	}
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	var entry CacheEntry
+	var entry Entry
 	if err := c.store.LoadJSON(c.path(key), &entry); err != nil || entry.TTL <= 0 || !time.Now().Before(entry.StoredAt.Add(entry.TTL)) {
 		return nil, false
 	}
@@ -71,7 +68,7 @@ func (c *Cache) Get(key string) ([]byte, bool) {
 }
 
 // Set stores entry atomically. Keys must be non-empty and TTL must be positive.
-func (c *Cache) Set(key string, entry CacheEntry) error {
+func (c *Cache) Set(key string, entry Entry) error {
 	if key == "" {
 		return errors.New("cache: key must not be empty")
 	}

@@ -88,20 +88,22 @@ func executeDiscover(cmd *cobra.Command, env *discoverEnv) error {
 	if model == "" {
 		model = env.cfg.OpenRouter.Model
 	}
-	client, err := openrouter.New(env.cfg.OpenRouter, apiKey)
+	client, err := openrouter.New(&env.cfg.OpenRouter, apiKey)
 	if err != nil {
 		return fmt.Errorf("create OpenRouter client: %w", err)
 	}
 
 	result := DiscoverResult{JTBDs: []domain.JobToBeDone{}, Solutions: []domain.SolutionHypothesis{}}
-	for _, cluster := range clusters {
+	for clusterIndex := range clusters {
+		cluster := &clusters[clusterIndex]
 		jobs, genErr := (discover.Generator{Client: client, Model: model}).Generate(commandContext(cmd), cluster)
 		if genErr != nil {
 			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: cluster %s: %v\n", cluster.ID, genErr)
 			continue
 		}
-		for _, job := range jobs {
-			result.JTBDs = append(result.JTBDs, job)
+		for jobIndex := range jobs {
+			job := &jobs[jobIndex]
+			result.JTBDs = append(result.JTBDs, *job)
 			pt, rationale, classErr := (discover.Classifier{Client: client, Model: model}).Classify(commandContext(cmd), job)
 			if classErr != nil {
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: JTBD %s: %v\n", job.ID, classErr)
@@ -137,7 +139,7 @@ func commandContext(cmd *cobra.Command) context.Context {
 func loadProblemClusters(store *storage.Storage) ([]domain.ProblemCluster, error) {
 	files, err := store.ListFiles("clusters", ".json")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list cluster files: %w", err)
 	}
 	clusters := make([]domain.ProblemCluster, 0, len(files))
 	for _, path := range files {

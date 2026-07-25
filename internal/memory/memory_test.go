@@ -284,6 +284,52 @@ func TestAddHNRequests(t *testing.T) {
 	})
 }
 
+func TestAddRedditRequests(t *testing.T) {
+	t.Parallel()
+	m := setupTestMemory(t)
+	m.AddRedditRequests(5)
+	m.AddRedditRequests(0)
+	m.AddRedditRequests(-1)
+	m.AddRedditRequests(3)
+	if got := m.GetStats().RedditRequests; got != 8 {
+		t.Fatalf("expected 8 Reddit requests, got %d", got)
+	}
+
+	const n = 100
+	var wg sync.WaitGroup
+	wg.Add(n)
+	for i := 0; i < n; i++ {
+		go func() { defer wg.Done(); m.AddRedditRequests(1) }()
+	}
+	wg.Wait()
+	if got := m.GetStats().RedditRequests; got != 8+n {
+		t.Fatalf("expected %d Reddit requests, got %d", 8+n, got)
+	}
+}
+
+func TestAddRedditCacheHits(t *testing.T) {
+	t.Parallel()
+	m := setupTestMemory(t)
+	m.AddRedditCacheHits(4)
+	m.AddRedditCacheHits(0)
+	m.AddRedditCacheHits(-1)
+	m.AddRedditCacheHits(6)
+	if got := m.GetStats().RedditCacheHits; got != 10 {
+		t.Fatalf("expected 10 Reddit cache hits, got %d", got)
+	}
+
+	const n = 100
+	var wg sync.WaitGroup
+	wg.Add(n)
+	for i := 0; i < n; i++ {
+		go func() { defer wg.Done(); m.AddRedditCacheHits(1) }()
+	}
+	wg.Wait()
+	if got := m.GetStats().RedditCacheHits; got != 10+n {
+		t.Fatalf("expected %d Reddit cache hits, got %d", 10+n, got)
+	}
+}
+
 func TestAddHNCacheHits(t *testing.T) {
 	t.Parallel()
 

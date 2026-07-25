@@ -179,7 +179,7 @@ func executeClassify(cmd *cobra.Command, env *classifyEnv) error {
 		return errors.New("OPENROUTER_API_KEY environment variable is required for classification")
 	}
 
-	orClient, err := openrouter.New(env.cfg.OpenRouter, apiKey)
+	orClient, err := openrouter.New(&env.cfg.OpenRouter, apiKey)
 	if err != nil {
 		return fmt.Errorf("create OpenRouter client: %w", err)
 	}
@@ -200,33 +200,7 @@ func executeClassify(cmd *cobra.Command, env *classifyEnv) error {
 		ctx = context.Background()
 	}
 	problemSignals, failures := classifier.Classify(ctx, signals)
-
-	// Save each problem signal.
-	savedCount := 0
-	signalCount := 0
-	noiseCount := 0
-
-	for i := range problemSignals {
-		ps := problemSignals[i]
-		filename := ps.ID + ".json"
-		signalPath := filepath.Join(env.store.BaseDir(), "problem-signals", filename)
-
-		if err := env.store.SaveJSON(signalPath, ps); err != nil {
-			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: failed to save problem signal %s: %v\n", ps.ID, err)
-			continue
-		}
-
-		savedCount++
-
-		// Update memory stats.
-		if ps.IsProblemSignal {
-			signalCount++
-			env.mem.IncrementStat("problem_signals_found")
-		} else {
-			noiseCount++
-			env.mem.IncrementStat("noise_signals")
-		}
-	}
+	counts := saveClassifications(cmd, env, problemSignals)
 
 	// Update LLM request count.
 	llmStats := orClient.Stats()
@@ -240,9 +214,41 @@ func executeClassify(cmd *cobra.Command, env *classifyEnv) error {
 	}
 
 	// Print summary.
-	printClassifySummary(cmd, savedCount, len(failures), signalCount, noiseCount, len(signals), env.force)
+	printClassifySummary(cmd, counts.saved, len(failures), counts.signals, counts.noise, len(signals), env.force)
 
 	return nil
+}
+
+type classificationCounts struct {
+	saved   int
+	signals int
+	noise   int
+}
+
+func saveClassifications(
+	cmd *cobra.Command,
+	env *classifyEnv,
+	problemSignals []domain.ProblemSignal,
+) classificationCounts {
+	var counts classificationCounts
+	for index := range problemSignals {
+		signal := &problemSignals[index]
+		signalPath := filepath.Join(env.store.BaseDir(), "problem-signals", signal.ID+".json")
+		if err := env.store.SaveJSON(signalPath, signal); err != nil {
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: failed to save problem signal %s: %v\n", signal.ID, err)
+			continue
+		}
+
+		counts.saved++
+		if signal.IsProblemSignal {
+			counts.signals++
+			env.mem.IncrementStat("problem_signals_found")
+		} else {
+			counts.noise++
+			env.mem.IncrementStat("noise_signals")
+		}
+	}
+	return counts
 }
 
 // loadRawSignals loads all raw signal files from the raw-signals directory.
@@ -301,7 +307,7 @@ func filterClassifiedSignals(signals []domain.RawSignal, env *classifyEnv) []dom
 }
 
 // printClassifyDryRun prints the classification plan for dry-run mode.
-func printClassifyDryRun(cmd *cobra.Command, env *classifyEnv, signals []domain.RawSignal, batchSize int, model string, promptPath string) {
+func printClassifyDryRun(cmd *cobra.Command, env *classifyEnv, signals []domain.RawSignal, batchSize int, model, promptPath string) {
 	w := cmd.OutOrStdout()
 
 	_, _ = fmt.Fprintf(w, "=== Classification Plan (dry-run) ===\n")
@@ -312,7 +318,8 @@ func printClassifyDryRun(cmd *cobra.Command, env *classifyEnv, signals []domain.
 	_, _ = fmt.Fprintf(w, "  Force re-classify: %t\n", env.force)
 
 	batches := (len(signals) + batchSize - 1) / batchSize
-	_, _ = fmt.Fprintf(w, "  Estimated LLM requests: %d\n", batches) // one request per signal per batch
+	// One request is made per signal in each batch.
+	_, _ = fmt.Fprintf(w, "  Estimated LLM requests: %d\n", batches)
 
 	if env.resume {
 		_, _ = fmt.Fprintln(w, "  Mode: resume (skip already classified)")
