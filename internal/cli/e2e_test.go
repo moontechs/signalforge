@@ -106,14 +106,14 @@ func (tc *testCommand) seedClusters(t *testing.T, count int) {
 	t.Helper()
 	for i := 0; i < count; i++ {
 		c := domain.ProblemCluster{
-			ID:            "cluster-" + itoa(i),
-			Title:         "Cluster " + itoa(i),
-			Summary:       "Summary for cluster " + itoa(i),
-			SignalCount:   3,
-			ProblemScore:  domain.ProblemScorecard{EvidenceStrength: 6.0, Recurrence: 7.0, Severity: 5.0, WorkaroundCost: 4.0, SourceDiversity: 3.0, Longevity: 5.0, UserSpecificity: 6.0, ProductSolvability: 7.0},
-			Confidence:    0.8 + float64(i)*0.05,
-			SourceTypes:   []string{"github"},
-			CreatedAt:     time.Now(),
+			ID:           "cluster-" + itoa(i),
+			Title:        "Cluster " + itoa(i),
+			Summary:      "Summary for cluster " + itoa(i),
+			SignalCount:  3,
+			ProblemScore: domain.ProblemScorecard{EvidenceStrength: 6.0, Recurrence: 7.0, Severity: 5.0, WorkaroundCost: 4.0, SourceDiversity: 3.0, Longevity: 5.0, UserSpecificity: 6.0, ProductSolvability: 7.0},
+			Confidence:   0.8 + float64(i)*0.05,
+			SourceTypes:  []string{"github"},
+			CreatedAt:    time.Now(),
 		}
 		path := filepath.Join(tc.homeDir, "clusters", "cluster-"+itoa(i)+".json")
 		if err := tc.store.SaveJSON(path, c); err != nil {
@@ -127,15 +127,15 @@ func (tc *testCommand) seedDiscoverResult(t *testing.T, solutionCount int) {
 	solutions := make([]domain.SolutionHypothesis, solutionCount)
 	for i := 0; i < solutionCount; i++ {
 		solutions[i] = domain.SolutionHypothesis{
-			ID:                "sol-" + itoa(i),
-			ProblemClusterID:  "cluster-" + itoa(i),
-			Title:             "Solution " + itoa(i),
-			Summary:           "Summary for solution " + itoa(i),
-			ProductType:       domain.ProductTypeSaaS,
-			SolutionScore:     domain.SolutionScorecard{ProblemFit: 7.0, ProductTypeFit: 6.0, CompetitionGap: 5.0, BuildSimplicity: 4.0, DistributionPotential: 3.0, MonetizationPotential: 6.0, RetentionPotential: 5.0, PlatformSafety: 4.0, Defensibility: 3.0},
-			Confidence:        0.7 + float64(i)*0.05,
-			Recommendation:    domain.RecommendationStrongCandidate,
-			CreatedAt:         time.Now(),
+			ID:               "sol-" + itoa(i),
+			ProblemClusterID: "cluster-" + itoa(i),
+			Title:            "Solution " + itoa(i),
+			Summary:          "Summary for solution " + itoa(i),
+			ProductType:      domain.ProductTypeSaaS,
+			SolutionScore:    domain.SolutionScorecard{ProblemFit: 7.0, ProductTypeFit: 6.0, CompetitionGap: 5.0, BuildSimplicity: 4.0, DistributionPotential: 3.0, MonetizationPotential: 6.0, RetentionPotential: 5.0, PlatformSafety: 4.0, Defensibility: 3.0},
+			Confidence:       0.7 + float64(i)*0.05,
+			Recommendation:   domain.RecommendationStrongCandidate,
+			CreatedAt:        time.Now(),
 		}
 	}
 	result := DiscoverResult{
@@ -510,18 +510,16 @@ func TestValidateFormat(t *testing.T) {
 
 	for _, f := range valid {
 		t.Run("valid/"+f, func(t *testing.T) {
-			env := &exportEnv{format: f}
-			cmd := &cobra.Command{}
-			// We can't easily test the flag validation, but we can test the format switch.
-			// The actual validation is done in runExport.
-			_ = env
-			_ = cmd
+			if !validExportFormat(f) {
+				t.Errorf("expected %q to be a valid export format", f)
+			}
 		})
 	}
 	for _, f := range invalid {
 		t.Run("invalid/"+f, func(t *testing.T) {
-			// runExport would catch this; the format validation is in the command run function.
-			_ = f
+			if validExportFormat(f) {
+				t.Errorf("expected %q to be rejected as an export format", f)
+			}
 		})
 	}
 }

@@ -2,6 +2,9 @@ package cli
 
 import (
 	"context"
+	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -76,6 +79,94 @@ func TestBuildCollector_HN_Disabled(t *testing.T) {
 	_, err := buildCollector("hackernews", cfg, store)
 	if err == nil {
 		t.Fatal("expected error for disabled HN, got nil")
+	}
+}
+
+func TestBuildCollector_RedditDisabledAndCredentials(t *testing.T) {
+	t.Setenv("REDDIT_CLIENT_ID", "client")
+	t.Setenv("REDDIT_CLIENT_SECRET", "secret")
+	cfg := newTestConfig()
+	store := newTestStorage(t)
+	if _, err := buildCollector("reddit", cfg, store); err == nil {
+		t.Fatal("expected disabled Reddit error")
+	}
+	cfg.Sources.Reddit.Enabled = true
+	cfg.Sources.Reddit.Subreddits = []string{"saas"}
+	cfg.Sources.Reddit.MaxPostsPerRun = 1
+	collector, err := buildCollector("reddit", cfg, store)
+	if err != nil {
+		t.Fatalf("buildCollector(reddit) failed: %v", err)
+	}
+	if _, ok := collector.(*reddit.Collector); !ok {
+		t.Fatalf("expected Reddit collector, got %T", collector)
+	}
+}
+
+func TestBuildCollector_RedditMissingCredentials(t *testing.T) {
+	t.Setenv("REDDIT_CLIENT_ID", "")
+	t.Setenv("REDDIT_CLIENT_SECRET", "")
+	cfg := newTestConfig()
+	cfg.Sources.Reddit.Enabled = true
+	cfg.Sources.Reddit.Subreddits = []string{"saas"}
+	cfg.Sources.Reddit.MaxPostsPerRun = 1
+	if _, err := buildCollector("reddit", cfg, newTestStorage(t)); err == nil || !strings.Contains(err.Error(), "REDDIT_CLIENT_ID") {
+		t.Fatalf("expected missing credential error, got %v", err)
+	}
+}
+
+func TestRedditDryRunPlan(t *testing.T) {
+	cfg := newTestConfig()
+	cfg.Sources.Reddit.Enabled = true
+	cfg.Sources.Reddit.Subreddits = []string{"saas", "indiehackers"}
+	cfg.Sources.Reddit.MaxPostsPerRun = 4
+	cfg.Sources.Reddit.MaxCommentsPerPost = 2
+	env := &collectEnv{selectedSources: []string{"reddit"}, maxItems: 3, sinceWindow: 24 * time.Hour}
+	plans := buildDryRunPlans(env, cfg)
+	if len(plans) != 1 || len(plans[0].Targets) != 2 || plans[0].Targets[0] != "subreddit: saas" || plans[0].EstimatedReqs != 6 {
+		t.Fatalf("unexpected Reddit dry run plan: %+v", plans)
+	}
+}
+
+func TestSetupCollectEnv_RedditDryRunDoesNotRequireCredentials(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("SIGNALFORGE_HOME", dir)
+	t.Setenv("REDDIT_CLIENT_ID", "")
+	t.Setenv("REDDIT_CLIENT_SECRET", "")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.DefaultConfig()
+	cfg.Sources.Reddit.Enabled = true
+	cfg.Sources.Reddit.Subreddits = []string{"saas"}
+	if err := config.SaveConfig(dir, cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	env, err := setupCollectEnv("reddit", "30d", "", 0, "", false, true, false)
+	if err != nil {
+		t.Fatalf("dry-run setup checked credentials: %v", err)
+	}
+	if len(env.collectors) != 0 || !env.dryRun {
+		t.Fatalf("unexpected dry-run environment: %+v", env)
+	}
+	cmd := &cobra.Command{}
+	output := new(strings.Builder)
+	cmd.SetOut(output)
+	if err := executeCollect(cmd, env); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output.String(), "subreddit: saas") {
+		t.Fatalf("missing Reddit dry-run target: %q", output.String())
+	}
+}
+
+func TestEstimateRedditRequestsWithoutComments(t *testing.T) {
+	cfg := newTestConfig()
+	cfg.Sources.Reddit.Subreddits = []string{"go", "golang"}
+	cfg.Sources.Reddit.MaxPostsPerRun = 250
+	cfg.Sources.Reddit.MaxCommentsPerPost = 0
+	if got := estimateRedditRequests(cfg, &collectEnv{}); got != 7 {
+		t.Fatalf("estimate = %d, want token plus three listing pages per subreddit", got)
 	}
 }
 
@@ -156,6 +247,26 @@ func TestStatsDelta_StackExchange(t *testing.T) {
 	delta := statsDelta(before, after)
 	if delta.seRequests != 7 || delta.seCacheHits != 5 {
 		t.Fatalf("expected Stack Exchange delta 7/5, got %d/%d", delta.seRequests, delta.seCacheHits)
+	}
+}
+
+func TestStatsDelta_Reddit(t *testing.T) {
+	delta := statsDelta(&domain.ResearchStats{RedditRequests: 2, RedditCacheHits: 1}, &domain.ResearchStats{RedditRequests: 8, RedditCacheHits: 4})
+	if delta.redditRequests != 6 || delta.redditCacheHits != 3 {
+		t.Fatalf("unexpected Reddit delta: %+v", delta)
+	}
+}
+
+func TestReportCollectSummary_Reddit(t *testing.T) {
+	cmd := &cobra.Command{}
+	buf := new(strings.Builder)
+	cmd.SetOut(buf)
+	delta := collectStatsDelta{redditRequests: 6, redditCacheHits: 3}
+	if err := reportCollectSummary(cmd, 0, &delta); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), "Reddit requests: 6 (cache hits: 3)") {
+		t.Fatalf("missing Reddit summary: %q", buf.String())
 	}
 }
 
@@ -540,9 +651,9 @@ func TestExecuteCollect_ResumePersistsCursor(t *testing.T) {
 func TestOrderSourcesDeterministically_GitHubFirst(t *testing.T) {
 	t.Parallel()
 
-	input := []string{"hackernews", "stackexchange", "github"}
+	input := []string{"reddit", "hackernews", "stackexchange", "github"}
 	result := orderSourcesDeterministically(input)
-	expected := []string{"github", "hackernews", "stackexchange"}
+	expected := []string{"github", "hackernews", "stackexchange", "reddit"}
 	if len(result) != len(expected) {
 		t.Fatalf("expected %v, got %v", expected, result)
 	}
@@ -550,6 +661,71 @@ func TestOrderSourcesDeterministically_GitHubFirst(t *testing.T) {
 		if result[i] != expected[i] {
 			t.Fatalf("expected %v at index %d, got %v", expected, i, result)
 		}
+	}
+}
+
+func TestResolveCollectSources_Reddit(t *testing.T) {
+	t.Parallel()
+	sources, err := resolveCollectSources("reddit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sources) != 1 || sources[0] != "reddit" {
+		t.Fatalf("sources = %v", sources)
+	}
+}
+
+func TestExecuteCollect_PersistsPartialResultsAndContinues(t *testing.T) {
+	store := storage.New(t.TempDir())
+	mem := memory.New(store)
+	first := &mockCollector{
+		name: "first",
+		collectFn: func(domain.CollectRequest) ([]domain.RawSignal, error) {
+			return []domain.RawSignal{{
+				ID:          "first:one",
+				Source:      "first",
+				SourceID:    "one",
+				ContentHash: "hash-one",
+			}}, errors.New("partial failure")
+		},
+	}
+	secondInvoked := false
+	second := &mockCollector{
+		name: "second",
+		collectFn: func(domain.CollectRequest) ([]domain.RawSignal, error) {
+			secondInvoked = true
+			return []domain.RawSignal{{
+				ID:          "second:two",
+				Source:      "second",
+				SourceID:    "two",
+				ContentHash: "hash-two",
+			}}, nil
+		},
+	}
+	before := mem.GetStats()
+	env := &collectEnv{
+		store:           store,
+		mem:             mem,
+		collectors:      []domain.SourceCollector{first, second},
+		selectedSources: []string{"first", "second"},
+		before:          &before,
+		sinceWindow:     24 * time.Hour,
+	}
+	cmd := &cobra.Command{}
+	cmd.SetOut(new(strings.Builder))
+
+	err := executeCollect(cmd, env)
+	if err == nil || !strings.Contains(err.Error(), "partial failure") {
+		t.Fatalf("error = %v", err)
+	}
+	if !secondInvoked || !mem.HasRawSignal("first", "one") || !mem.HasRawSignal("second", "two") {
+		t.Fatalf("second invoked=%v memory=%+v", secondInvoked, mem.GetMemory())
+	}
+	if !mem.HasContentHash("hash-one") || !mem.HasContentHash("hash-two") {
+		t.Fatal("partial result content hashes were not persisted")
+	}
+	if !store.Exists(filepath.Join(store.BaseDir(), "memory.json")) {
+		t.Fatal("memory.json was not saved after partial failure")
 	}
 }
 

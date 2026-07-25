@@ -3,10 +3,12 @@ package discover
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"github.com/moontechs/signalforge/internal/domain"
 	"strings"
 	"time"
+
+	"github.com/moontechs/signalforge/internal/domain"
 )
 
 type solutionResponse struct {
@@ -17,13 +19,16 @@ type Solver struct {
 	Model  string
 }
 
-func (s Solver) Generate(ctx context.Context, job domain.JobToBeDone) ([]domain.SolutionHypothesis, error) {
+func (s Solver) Generate(ctx context.Context, job *domain.JobToBeDone) ([]domain.SolutionHypothesis, error) {
 	if s.Client == nil {
-		return nil, fmt.Errorf("discover: nil LLM client")
+		return nil, errors.New("discover: nil LLM client")
 	}
 	var out solutionResponse
-	b, _ := json.Marshal(job)
-	resp, err := s.Client.Complete(ctx, domain.CompletionRequest{Model: s.Model, System: "Return only valid JSON. Produce distinct, realistic product concepts.", Prompt: "Produce at least 3 solutions with different valid product_type values for this JTBD. Include title, summary, product_type_reason, target_user, problem, proposed_solution, core_workflow, differentiation, must_have_features, competitors, implementation, strengths, weaknesses, risks, and unknowns. JTBD:\n" + string(b), MaxTokens: 5000, Schema: &out})
+	body, err := json.Marshal(job)
+	if err != nil {
+		return nil, fmt.Errorf("encode JTBD: %w", err)
+	}
+	resp, err := s.Client.Complete(ctx, domain.CompletionRequest{Model: s.Model, System: "Return only valid JSON. Produce distinct, realistic product concepts.", Prompt: "Produce at least 3 solutions with different valid product_type values for this JTBD. Include title, summary, product_type_reason, target_user, problem, proposed_solution, core_workflow, differentiation, must_have_features, competitors, implementation, strengths, weaknesses, risks, and unknowns. JTBD:\n" + string(body), MaxTokens: 5000, Schema: &out})
 	if err != nil {
 		return nil, fmt.Errorf("generate solutions: %w", err)
 	}
@@ -31,7 +36,7 @@ func (s Solver) Generate(ctx context.Context, job domain.JobToBeDone) ([]domain.
 		return nil, fmt.Errorf("parse solutions: %w", err)
 	}
 	if len(out.Solutions) < 3 {
-		return nil, fmt.Errorf("solution count must be at least 3")
+		return nil, errors.New("solution count must be at least 3")
 	}
 	seen := map[domain.ProductType]bool{}
 	now := time.Now().UTC()
@@ -41,7 +46,7 @@ func (s Solver) Generate(ctx context.Context, job domain.JobToBeDone) ([]domain.
 			return nil, fmt.Errorf("invalid solution %d", i)
 		}
 		if seen[x.ProductType] {
-			return nil, fmt.Errorf("solutions must use distinct product types")
+			return nil, errors.New("solutions must use distinct product types")
 		}
 		seen[x.ProductType] = true
 		x.ID = stableID(job.ID, x.Title, string(x.ProductType))

@@ -153,69 +153,62 @@ func loadSolutions(store *storage.Storage) ([]domain.SolutionHypothesis, error) 
 }
 
 func rankClusters(clusters []domain.ProblemCluster, minProblemScore, minConfidence float64) []rankedCluster {
-	eps := 1e-9
-
-	result := make([]rankedCluster, 0, len(clusters))
-	for _, c := range clusters {
-		total := c.ProblemScore.Total()
-
-		// Use the stored ProblemTotal if non-zero; otherwise compute from scorecard.
-		if c.ProblemTotal > 0 {
-			total = c.ProblemTotal
-		}
-
-		if total+eps < minProblemScore {
-			continue
-		}
-		if c.Confidence+eps < minConfidence {
-			continue
-		}
-
-		result = append(result, rankedCluster{
-			Cluster:      c,
-			ProblemTotal: total,
-		})
-	}
-
-	// Sort by problem total descending.
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].ProblemTotal > result[j].ProblemTotal
-	})
-
-	return result
+	return filterAndRank(
+		clusters,
+		func(cluster *domain.ProblemCluster) (float64, float64, float64) {
+			return cluster.ProblemScore.Total(), cluster.ProblemTotal, cluster.Confidence
+		},
+		func(cluster domain.ProblemCluster, total float64) rankedCluster {
+			return rankedCluster{Cluster: cluster, ProblemTotal: total}
+		},
+		func(cluster *rankedCluster) float64 { return cluster.ProblemTotal },
+		minProblemScore,
+		minConfidence,
+	)
 }
 
 func rankSolutions(solutions []domain.SolutionHypothesis, minSolutionScore, minConfidence float64) []rankedSolution {
-	eps := 1e-9
+	return filterAndRank(
+		solutions,
+		func(solution *domain.SolutionHypothesis) (float64, float64, float64) {
+			return solution.SolutionScore.Total(), solution.SolutionTotal, solution.Confidence
+		},
+		func(solution domain.SolutionHypothesis, total float64) rankedSolution {
+			return rankedSolution{Solution: solution, SolutionTotal: total}
+		},
+		func(solution *rankedSolution) float64 { return solution.SolutionTotal },
+		minSolutionScore,
+		minConfidence,
+	)
+}
 
-	result := make([]rankedSolution, 0, len(solutions))
-	for _, s := range solutions {
-		total := s.SolutionScore.Total()
-
-		// Use the stored SolutionTotal if non-zero.
-		if s.SolutionTotal > 0 {
-			total = s.SolutionTotal
+func filterAndRank[T, R any](
+	values []T,
+	metrics func(*T) (calculated, stored, confidence float64),
+	build func(T, float64) R,
+	score func(*R) float64,
+	minScore, minConfidence float64,
+) []R {
+	result := make([]R, 0, len(values))
+	for index := range values {
+		calculated, stored, confidence := metrics(&values[index])
+		total, eligible := eligibleRank(calculated, stored, confidence, minScore, minConfidence)
+		if eligible {
+			result = append(result, build(values[index], total))
 		}
-
-		if total+eps < minSolutionScore {
-			continue
-		}
-		if s.Confidence+eps < minConfidence {
-			continue
-		}
-
-		result = append(result, rankedSolution{
-			Solution:      s,
-			SolutionTotal: total,
-		})
 	}
-
-	// Sort by solution total descending.
 	sort.Slice(result, func(i, j int) bool {
-		return result[i].SolutionTotal > result[j].SolutionTotal
+		return score(&result[i]) > score(&result[j])
 	})
-
 	return result
+}
+
+func eligibleRank(calculated, stored, confidence, minScore, minConfidence float64) (float64, bool) {
+	const epsilon = 1e-9
+	if stored > 0 {
+		calculated = stored
+	}
+	return calculated, calculated+epsilon >= minScore && confidence+epsilon >= minConfidence
 }
 
 func printRankedResults(w io.Writer, clusters []rankedCluster, solutions []rankedSolution, limit int) {
@@ -227,10 +220,10 @@ func printRankedResults(w io.Writer, clusters []rankedCluster, solutions []ranke
 
 	// Merge clusters and solutions into a single sorted list.
 	type rankedItem struct {
-		score    float64
+		score     float64
 		isCluster bool
-		cluster  *rankedCluster
-		solution *rankedSolution
+		cluster   *rankedCluster
+		solution  *rankedSolution
 	}
 
 	items := make([]rankedItem, 0, totalResults)

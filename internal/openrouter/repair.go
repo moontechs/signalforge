@@ -64,7 +64,7 @@ Return only the corrected JSON, nothing else.`, invalidContent)
 
 	var chatResp ChatCompletionResponse
 	if pErr := json.Unmarshal(body, &chatResp); pErr != nil {
-		return nil, fmt.Errorf("%w: parse repair response: %s", ErrRepairFailed, pErr)
+		return nil, fmt.Errorf("%w: parse repair response: %w", ErrRepairFailed, pErr)
 	}
 
 	if len(chatResp.Choices) == 0 {

@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -23,12 +24,16 @@ type Generator struct {
 	Model  string
 }
 
-func (g Generator) Generate(ctx context.Context, cluster domain.ProblemCluster) ([]domain.JobToBeDone, error) {
+func (g Generator) Generate(ctx context.Context, cluster *domain.ProblemCluster) ([]domain.JobToBeDone, error) {
 	if g.Client == nil {
-		return nil, fmt.Errorf("discover: nil LLM client")
+		return nil, errors.New("discover: nil LLM client")
 	}
 	var schema jobResponse
-	resp, err := g.Client.Complete(ctx, domain.CompletionRequest{Model: g.Model, System: "Return only valid JSON. Derive concise, non-overlapping jobs-to-be-done.", Prompt: clusterPrompt(cluster), MaxTokens: 2000, Schema: &schema})
+	prompt, err := clusterPrompt(cluster)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := g.Client.Complete(ctx, domain.CompletionRequest{Model: g.Model, System: "Return only valid JSON. Derive concise, non-overlapping jobs-to-be-done.", Prompt: prompt, MaxTokens: 2000, Schema: &schema})
 	if err != nil {
 		return nil, fmt.Errorf("generate JTBD: %w", err)
 	}
@@ -36,7 +41,7 @@ func (g Generator) Generate(ctx context.Context, cluster domain.ProblemCluster) 
 		return nil, fmt.Errorf("parse JTBD: %w", err)
 	}
 	if len(schema.Jobs) < 1 || len(schema.Jobs) > 3 {
-		return nil, fmt.Errorf("JTBD count must be 1-3")
+		return nil, errors.New("JTBD count must be 1-3")
 	}
 	now := time.Now().UTC()
 	for i := range schema.Jobs {
@@ -59,10 +64,14 @@ func RenderStatement(situation, user, motivation, outcome string) string {
 	return fmt.Sprintf("When %s, %s wants to %s, so they can %s", strings.TrimSpace(situation), strings.TrimSpace(user), strings.TrimSpace(motivation), strings.TrimSpace(outcome))
 }
 
-func clusterPrompt(c domain.ProblemCluster) string {
-	b, _ := json.Marshal(c)
-	return "Create 1-3 JTBDs from this complete problem cluster JSON. Every job must include situation, motivation, expected_outcome, target_users, current_solutions, and constraints.\n" + string(b)
+func clusterPrompt(cluster *domain.ProblemCluster) (string, error) {
+	body, err := json.Marshal(cluster)
+	if err != nil {
+		return "", fmt.Errorf("encode problem cluster: %w", err)
+	}
+	return "Create 1-3 JTBDs from this complete problem cluster JSON. Every job must include situation, motivation, expected_outcome, target_users, current_solutions, and constraints.\n" + string(body), nil
 }
+
 func stableID(parts ...string) string {
 	h := sha256.New()
 	for _, p := range parts {

@@ -3,9 +3,11 @@ package discover
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"github.com/moontechs/signalforge/internal/domain"
 	"strings"
+
+	"github.com/moontechs/signalforge/internal/domain"
 )
 
 type classification struct {
@@ -19,18 +21,21 @@ type Classifier struct {
 }
 
 // Classify determines whether a JTBD merits product generation.
-func (c Classifier) Classify(ctx context.Context, j domain.JobToBeDone) (domain.ProductType, string, error) {
+func (c Classifier) Classify(ctx context.Context, job *domain.JobToBeDone) (domain.ProductType, string, error) {
 	if c.Client == nil {
-		return "", "", fmt.Errorf("discover: nil LLM client")
+		return "", "", errors.New("discover: nil LLM client")
 	}
 	var out classification
-	b, _ := json.Marshal(j)
-	r, e := c.Client.Complete(ctx, domain.CompletionRequest{Model: c.Model, System: "Return only valid JSON.", Prompt: "Assess whether this JTBD is worth solving with a product. Return product_type as no_product when not worth solving, with rationale. JTBD:\n" + string(b), Schema: &out, MaxTokens: 500})
-	if e != nil {
-		return "", "", fmt.Errorf("classify JTBD: %w", e)
+	body, err := json.Marshal(job)
+	if err != nil {
+		return "", "", fmt.Errorf("encode JTBD: %w", err)
 	}
-	if e = json.Unmarshal([]byte(r.Content), &out); e != nil {
-		return "", "", fmt.Errorf("parse classification: %w", e)
+	response, err := c.Client.Complete(ctx, domain.CompletionRequest{Model: c.Model, System: "Return only valid JSON.", Prompt: "Assess whether this JTBD is worth solving with a product. Return product_type as no_product when not worth solving, with rationale. JTBD:\n" + string(body), Schema: &out, MaxTokens: 500})
+	if err != nil {
+		return "", "", fmt.Errorf("classify JTBD: %w", err)
+	}
+	if err := json.Unmarshal([]byte(response.Content), &out); err != nil {
+		return "", "", fmt.Errorf("parse classification: %w", err)
 	}
 	p := strings.TrimSpace(out.ProductType)
 	if !domain.IsValidProductType(p) {

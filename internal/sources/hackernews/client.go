@@ -93,7 +93,7 @@ func (c *client) cached(key string, ttl time.Duration) ([]byte, bool) {
 // save persists a response body to the on-disk cache. Errors are non-fatal.
 func (c *client) save(key string, body []byte, ttl time.Duration) {
 	if c.cache != nil {
-		_ = c.cache.Set(key, cache.CacheEntry{Body: body, TTL: ttl})
+		_ = c.cache.Set(key, cache.Entry{Body: body, TTL: ttl})
 	}
 }
 

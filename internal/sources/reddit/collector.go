@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -14,361 +13,170 @@ import (
 	"github.com/moontechs/signalforge/internal/domain"
 )
 
-// Collector implements domain.SourceCollector for Reddit.
-//
-// It orchestrates subreddit listing scanning, post filtering, comment-tree
-// fetching (with a bounded worker pool), comment flattening, and signal
-// construction in a single run.
+// Collector orchestrates Reddit listing and comment collection.
 type Collector struct {
 	config    ConfigValues
 	client    *client
 	now       func() time.Time
+	collectMu sync.Mutex
 	mu        sync.Mutex
-	requests  int
-	cacheHits int
+	stats     Stats
 }
 
-// New creates a new Reddit Collector.
-// Returns ErrDisabled if cfg.Enabled is false.
-// May return ErrMissingCredentials if Reddit is enabled but clientID or
-// clientSecret is empty.
-func New(cfg *ConfigValues, clientID, clientSecret string) (*Collector, error) {
-	if !cfg.Enabled {
+func New(cfg *ConfigValues) (*Collector, error) {
+	if cfg == nil || !cfg.Enabled {
 		return nil, ErrDisabled
 	}
-
-	transport := &httpTransport{
-		client: &http.Client{
-			Timeout: 30 * time.Second,
-		},
-	}
-
-	c := &Collector{
-		config: *cfg,
-		now:    time.Now,
-	}
-	c.client = newClient(transport, clientID, clientSecret, cfg.MaxRequests)
-	return c, nil
-}
-
-// Name returns the collector name ("reddit").
-func (c *Collector) Name() string {
-	return SourceName
-}
-
-// WithTransport replaces the HTTP transport (for testing).
-func (c *Collector) WithTransport(t transport) *Collector {
-	c.client.transport = t
-	return c
-}
-
-// WithNow overrides the time function (for testing).
-func (c *Collector) WithNow(now func() time.Time) *Collector {
-	c.now = now
-	return c
-}
-
-// WithCache attaches an on-disk response cache.
-func (c *Collector) WithCache(value *cache.Cache) *Collector {
-	c.client = c.client.WithCache(value)
-	return c
-}
-
-// Stats returns the request and cache-hit counts from the last collection.
-func (c *Collector) Stats() Stats {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return Stats{Requests: c.requests, CacheHits: c.cacheHits}
-}
-
-// collectScope is the validated and normalised plan for a single collection run.
-type collectScope struct {
-	subreddits  []string
-	sort        string
-	timeFilter  string
-	maxPosts    int
-	maxComments int
-	since       time.Time
-	maxRequests int
-}
-
-// buildScope validates, normalises, and deduplicates subreddit names and
-// derives a concrete collection plan from ConfigValues and CollectRequest.
-func buildScope(cfg *ConfigValues, req *domain.CollectRequest) (*collectScope, error) {
-	if !cfg.Enabled {
-		return nil, ErrDisabled
-	}
-
-	// Validate and normalise subreddits.
-	subreddits, err := normalizeSubreddits(cfg.Subreddits)
-	if err != nil {
-		return nil, err
-	}
-	if len(subreddits) == 0 {
-		return nil, fmt.Errorf("%w: at least one subreddit is required", ErrInvalidSubreddit)
-	}
-
-	// Validate sort.
-	sort := cfg.Sort
-	if sort == "" {
-		sort = DefaultSort
-	}
-	validSort := false
-	for _, s := range SupportedSortValues {
-		if s == sort {
-			validSort = true
-			break
+	for _, s := range cfg.Subreddits {
+		s = strings.TrimSpace(s)
+		if s == "" || strings.ContainsAny(s, "/?#") {
+			return nil, fmt.Errorf("%w: %q", ErrInvalidSubreddit, s)
 		}
 	}
-	if !validSort {
-		return nil, fmt.Errorf("%w: %q (supported: %v)", ErrInvalidSort, sort, SupportedSortValues)
-	}
-
-	// Validate time filter.
-	timeFilter := cfg.Time
-	if timeFilter == "" {
-		timeFilter = DefaultTime
-	}
-	validTime := false
-	for _, t := range SupportedTimeValues {
-		if t == timeFilter {
-			validTime = true
-			break
-		}
-	}
-	if !validTime {
-		return nil, fmt.Errorf("%w: %q (supported: %v)", ErrInvalidTime, timeFilter, SupportedTimeValues)
-	}
-
-	maxPosts := cfg.MaxPostsPerRun
-	if req.MaxItems > 0 && req.MaxItems < maxPosts {
-		maxPosts = req.MaxItems
-	}
-	if maxPosts <= 0 {
-		maxPosts = 200
-	}
-
-	maxComments := cfg.MaxCommentsPerPost
-	if req.MaxCommentsPerItem > 0 && req.MaxCommentsPerItem < maxComments {
-		maxComments = req.MaxCommentsPerItem
-	}
-	if maxComments < 0 {
-		maxComments = 0
-	}
-
-	return &collectScope{
-		subreddits:  subreddits,
-		sort:        sort,
-		timeFilter:  timeFilter,
-		maxPosts:    maxPosts,
-		maxComments: maxComments,
-		since:       req.Since,
-		maxRequests: cfg.MaxRequests,
-	}, nil
+	t := &http.Client{Timeout: 30 * time.Second}
+	return &Collector{config: *cfg, client: newClient(t, cfg), now: time.Now}, nil
 }
 
-// normalizeSubreddits validates, normalises, and deduplicates subreddit names.
-func normalizeSubreddits(subreddits []string) ([]string, error) {
-	if len(subreddits) == 0 {
-		return nil, nil
+func (c *Collector) Name() string                            { return SourceName }
+func (c *Collector) WithTransport(t transport) *Collector    { c.client.transport = t; return c }
+func (c *Collector) WithNow(now func() time.Time) *Collector { c.now = now; return c }
+func (c *Collector) WithCache(value *cache.Cache) *Collector { c.client.WithCache(value); return c }
+func (c *Collector) Stats() Stats                            { c.mu.Lock(); defer c.mu.Unlock(); return c.stats }
+
+func (c *Collector) effectiveScope(req *domain.CollectRequest) collectionScope {
+	scope := deriveScope(&c.config, req.Since)
+	if len(req.Subreddits) > 0 {
+		scope.subreddits = req.Subreddits
 	}
+	if req.MaxItems > 0 {
+		scope.maxPosts = req.MaxItems
+	}
+	if req.MaxCommentsPerItem > 0 {
+		scope.maxComments = req.MaxCommentsPerItem
+	}
+	return scope
+}
 
-	seen := make(map[string]bool)
-	var result []string
-
-	for _, sr := range subreddits {
-		// Trim whitespace.
-		sr = strings.TrimSpace(sr)
-		if sr == "" {
+func addEligiblePosts(listing *listingResponse, seen map[string]struct{}, posts *[]postResponse, since time.Time, limit int) {
+	for index := range listing.Data.Children {
+		child := &listing.Data.Children[index]
+		if child.Kind != "t3" || child.Data.ID == "" {
 			continue
 		}
-		// Normalise optional r/ prefix.
-		sr = strings.TrimPrefix(sr, "r/")
-		sr = strings.TrimSpace(sr)
-		if sr == "" {
+		if _, ok := seen[child.Data.ID]; ok {
 			continue
 		}
-		// Reject separators and path traversal characters.
-		if strings.ContainsAny(sr, "/\\.") || strings.Contains(sr, "..") {
-			return nil, fmt.Errorf("%w: %q contains invalid characters", ErrInvalidSubreddit, sr)
-		}
-		// Reject empty after normalisation.
-		if sr == "" {
+		seen[child.Data.ID] = struct{}{}
+		if !eligiblePost(&child.Data, since) {
 			continue
 		}
-
-		if !seen[sr] {
-			seen[sr] = true
-			result = append(result, sr)
+		*posts = append(*posts, child.Data)
+		if len(*posts) >= limit {
+			return
 		}
 	}
-	return result, nil
 }
 
-// Collect implements domain.SourceCollector.
-//
-// The collection pipeline is:
-//  1. Build and validate the collection scope from config and request
-//  2. Scan each configured subreddit listing, deduplicate post IDs
-//  3. Filter posts by since window
-//  4. Fetch comment trees through a bounded worker pool (5 concurrent workers)
-//  5. Flatten comments and construct domain.RawSignal values
-//  6. Sort results by CreatedAt descending
-//  7. Apply max-items cap
-//  8. Return results with any partial errors joined
-//
-//nolint:gocognit,cyclop,funlen,gocritic // orchestration function; CollectRequest passed by value per interface contract
-func (c *Collector) Collect(ctx context.Context, req domain.CollectRequest) ([]domain.RawSignal, error) {
-	scope, err := buildScope(&c.config, &req)
-	if err != nil {
-		return nil, err
-	}
-
-	// Record client stats before collection to compute delta.
-	beforeStats := c.client.Stats()
-
-	// Dedup set for post IDs across subreddits.
-	seen := make(map[string]struct{})
-	var candidatePosts []postData
-	var listingErrs []error
-
-	// 1. Scan subreddits in order, deduplicate post IDs.
-	for _, sr := range scope.subreddits {
-		select {
-		case <-ctx.Done():
-			c.storeStatsDelta(beforeStats)
-			return nil, ctx.Err()
-		default:
+func (c *Collector) collectSubreddit(ctx context.Context, subreddit string, scope *collectionScope, since time.Time, seen map[string]struct{}, posts *[]postResponse) (bool, error) {
+	after := ""
+	for len(*posts) < scope.maxPosts {
+		if err := ctx.Err(); err != nil {
+			return true, err
 		}
-
-		limit := scope.maxPosts
-		if limit > 100 {
-			limit = 100
-		}
-		listing, err := c.client.listing(ctx, sr, scope.sort, scope.timeFilter, limit)
+		listing, err := c.client.listing(ctx, strings.TrimSpace(subreddit), scope, after)
 		if err != nil {
-			listingErrs = append(listingErrs, fmt.Errorf("subreddit %s: %w", sr, err))
-			continue
+			return errors.Is(err, ErrRequestCap), fmt.Errorf("listing r/%s: %w", subreddit, err)
 		}
-		if listing == nil {
-			continue
+		addEligiblePosts(&listing, seen, posts, since, scope.maxPosts)
+		if len(*posts) >= scope.maxPosts {
+			return true, nil
 		}
-		for i := range listing.Data.Children {
-			child := &listing.Data.Children[i]
-			if child.Kind != "t3" {
-				continue
-			}
-			if _, ok := seen[child.Data.ID]; ok {
-				continue
-			}
-			if !sinceFilter(&child.Data, scope.since) {
-				continue
-			}
-			seen[child.Data.ID] = struct{}{}
-			candidatePosts = append(candidatePosts, child.Data)
+		if listing.Data.After == "" || listing.Data.After == after || len(listing.Data.Children) == 0 {
+			return false, nil
+		}
+		after = listing.Data.After
+	}
+	return true, nil
+}
+
+func (c *Collector) collectPosts(ctx context.Context, scope *collectionScope, since time.Time) ([]postResponse, []error) {
+	seen := make(map[string]struct{})
+	posts := make([]postResponse, 0, scope.maxPosts)
+	var errs []error
+	for _, subreddit := range scope.subreddits {
+		stop, err := c.collectSubreddit(ctx, subreddit, scope, since, seen, &posts)
+		if err != nil {
+			errs = append(errs, err)
+		}
+		if stop {
+			break
 		}
 	}
+	return posts, errs
+}
 
-	// 2. Process candidates through bounded worker pool (5 workers).
-	var (
-		mu       sync.Mutex
-		signals  []domain.RawSignal
-		itemErrs []error
-		itemMu   sync.Mutex
-		wg       sync.WaitGroup
-		sem      = make(chan struct{}, 5)
-	)
-
-	for i := range candidatePosts {
-		post := &candidatePosts[i]
-		select {
-		case <-ctx.Done():
-			wg.Wait()
-			c.storeStatsDelta(beforeStats)
-			return signals, ctx.Err()
-		default:
+func (c *Collector) collectSignals(ctx context.Context, posts []postResponse, scope *collectionScope, collectedAt time.Time) ([]domain.RawSignal, []error) {
+	var mu sync.Mutex
+	var errs []error
+	addErr := func(err error) { mu.Lock(); errs = append(errs, err); mu.Unlock() }
+	results := make([]domain.RawSignal, 0, len(posts))
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 5)
+	for index := range posts {
+		if ctx.Err() != nil {
+			break
 		}
-
-		sem <- struct{}{}
+		post := &posts[index]
 		wg.Add(1)
-		go func(p *postData) {
+		go func(p *postResponse) {
 			defer wg.Done()
+			select {
+			case sem <- struct{}{}:
+			case <-ctx.Done():
+				return
+			}
 			defer func() { <-sem }()
-
-			var comments []domain.Comment
+			var comments *listingResponse
 			if scope.maxComments > 0 {
-				// Fetch comment tree raw JSON.
-				rawJSON, err := c.client.commentsRawJSON(ctx, p.ID)
+				cs, err := c.client.comments(ctx, p.Subreddit, p.ID, scope.maxComments)
 				if err != nil {
-					itemMu.Lock()
-					itemErrs = append(itemErrs, fmt.Errorf("comments for post %s: %w", p.ID, err))
-					itemMu.Unlock()
-					return
-				}
-				comments, err = FlattenComments(rawJSON, scope.maxComments)
-				if err != nil {
-					itemMu.Lock()
-					itemErrs = append(itemErrs, fmt.Errorf("flatten comments for post %s: %w", p.ID, err))
-					itemMu.Unlock()
-					return
+					addErr(fmt.Errorf("comments %s: %w", p.ID, err))
+				} else if len(cs) > 1 {
+					comments = &cs[1]
 				}
 			}
-
-			signal := parsePost(*p, comments, scope.sort, c.now())
-
+			signal := parsePost(p, collectedAt, scope.maxComments, comments)
 			mu.Lock()
-			signals = append(signals, signal)
+			results = append(results, signal)
 			mu.Unlock()
 		}(post)
 	}
 	wg.Wait()
-
-	// 3. Sort by CreatedAt descending (newest first).
-	sort.Slice(signals, func(i, j int) bool {
-		return signals[i].CreatedAt.After(signals[j].CreatedAt)
-	})
-
-	// 4. Apply maxItems cap.
-	if scope.maxPosts > 0 && len(signals) > scope.maxPosts {
-		signals = signals[:scope.maxPosts]
-	}
-
-	// 5. Store per-run stats delta.
-	c.storeStatsDelta(beforeStats)
-
-	// 6. Return results with partial errors.
-	if len(listingErrs) > 0 || len(itemErrs) > 0 {
-		allErrs := make([]error, 0, len(listingErrs)+len(itemErrs))
-		allErrs = append(allErrs, listingErrs...)
-		allErrs = append(allErrs, itemErrs...)
-		return signals, errors.Join(allErrs...)
-	}
-
-	return signals, nil
+	sortSignalsNewestFirst(results)
+	return results, errs
 }
 
-// sinceFilter returns true if the post's creation time is within or after
-// the given since window. A zero-value since means no filtering.
-func sinceFilter(p *postData, since time.Time) bool {
-	if since.IsZero() {
-		return true
-	}
-	return !unixTimestamp(p.CreatedUTC).Before(since)
-}
-
-// storeStatsDelta computes the delta of client stats since beforeStats and
-// stores it as the per-run request/cache-hit counts.
-func (c *Collector) storeStatsDelta(beforeStats Stats) {
-	afterStats := c.client.Stats()
-	delta := Stats{
-		Requests:  afterStats.Requests - beforeStats.Requests,
-		CacheHits: afterStats.CacheHits - beforeStats.CacheHits,
-	}
+func (c *Collector) storeStats(before Stats) {
+	after := c.client.Stats()
 	c.mu.Lock()
-	c.requests = delta.Requests
-	c.cacheHits = delta.CacheHits
+	c.stats = Stats{Requests: after.Requests - before.Requests, CacheHits: after.CacheHits - before.CacheHits}
 	c.mu.Unlock()
 }
 
-// Ensure interface compliance.
+func (c *Collector) Collect(ctx context.Context, req domain.CollectRequest) ([]domain.RawSignal, error) { //nolint:gocritic // Value signature is required by domain.SourceCollector.
+	c.collectMu.Lock()
+	defer c.collectMu.Unlock()
+	c.client.beginRun()
+	before := c.client.Stats()
+	scope := c.effectiveScope(&req)
+	posts, errs := c.collectPosts(ctx, &scope, req.Since)
+	results, commentErrs := c.collectSignals(ctx, posts, &scope, c.now())
+	errs = append(errs, commentErrs...)
+	c.storeStats(before)
+	if err := ctx.Err(); err != nil && !errors.Is(errors.Join(errs...), err) {
+		errs = append(errs, err)
+	}
+	return results, errors.Join(errs...)
+}
+
 var _ domain.SourceCollector = (*Collector)(nil)

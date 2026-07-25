@@ -1,6 +1,6 @@
 # SignalForge
 
-**Automated problem discovery engine** — collects public signals from GitHub, Hacker News, and Stack Exchange, classifies them, clusters recurring problems, and generates evidence-backed product hypotheses.
+**Automated problem discovery engine** — collects public signals from GitHub, Hacker News, Stack Exchange, and optionally Reddit, classifies them, clusters recurring problems, and generates evidence-backed product hypotheses.
 
 ## Quick Start
 
@@ -114,7 +114,30 @@ signalforge export --format csv --output report.csv
 signalforge collect --sources github,hn,stackexchange --since 30d
 signalforge collect --sources github --since 7d --max-items 50 --force
 signalforge collect --sources github --dry-run
+
+# Reddit is opt-in and requires Reddit application credentials
+export REDDIT_CLIENT_ID=your-client-id
+export REDDIT_CLIENT_SECRET=your-client-secret
+signalforge collect --sources reddit --since 30d
 ```
+
+Reddit collection is disabled by default. Enable it in `config.json` with at least one subreddit:
+
+```json
+{"sources":{"reddit":{"enabled":true,"subreddits":["saas"],"max_posts_per_run":50,"max_comments_per_post":20}}}
+```
+
+`REDDIT_CLIENT_ID` and `REDDIT_CLIENT_SECRET` are required only when Reddit is enabled.
+
+| Setting | Default | Validation / behavior |
+|---------|---------|-----------------------|
+| `sources.reddit.enabled` | `false` | Reddit remains opt-in |
+| `sources.reddit.subreddits` | `[]` | At least one nonblank subreddit when enabled |
+| `sources.reddit.max_posts_per_run` | `200` | Must be greater than zero |
+| `sources.reddit.max_comments_per_post` | `20` | Must be zero or greater; zero disables comment fetching |
+| `limits.max_reddit_requests_per_run` | `300` | Caps actual OAuth and API requests in each run |
+
+Reddit collection reads the `new` listing with time range `all`, then applies the command's `--since` window. Listing responses are cached for 5 minutes and comment responses for 24 hours.
 
 ### `classify` — Classify raw signals
 
@@ -149,13 +172,13 @@ signalforge discover --no-semantic
 
 ## Configuration
 
-SignalForge stores configuration at `~/.signalforge/config.yaml`. Created on first `init`.
+SignalForge stores configuration at `~/.signalforge/config.json`. Created on first `init`.
 
 ### Data directory structure
 
 ```
 ~/.signalforge/
-├── config.yaml        # Configuration
+├── config.json        # Configuration
 ├── memory.json        # Persistent memory (dedup, stats, cursors)
 ├── raw-signals/       # Collected raw signals
 ├── problem-signals/   # Classified problem signals
@@ -169,6 +192,8 @@ SignalForge stores configuration at `~/.signalforge/config.yaml`. Created on fir
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `GITHUB_TOKEN` | For GitHub collection | GitHub personal access token |
+| `REDDIT_CLIENT_ID` | For enabled Reddit collection | Reddit application client ID |
+| `REDDIT_CLIENT_SECRET` | For enabled Reddit collection | Reddit application client secret |
 | `OPENROUTER_API_KEY` | For classification/discover | OpenRouter API key |
 | `OPENROUTER_MODEL` | No | Model override |
 | `SIGNALFORGE_HOME` | No | Override data directory |

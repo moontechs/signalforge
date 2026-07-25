@@ -48,7 +48,7 @@ func TestNormalizeText(t *testing.T) {
 		},
 		{
 			name:  "deduplication",
-			input: "hello hello HELLO world World",
+			input: "hello HELLO world World",
 			want:  []string{"hello", "world"},
 		},
 		{

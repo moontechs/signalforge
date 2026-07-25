@@ -37,7 +37,7 @@ func TestCollector_sinceFiltering(t *testing.T) {
 
 func TestCollectorMultiSitePaginationAndLimits(t *testing.T) {
 	fake := newFakeTransport()
-	fake.addSequentialResponses("https://api.stackexchange.com/2.3/search/advanced*",
+	fake.addSequentialResponses(
 		fakeResponse{statusCode: 200, body: `{"items":[{"question_id":1,"title":"one","body_markdown":"<p>body</p>","creation_date":1740000000}],"has_more":true,"quota_remaining":10}`},
 		fakeResponse{statusCode: 200, body: `{"items":[{"question_id":2,"title":"two","body_markdown":"<p>body two</p>","creation_date":1740000001}],"has_more":true,"quota_remaining":9}`},
 	)

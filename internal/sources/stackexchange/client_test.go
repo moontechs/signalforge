@@ -94,9 +94,7 @@ func TestClient_backoffDelay(t *testing.T) {
 	// First response returns backoff=2, second is normal.
 	firstBody := `{"items":[{"question_id":1}],"has_more":false,"quota_remaining":90,"backoff":2}`
 	secondBody := `{"items":[{"question_id":2}],"has_more":false,"quota_remaining":89}`
-	url := "https://api.stackexchange.com/2.3/search/advanced*"
-
-	fake.addSequentialResponses(url,
+	fake.addSequentialResponses(
 		fakeResponse{statusCode: 200, body: firstBody},
 		fakeResponse{statusCode: 200, body: secondBody},
 	)
@@ -260,7 +258,7 @@ func TestClient_cacheExpiration(t *testing.T) {
 	path := "/questions?filter=withbody&order=desc&pagesize=100&site=stackoverflow&sort=creation"
 
 	// Pre-write expired cache (TTL for questions is 5 min, use 10 min old).
-	oldResp := cache.CacheEntry{Body: []byte(`{"items":[{"question_id":99,"title":"Stale"}],"has_more":false,"quota_remaining":98}`), TTL: 5 * time.Minute, StoredAt: time.Now().Add(-10 * time.Minute)}
+	oldResp := cache.Entry{Body: []byte(`{"items":[{"question_id":99,"title":"Stale"}],"has_more":false,"quota_remaining":98}`), TTL: 5 * time.Minute, StoredAt: time.Now().Add(-10 * time.Minute)}
 	if err := cache.NewCache(store, "stackexchange").Set(path, oldResp); err != nil {
 		t.Fatalf("pre-write cache: %v", err)
 	}
@@ -287,8 +285,7 @@ func TestClient_retryTransientRecovers(t *testing.T) {
 	t.Parallel()
 	fake := newFakeTransport()
 
-	url := "https://api.stackexchange.com/2.3/search/advanced*"
-	fake.addSequentialResponses(url,
+	fake.addSequentialResponses(
 		fakeResponse{statusCode: 500, body: `{}`},
 		fakeResponse{statusCode: 200, body: `{"items":[{"question_id":1}],"has_more":false,"quota_remaining":99}`},
 	)
@@ -436,8 +433,7 @@ func TestClient_429retry(t *testing.T) {
 	t.Parallel()
 	fake := newFakeTransport()
 
-	url := "https://api.stackexchange.com/2.3/search/advanced*"
-	fake.addSequentialResponses(url,
+	fake.addSequentialResponses(
 		fakeResponse{statusCode: 429, body: `{}`},
 		fakeResponse{statusCode: 200, body: `{"items":[{"question_id":1}],"has_more":false,"quota_remaining":99}`},
 	)
@@ -545,7 +541,7 @@ func TestClient_paginationMetadata(t *testing.T) {
 	page2 := `{"items":[{"question_id":2}],"has_more":false,"quota_remaining":89}`
 
 	// Use wildcard plus sequential responses for distinct pages.
-	fake.addSequentialResponses("https://api.stackexchange.com/2.3/search/advanced*",
+	fake.addSequentialResponses(
 		fakeResponse{statusCode: 200, body: page1},
 		fakeResponse{statusCode: 200, body: page2})
 
@@ -603,8 +599,7 @@ func TestClient_408retry(t *testing.T) {
 	t.Parallel()
 	fake := newFakeTransport()
 
-	url := "https://api.stackexchange.com/2.3/search/advanced*"
-	fake.addSequentialResponses(url,
+	fake.addSequentialResponses(
 		fakeResponse{statusCode: 408, body: `{}`},
 		fakeResponse{statusCode: 200, body: `{"items":[{"question_id":1}],"has_more":false,"quota_remaining":99}`},
 	)

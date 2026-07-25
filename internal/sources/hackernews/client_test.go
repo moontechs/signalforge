@@ -135,7 +135,7 @@ func TestClient_cacheExpiration(t *testing.T) {
 
 	key := "/newstories.json"
 	oldCache := cache.NewCache(store, "hackernews")
-	if err := oldCache.Set(key, cache.CacheEntry{Body: []byte("[99,98,97]"), TTL: 5 * time.Minute, StoredAt: time.Now().Add(-10 * time.Minute)}); err != nil {
+	if err := oldCache.Set(key, cache.Entry{Body: []byte("[99,98,97]"), TTL: 5 * time.Minute, StoredAt: time.Now().Add(-10 * time.Minute)}); err != nil {
 		t.Fatalf("pre-write cache: %v", err)
 	}
 

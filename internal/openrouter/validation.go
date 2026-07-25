@@ -16,14 +16,14 @@ func (c *Client) validateResponse(content string, schema any) ([]byte, error) {
 	if schema != nil {
 		// Verify we can unmarshal into the schema type.
 		if err := json.Unmarshal([]byte(content), schema); err != nil {
-			return nil, fmt.Errorf("%w: schema validation: %s", ErrInvalidResponse, err)
+			return nil, fmt.Errorf("%w: schema validation: %w", ErrInvalidResponse, err)
 		}
 
 		// Check numeric field ranges.
 		var raw map[string]any
 		if uErr := json.Unmarshal([]byte(content), &raw); uErr == nil {
 			if err := validateRanges(raw); err != nil {
-				return nil, fmt.Errorf("%w: %s", ErrInvalidResponse, err)
+				return nil, fmt.Errorf("%w: %w", ErrInvalidResponse, err)
 			}
 		}
 	}

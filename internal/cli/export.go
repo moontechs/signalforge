@@ -36,7 +36,9 @@ Example:
 
 	cmd.Flags().String("format", "", "Output format: markdown, json, or csv (required)")
 	cmd.Flags().String("output", "", "Output file path (optional; defaults to stdout)")
-	cmd.MarkFlagRequired("format")
+	if err := cmd.MarkFlagRequired("format"); err != nil {
+		panic(fmt.Sprintf("mark export format required: %v", err))
+	}
 
 	return cmd
 }
@@ -49,21 +51,18 @@ type exportEnv struct {
 }
 
 type exportData struct {
-	ExportedAt string                     `json:"exported_at"`
-	Clusters   []domain.ProblemCluster    `json:"clusters,omitempty"`
+	ExportedAt string                      `json:"exported_at"`
+	Clusters   []domain.ProblemCluster     `json:"clusters,omitempty"`
 	Solutions  []domain.SolutionHypothesis `json:"solutions,omitempty"`
-	Stats      domain.ResearchStats       `json:"stats,omitempty"`
+	Stats      domain.ResearchStats        `json:"stats,omitempty"`
 }
 
 func runExport(cmd *cobra.Command, _ []string) error {
 	format, _ := cmd.Flags().GetString("format")
 	output, _ := cmd.Flags().GetString("output")
 
-	format = strings.ToLower(strings.TrimSpace(format))
-	switch format {
-	case "markdown", "json", "csv":
-		// valid
-	default:
+	format = normalizeExportFormat(format)
+	if !validExportFormat(format) {
 		return fmt.Errorf("invalid format %q: must be markdown, json, or csv", format)
 	}
 
@@ -102,7 +101,10 @@ func executeExport(cmd *cobra.Command, env *exportEnv) error {
 		return fmt.Errorf("load clusters: %w", err)
 	}
 
-	solutions, _ := loadSolutions(env.store)
+	solutions, err := loadSolutions(env.store)
+	if err != nil {
+		return fmt.Errorf("load solutions: %w", err)
+	}
 	stats := env.mem.GetStats()
 
 	data := exportData{
@@ -116,11 +118,11 @@ func executeExport(cmd *cobra.Command, env *exportEnv) error {
 	var output string
 	switch env.format {
 	case "markdown":
-		output = generateMarkdown(data)
+		output = generateMarkdown(&data)
 	case "json":
-		output = generateJSON(data)
+		output = generateJSON(&data)
 	case "csv":
-		output = generateCSV(data)
+		output = generateCSV(&data)
 	}
 
 	// Write output.
@@ -133,7 +135,7 @@ func executeExport(cmd *cobra.Command, env *exportEnv) error {
 	return err
 }
 
-func generateMarkdown(data exportData) string {
+func generateMarkdown(data *exportData) string {
 	var b strings.Builder
 
 	b.WriteString("# SignalForge Research Report\n\n")
@@ -141,8 +143,8 @@ func generateMarkdown(data exportData) string {
 
 	// Stats section.
 	b.WriteString("## Statistics\n\n")
-	b.WriteString(fmt.Sprintf("| Metric | Value |\n"))
-	b.WriteString(fmt.Sprintf("|--------|-------|\n"))
+	b.WriteString("| Metric | Value |\n")
+	b.WriteString("|--------|-------|\n")
 	b.WriteString(fmt.Sprintf("| Raw signals collected | %d |\n", data.Stats.RawSignalsCollected))
 	b.WriteString(fmt.Sprintf("| Raw signals skipped | %d |\n", data.Stats.RawSignalsSkipped))
 	b.WriteString(fmt.Sprintf("| Problem signals found | %d |\n", data.Stats.ProblemSignalsFound))
@@ -161,7 +163,8 @@ func generateMarkdown(data exportData) string {
 	} else {
 		b.WriteString("| # | Title | Problem Score | Confidence | Sources | Signals |\n")
 		b.WriteString("|---|-------|--------------|------------|---------|---------|\n")
-		for i, c := range data.Clusters {
+		for i := range data.Clusters {
+			c := &data.Clusters[i]
 			total := c.ProblemScore.Total()
 			if c.ProblemTotal > 0 {
 				total = c.ProblemTotal
@@ -182,7 +185,8 @@ func generateMarkdown(data exportData) string {
 	} else {
 		b.WriteString("| # | Title | Solution Score | Confidence | Recommendation | Product Type |\n")
 		b.WriteString("|---|-------|---------------|------------|----------------|-------------|\n")
-		for i, s := range data.Solutions {
+		for i := range data.Solutions {
+			s := &data.Solutions[i]
 			total := s.SolutionScore.Total()
 			if s.SolutionTotal > 0 {
 				total = s.SolutionTotal
@@ -200,7 +204,7 @@ func generateMarkdown(data exportData) string {
 	return b.String()
 }
 
-func generateJSON(data exportData) string {
+func generateJSON(data *exportData) string {
 	enc, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
 		return fmt.Sprintf("{\"error\": %q}", err.Error())
@@ -208,7 +212,7 @@ func generateJSON(data exportData) string {
 	return string(enc)
 }
 
-func generateCSV(data exportData) string {
+func generateCSV(data *exportData) string {
 	var b strings.Builder
 
 	// Header row.
@@ -216,11 +220,13 @@ func generateCSV(data exportData) string {
 
 	// Build a map of cluster ID to solution info.
 	solutionMap := make(map[string][]domain.SolutionHypothesis)
-	for _, s := range data.Solutions {
-		solutionMap[s.ProblemClusterID] = append(solutionMap[s.ProblemClusterID], s)
+	for index := range data.Solutions {
+		s := &data.Solutions[index]
+		solutionMap[s.ProblemClusterID] = append(solutionMap[s.ProblemClusterID], *s)
 	}
 
-	for _, c := range data.Clusters {
+	for index := range data.Clusters {
+		c := &data.Clusters[index]
 		total := c.ProblemScore.Total()
 		if c.ProblemTotal > 0 {
 			total = c.ProblemTotal
@@ -236,7 +242,8 @@ func generateCSV(data exportData) string {
 			continue
 		}
 
-		for _, s := range solutions {
+		for solutionIndex := range solutions {
+			s := &solutions[solutionIndex]
 			sTotal := s.SolutionScore.Total()
 			if s.SolutionTotal > 0 {
 				sTotal = s.SolutionTotal
@@ -250,6 +257,19 @@ func generateCSV(data exportData) string {
 	}
 
 	return b.String()
+}
+
+func normalizeExportFormat(format string) string {
+	return strings.ToLower(strings.TrimSpace(format))
+}
+
+func validExportFormat(format string) bool {
+	switch normalizeExportFormat(format) {
+	case "markdown", "json", "csv":
+		return true
+	default:
+		return false
+	}
 }
 
 func csvEscape(s string) string {

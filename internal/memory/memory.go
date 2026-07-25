@@ -304,18 +304,16 @@ func (m *DefaultMemory) AddRedditRequests(count int) {
 	if count <= 0 {
 		return
 	}
-
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.mem.Stats.RedditRequests += count
 }
 
-// AddRedditCacheHits increments the Reddit cache hit count.
+// AddRedditCacheHits increments the Reddit cache-hit count.
 func (m *DefaultMemory) AddRedditCacheHits(count int) {
 	if count <= 0 {
 		return
 	}
-
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.mem.Stats.RedditCacheHits += count

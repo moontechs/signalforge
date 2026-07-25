@@ -16,7 +16,7 @@ Reddit is a rich source of problem signals (r/Startups, r/SaaS, r/ProductManagem
 Reddit collector is **built and documented but disabled by default**. Users must explicitly opt in via config (`sources.reddit.enabled: true`) and set specific subreddits.
 
 - Collector code lives in `internal/sources/reddit/`
-- CLI flag `--reddit` enables it at runtime
+- The `collect --sources reddit` selection enables it at runtime after configuration opt-in
 - Default config: `enabled: false`, `subreddits: []`
 
 ## Consequences
