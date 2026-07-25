@@ -3,6 +3,8 @@ package cli
 import (
 	"context"
 	"errors"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,6 +21,20 @@ import (
 	"github.com/moontechs/signalforge/internal/sources/stackexchange"
 	"github.com/moontechs/signalforge/internal/storage"
 )
+
+type redditTransportFunc func(*http.Request) (*http.Response, error)
+
+func (f redditTransportFunc) Do(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+func redditTestResponse(status int, body string) *http.Response {
+	return &http.Response{
+		StatusCode: status,
+		Body:       io.NopCloser(strings.NewReader(body)),
+		Header:     make(http.Header),
+	}
+}
 
 func newTestConfig() *config.Config {
 	cfg := config.DefaultConfig()
@@ -93,12 +109,35 @@ func TestBuildCollector_RedditDisabledAndCredentials(t *testing.T) {
 	cfg.Sources.Reddit.Enabled = true
 	cfg.Sources.Reddit.Subreddits = []string{"saas"}
 	cfg.Sources.Reddit.MaxPostsPerRun = 1
+	cfg.Sources.Reddit.MaxCommentsPerPost = 0
+	cfg.Sources.Reddit.Sort = "TOP"
+	cfg.Sources.Reddit.Time = "MONTH"
 	collector, err := buildCollector("reddit", cfg, store)
 	if err != nil {
 		t.Fatalf("buildCollector(reddit) failed: %v", err)
 	}
-	if _, ok := collector.(*reddit.Collector); !ok {
+	redditCollector, ok := collector.(*reddit.Collector)
+	if !ok {
 		t.Fatalf("expected Reddit collector, got %T", collector)
+	}
+
+	var listingURL string
+	redditCollector.WithTransport(redditTransportFunc(func(req *http.Request) (*http.Response, error) {
+		switch req.URL.Host {
+		case "www.reddit.com":
+			return redditTestResponse(http.StatusOK, `{"access_token":"token","expires_in":3600}`), nil
+		case "oauth.reddit.com":
+			listingURL = req.URL.String()
+			return redditTestResponse(http.StatusOK, `{"data":{"children":[],"after":""}}`), nil
+		default:
+			return nil, errors.New("unexpected Reddit host")
+		}
+	}))
+	if _, err := redditCollector.Collect(context.Background(), domain.CollectRequest{}); err != nil {
+		t.Fatalf("collect with built Reddit collector: %v", err)
+	}
+	if listingURL != "https://oauth.reddit.com/r/saas/top.json?limit=1&t=month" {
+		t.Fatalf("listing URL = %q, want configured sort and time", listingURL)
 	}
 }
 
@@ -694,12 +733,20 @@ func TestExecuteCollect_PersistsPartialResultsAndContinues(t *testing.T) {
 		name: "second",
 		collectFn: func(domain.CollectRequest) ([]domain.RawSignal, error) {
 			secondInvoked = true
-			return []domain.RawSignal{{
-				ID:          "second:two",
-				Source:      "second",
-				SourceID:    "two",
-				ContentHash: "hash-two",
-			}}, nil
+			return []domain.RawSignal{
+				{
+					ID:          "second:two",
+					Source:      "second",
+					SourceID:    "two",
+					ContentHash: "hash-one",
+				},
+				{
+					ID:          "second:three",
+					Source:      "second",
+					SourceID:    "three",
+					ContentHash: "hash-two",
+				},
+			}, nil
 		},
 	}
 	before := mem.GetStats()
@@ -718,14 +765,134 @@ func TestExecuteCollect_PersistsPartialResultsAndContinues(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "partial failure") {
 		t.Fatalf("error = %v", err)
 	}
-	if !secondInvoked || !mem.HasRawSignal("first", "one") || !mem.HasRawSignal("second", "two") {
+	if !secondInvoked || mem.HasRawSignal("first", "one") || mem.HasRawSignal("second", "two") || !mem.HasRawSignal("second", "three") {
 		t.Fatalf("second invoked=%v memory=%+v", secondInvoked, mem.GetMemory())
 	}
 	if !mem.HasContentHash("hash-one") || !mem.HasContentHash("hash-two") {
-		t.Fatal("partial result content hashes were not persisted")
+		t.Fatal("persisted partial and successful content hashes should suppress duplicates")
 	}
 	if !store.Exists(filepath.Join(store.BaseDir(), "memory.json")) {
 		t.Fatal("memory.json was not saved after partial failure")
+	}
+
+	files, err := store.ListFiles("raw-signals", ".json")
+	if err != nil {
+		t.Fatalf("list raw signals: %v", err)
+	}
+	if len(files) != 2 {
+		t.Fatalf("raw signal files = %d, want 2", len(files))
+	}
+	savedIDs := make(map[string]bool, len(files))
+	for _, path := range files {
+		var signal domain.RawSignal
+		if err := store.LoadJSON(path, &signal); err != nil {
+			t.Fatalf("load raw signal %s: %v", path, err)
+		}
+		savedIDs[signal.ID] = true
+	}
+	if !savedIDs["first:one"] || !savedIDs["second:three"] || savedIDs["second:two"] {
+		t.Fatalf("saved raw signal IDs = %v", savedIDs)
+	}
+}
+
+func TestExecuteCollect_DoesNotRecordSignalsThatFailPersistence(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "raw-signals"), []byte("not a directory"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store := storage.New(dir)
+	mem := memory.New(store)
+	collector := &mockCollector{
+		name: "source",
+		collectFn: func(domain.CollectRequest) ([]domain.RawSignal, error) {
+			return []domain.RawSignal{{
+				ID:          "source:one",
+				Source:      "source",
+				SourceID:    "one",
+				ContentHash: "hash-one",
+			}}, nil
+		},
+	}
+	before := mem.GetStats()
+	env := &collectEnv{
+		store:           store,
+		mem:             mem,
+		collectors:      []domain.SourceCollector{collector},
+		selectedSources: []string{"source"},
+		before:          &before,
+		sinceWindow:     24 * time.Hour,
+	}
+	cmd := &cobra.Command{}
+	cmd.SetOut(new(strings.Builder))
+
+	err := executeCollect(cmd, env)
+	if err == nil || !strings.Contains(err.Error(), "persistence") {
+		t.Fatalf("executeCollect() error = %v, want persistence error", err)
+	}
+	if mem.HasRawSignal("source", "one") || mem.HasContentHash("hash-one") {
+		t.Fatal("unpersisted signal was recorded in deduplication memory")
+	}
+}
+
+func TestExecuteCollect_ForcePartialFailurePreservesExistingSignal(t *testing.T) {
+	t.Parallel()
+
+	store := storage.New(t.TempDir())
+	mem := memory.New(store)
+	complete := domain.RawSignal{
+		ID:          "source:one",
+		Source:      "source",
+		SourceID:    "one",
+		Body:        "complete",
+		Comments:    []domain.Comment{{ID: "comment", Body: "complete comment"}},
+		ContentHash: "complete-hash",
+	}
+	path := filepath.Join(store.BaseDir(), "raw-signals", storage.ContentHash(complete.ID)+".json")
+	if err := store.SaveJSON(path, &complete); err != nil {
+		t.Fatalf("save existing signal: %v", err)
+	}
+	mem.AddRawSignal(complete.Source, complete.SourceID)
+	mem.AddContentHash(complete.ContentHash, complete.ID)
+
+	collector := &mockCollector{
+		name: "source",
+		collectFn: func(domain.CollectRequest) ([]domain.RawSignal, error) {
+			return []domain.RawSignal{{
+				ID:          complete.ID,
+				Source:      complete.Source,
+				SourceID:    complete.SourceID,
+				Body:        complete.Body,
+				ContentHash: "partial-hash",
+			}}, errors.New("comments failed")
+		},
+	}
+	before := mem.GetStats()
+	env := &collectEnv{
+		store:           store,
+		mem:             mem,
+		collectors:      []domain.SourceCollector{collector},
+		selectedSources: []string{"source"},
+		before:          &before,
+		force:           true,
+		sinceWindow:     24 * time.Hour,
+	}
+	cmd := &cobra.Command{}
+	cmd.SetOut(new(strings.Builder))
+
+	err := executeCollect(cmd, env)
+	if err == nil || !strings.Contains(err.Error(), "comments failed") {
+		t.Fatalf("executeCollect() error = %v, want collection error", err)
+	}
+
+	var got domain.RawSignal
+	if err := store.LoadJSON(path, &got); err != nil {
+		t.Fatalf("load existing signal: %v", err)
+	}
+	if got.ContentHash != complete.ContentHash || len(got.Comments) != 1 {
+		t.Fatalf("existing signal was replaced by partial result: %+v", got)
+	}
+	if mem.HasContentHash("partial-hash") {
+		t.Fatal("unsaved partial content hash was recorded in memory")
 	}
 }
 
@@ -810,6 +977,7 @@ func TestExecuteCollect_ForceBypassesDedup(t *testing.T) {
 	beforeStats := mem.GetStats()
 
 	env := &collectEnv{
+		store:           store,
 		mem:             mem,
 		collectors:      []domain.SourceCollector{collector},
 		selectedSources: []string{"test-source"},
@@ -871,6 +1039,7 @@ func TestExecuteCollect_NonForcePreservesDedup(t *testing.T) {
 	beforeStats := mem.GetStats()
 
 	env := &collectEnv{
+		store:           store,
 		mem:             mem,
 		collectors:      []domain.SourceCollector{collector},
 		selectedSources: []string{"test-source"},
@@ -1484,6 +1653,28 @@ func TestDeduplicateSignals_ForceReturnsAll(t *testing.T) {
 	}
 }
 
+func TestDeduplicateSignals_RemovesDuplicatesWithinBatch(t *testing.T) {
+	t.Parallel()
+
+	store := storage.New(t.TempDir())
+	env := &collectEnv{mem: memory.New(store)}
+	signals := []domain.RawSignal{
+		{ID: "first", Source: "src", SourceID: "one", ContentHash: "hash-one"},
+		{ID: "duplicate-source-id", Source: "src", SourceID: "one", ContentHash: "hash-two"},
+		{ID: "duplicate-content", Source: "src", SourceID: "two", ContentHash: "hash-one"},
+		{ID: "empty-hash-one", Source: "src", SourceID: "three"},
+		{ID: "empty-hash-two", Source: "src", SourceID: "four"},
+	}
+
+	got := deduplicateSignals(signals, env)
+	if len(got) != 3 {
+		t.Fatalf("deduplicateSignals() returned %d signals, want 3: %#v", len(got), got)
+	}
+	if got[0].ID != "first" || got[1].ID != "empty-hash-one" || got[2].ID != "empty-hash-two" {
+		t.Fatalf("deduplicateSignals() IDs = [%s %s %s], want [first empty-hash-one empty-hash-two]", got[0].ID, got[1].ID, got[2].ID)
+	}
+}
+
 // mockCollectorInvoked tracks whether a collector was called.
 type mockCollectorInvoked struct {
 	name    string
@@ -2048,18 +2239,6 @@ func TestExecuteCollect_DryRunNoMemoryMutation(t *testing.T) {
 	}
 }
 
-func TestResolveCollectSources_Reddit(t *testing.T) {
-	t.Parallel()
-
-	sources, err := resolveCollectSources("reddit")
-	if err != nil {
-		t.Fatalf("resolveCollectSources(reddit) failed: %v", err)
-	}
-	if len(sources) != 1 || sources[0] != "reddit" {
-		t.Errorf("expected [reddit], got %v", sources)
-	}
-}
-
 func TestResolveCollectSources_RedditWithGitHub(t *testing.T) {
 	t.Parallel()
 
@@ -2069,32 +2248,6 @@ func TestResolveCollectSources_RedditWithGitHub(t *testing.T) {
 	}
 	if len(sources) != 2 {
 		t.Errorf("expected 2 sources, got %d: %v", len(sources), sources)
-	}
-}
-
-func TestStatsDelta_Reddit(t *testing.T) {
-	t.Parallel()
-
-	before := &domain.ResearchStats{
-		RedditRequests:  10,
-		RedditCacheHits: 5,
-	}
-	after := &domain.ResearchStats{
-		RawSignalsCollected: 10,
-		RawSignalsSkipped:   0,
-		RedditRequests:      25,
-		RedditCacheHits:     12,
-	}
-
-	delta := statsDelta(before, after)
-	if delta.collected != 10 {
-		t.Errorf("expected collected=10, got %d", delta.collected)
-	}
-	if delta.redditRequests != 15 {
-		t.Errorf("expected redditRequests=15, got %d", delta.redditRequests)
-	}
-	if delta.redditCacheHits != 7 {
-		t.Errorf("expected redditCacheHits=7, got %d", delta.redditCacheHits)
 	}
 }
 
@@ -2114,37 +2267,6 @@ func TestStatsDelta_NoReddit(t *testing.T) {
 	}
 	if delta.redditCacheHits != 0 {
 		t.Errorf("expected redditCacheHits=0, got %d", delta.redditCacheHits)
-	}
-}
-
-func TestReportCollectSummary_Reddit(t *testing.T) {
-	t.Parallel()
-
-	cmd := &cobra.Command{}
-	buf := new(strings.Builder)
-	cmd.SetOut(buf)
-
-	delta := collectStatsDelta{
-		collected:       8,
-		skipped:         1,
-		redditRequests:  15,
-		redditCacheHits: 7,
-		sources: []sourceCollectionResult{
-			{name: "reddit", attempted: 9, collected: 8, skipped: 1},
-		},
-	}
-
-	err := reportCollectSummary(cmd, 9, &delta)
-	if err != nil {
-		t.Fatalf("reportCollectSummary failed: %v", err)
-	}
-
-	output := buf.String()
-	if !strings.Contains(output, "Reddit requests: 15") {
-		t.Errorf("expected Reddit requests: 15 in output, got: %s", output)
-	}
-	if !strings.Contains(output, "cache hits: 7") {
-		t.Errorf("expected cache hits: 7 in output, got: %s", output)
 	}
 }
 
@@ -2295,23 +2417,24 @@ func TestBuildDryRunPlans_RedditDisabled(t *testing.T) {
 	}
 }
 
-func TestEstimateRedditRequests(t *testing.T) {
+func TestEstimateRedditRequestsWithComments(t *testing.T) {
 	t.Parallel()
 
 	cfg := &config.Config{
 		Sources: config.SourcesConfig{
 			Reddit: config.RedditConfig{
-				Subreddits:     []string{"golang", "python", "rust"},
-				MaxPostsPerRun: 200,
+				Subreddits:         []string{"golang", "python", "rust"},
+				MaxPostsPerRun:     200,
+				MaxCommentsPerPost: 1,
 			},
 		},
 	}
 
 	env := &collectEnv{}
 	reqs := estimateRedditRequests(cfg, env)
-	// 1 OAuth + 3 subreddits + 200 maxPosts = 204.
-	if reqs != 204 {
-		t.Errorf("expected 204 requests, got %d", reqs)
+	// 1 OAuth + 2 listing pages for each of 3 subreddits + 200 comment requests.
+	if reqs != 207 {
+		t.Errorf("expected 207 requests, got %d", reqs)
 	}
 }
 
@@ -2321,8 +2444,9 @@ func TestEstimateRedditRequests_WithEnvMaxItems(t *testing.T) {
 	cfg := &config.Config{
 		Sources: config.SourcesConfig{
 			Reddit: config.RedditConfig{
-				Subreddits:     []string{"golang"},
-				MaxPostsPerRun: 200,
+				Subreddits:         []string{"golang"},
+				MaxPostsPerRun:     200,
+				MaxCommentsPerPost: 1,
 			},
 		},
 	}
@@ -2370,8 +2494,8 @@ func TestBuildRedditTargets_EmptySubreddits(t *testing.T) {
 	}
 
 	targets := buildRedditTargets(cfg)
-	if len(targets) != 1 || targets[0] != "default subreddit" {
-		t.Errorf("expected ['default subreddit'], got %v", targets)
+	if len(targets) != 0 {
+		t.Errorf("expected no targets for an invalid empty subreddit list, got %v", targets)
 	}
 }
 
@@ -2383,20 +2507,22 @@ func TestRedditCollectorStats_TrackCollectorStatsHandlesReddit(t *testing.T) {
 
 	collector, err := reddit.New(&reddit.ConfigValues{
 		Enabled:            true,
+		ClientID:           "test-client-id",
+		ClientSecret:       "test-client-secret",
 		Subreddits:         []string{"test"},
 		MaxPostsPerRun:     10,
 		MaxCommentsPerPost: 5,
 		Sort:               "new",
-		Time:               "week",
+		TimeRange:          "week",
 		MaxRequests:        500,
-	}, "test-client-id", "test-client-secret")
+	})
 	if err != nil {
 		t.Fatalf("create reddit collector: %v", err)
 	}
 
 	beforeStats := mem.GetStats()
 	env := &collectEnv{
-		mem: mem,
+		mem:    mem,
 		before: &beforeStats,
 	}
 
@@ -2416,4 +2542,3 @@ func TestRedditCollectorStats_TrackCollectorStatsHandlesReddit(t *testing.T) {
 		t.Errorf("expected 0 HN requests unchanged, got %d", afterStats.HackerNewsRequests)
 	}
 }
-

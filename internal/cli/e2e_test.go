@@ -13,6 +13,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/moontechs/signalforge/internal/cache"
 	"github.com/moontechs/signalforge/internal/config"
 	"github.com/moontechs/signalforge/internal/domain"
 	"github.com/moontechs/signalforge/internal/memory"
@@ -278,6 +279,115 @@ func TestExecutePipelineDryRun(t *testing.T) {
 	}
 }
 
+func TestPipelineCollectCompleteRequiresSuccessfulMatchingState(t *testing.T) {
+	tc := newTestCommand(t)
+	env := &pipelineEnv{
+		dir:     tc.homeDir,
+		store:   tc.store,
+		mem:     tc.mem,
+		cfg:     &config.Config{},
+		sources: "github,hackernews",
+		since:   "30d",
+	}
+
+	tc.seedRawSignals(t, 1)
+	if pipelineCollectComplete(env) {
+		t.Fatal("raw signal files alone must not mark collection complete")
+	}
+	if err := savePipelineCollectState(env, false); err != nil {
+		t.Fatalf("save incomplete state: %v", err)
+	}
+	if pipelineCollectComplete(env) {
+		t.Fatal("incomplete state marked collection complete")
+	}
+	if err := savePipelineCollectState(env, true); err != nil {
+		t.Fatalf("save complete state: %v", err)
+	}
+	if !pipelineCollectComplete(env) {
+		t.Fatal("matching complete state did not mark collection complete")
+	}
+
+	env.sources = "github"
+	if pipelineCollectComplete(env) {
+		t.Fatal("state for a different source set marked collection complete")
+	}
+	env.sources = "hackernews,github"
+	env.since = "7d"
+	if pipelineCollectComplete(env) {
+		t.Fatal("state for a different since window marked collection complete")
+	}
+}
+
+func TestPipelineCollectCompleteRequiresRawSignalOutput(t *testing.T) {
+	tc := newTestCommand(t)
+	env := &pipelineEnv{
+		dir:     tc.homeDir,
+		store:   tc.store,
+		mem:     tc.mem,
+		cfg:     &config.Config{},
+		sources: "github",
+		since:   "30d",
+	}
+
+	if err := savePipelineCollectState(env, true); err != nil {
+		t.Fatalf("save complete state: %v", err)
+	}
+	if pipelineCollectComplete(env) {
+		t.Fatal("complete state without raw signal output marked collection complete")
+	}
+
+	tc.seedRawSignals(t, 1)
+	if !pipelineCollectComplete(env) {
+		t.Fatal("matching complete state with raw signal output did not mark collection complete")
+	}
+
+	files, err := tc.store.ListFiles("raw-signals", ".json")
+	if err != nil {
+		t.Fatalf("list raw signals: %v", err)
+	}
+	if err := os.Remove(files[0]); err != nil {
+		t.Fatalf("remove raw signal: %v", err)
+	}
+	if pipelineCollectComplete(env) {
+		t.Fatal("complete state remained valid after raw signal output was removed")
+	}
+}
+
+func TestRunPipelineCollectSharesMemoryWithLaterStages(t *testing.T) {
+	tc := newTestCommand(t)
+	cfg := config.DefaultConfig()
+	cfg.Sources.HackerNews.Feeds = []string{"askstories"}
+	if err := config.SaveConfig(tc.homeDir, cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	hnCache := cache.NewCache(tc.store, "hackernews")
+	if err := hnCache.Set("/askstories.json", cache.Entry{
+		Body: []byte("[]"),
+		TTL:  5 * time.Minute,
+	}); err != nil {
+		t.Fatalf("seed Hacker News cache: %v", err)
+	}
+
+	cmd := newPipelineCmd()
+	cmd.SetContext(context.Background())
+	cmd.SetOut(new(bytes.Buffer))
+	env := &pipelineEnv{
+		dir:     tc.homeDir,
+		store:   tc.store,
+		mem:     tc.mem,
+		cfg:     cfg,
+		sources: "hackernews",
+		since:   "30d",
+	}
+
+	if _, err := runPipelineCollect(cmd, env); err != nil {
+		t.Fatalf("runPipelineCollect() error = %v", err)
+	}
+	if got := env.mem.GetStats().HackerNewsCacheHits; got != 1 {
+		t.Fatalf("pipeline memory Hacker News cache hits = %d, want 1", got)
+	}
+}
+
 func TestExecutePipelineWithExistingData(t *testing.T) {
 	tc := newTestCommand(t)
 	// Seed complete data so every stage can be skipped.
@@ -290,6 +400,9 @@ func TestExecutePipelineWithExistingData(t *testing.T) {
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	env := &pipelineEnv{dir: tc.homeDir, store: tc.store, mem: tc.mem, cfg: &config.Config{}, sources: "github", since: "30d", dryRun: false, force: false}
+	if err := savePipelineCollectState(env, true); err != nil {
+		t.Fatalf("save collect completion state: %v", err)
+	}
 	if err := executePipeline(cmd, env); err != nil {
 		t.Fatal(err)
 	}
