@@ -394,6 +394,134 @@ func TestAddHNCacheHits(t *testing.T) {
 	})
 }
 
+func TestAddRedditRequests(t *testing.T) {
+	t.Parallel()
+
+	t.Run("basic increment", func(t *testing.T) {
+		t.Parallel()
+		m := setupTestMemory(t)
+		m.AddRedditRequests(5)
+		stats := m.GetStats()
+		if stats.RedditRequests != 5 {
+			t.Errorf("expected 5 Reddit requests, got %d", stats.RedditRequests)
+		}
+	})
+
+	t.Run("zero no change", func(t *testing.T) {
+		t.Parallel()
+		m := setupTestMemory(t)
+		m.AddRedditRequests(0)
+		stats := m.GetStats()
+		if stats.RedditRequests != 0 {
+			t.Errorf("expected 0 Reddit requests, got %d", stats.RedditRequests)
+		}
+	})
+
+	t.Run("negative no change", func(t *testing.T) {
+		t.Parallel()
+		m := setupTestMemory(t)
+		m.AddRedditRequests(-3)
+		stats := m.GetStats()
+		if stats.RedditRequests != 0 {
+			t.Errorf("expected 0 Reddit requests, got %d", stats.RedditRequests)
+		}
+	})
+
+	t.Run("accumulation", func(t *testing.T) {
+		t.Parallel()
+		m := setupTestMemory(t)
+		m.AddRedditRequests(3)
+		m.AddRedditRequests(7)
+		stats := m.GetStats()
+		if stats.RedditRequests != 10 {
+			t.Errorf("expected 10 Reddit requests, got %d", stats.RedditRequests)
+		}
+	})
+
+	t.Run("concurrent safety", func(t *testing.T) {
+		t.Parallel()
+		m := setupTestMemory(t)
+		var wg sync.WaitGroup
+		n := 10
+		wg.Add(n)
+		for i := 0; i < n; i++ {
+			go func() {
+				defer wg.Done()
+				m.AddRedditRequests(1)
+			}()
+		}
+		wg.Wait()
+		stats := m.GetStats()
+		if stats.RedditRequests != n {
+			t.Errorf("expected %d Reddit requests, got %d", n, stats.RedditRequests)
+		}
+	})
+}
+
+func TestAddRedditCacheHits(t *testing.T) {
+	t.Parallel()
+
+	t.Run("basic increment", func(t *testing.T) {
+		t.Parallel()
+		m := setupTestMemory(t)
+		m.AddRedditCacheHits(5)
+		stats := m.GetStats()
+		if stats.RedditCacheHits != 5 {
+			t.Errorf("expected 5 Reddit cache hits, got %d", stats.RedditCacheHits)
+		}
+	})
+
+	t.Run("zero no change", func(t *testing.T) {
+		t.Parallel()
+		m := setupTestMemory(t)
+		m.AddRedditCacheHits(0)
+		stats := m.GetStats()
+		if stats.RedditCacheHits != 0 {
+			t.Errorf("expected 0 Reddit cache hits, got %d", stats.RedditCacheHits)
+		}
+	})
+
+	t.Run("negative no change", func(t *testing.T) {
+		t.Parallel()
+		m := setupTestMemory(t)
+		m.AddRedditCacheHits(-3)
+		stats := m.GetStats()
+		if stats.RedditCacheHits != 0 {
+			t.Errorf("expected 0 Reddit cache hits, got %d", stats.RedditCacheHits)
+		}
+	})
+
+	t.Run("accumulation", func(t *testing.T) {
+		t.Parallel()
+		m := setupTestMemory(t)
+		m.AddRedditCacheHits(3)
+		m.AddRedditCacheHits(7)
+		stats := m.GetStats()
+		if stats.RedditCacheHits != 10 {
+			t.Errorf("expected 10 Reddit cache hits, got %d", stats.RedditCacheHits)
+		}
+	})
+
+	t.Run("concurrent safety", func(t *testing.T) {
+		t.Parallel()
+		m := setupTestMemory(t)
+		var wg sync.WaitGroup
+		n := 10
+		wg.Add(n)
+		for i := 0; i < n; i++ {
+			go func() {
+				defer wg.Done()
+				m.AddRedditCacheHits(1)
+			}()
+		}
+		wg.Wait()
+		stats := m.GetStats()
+		if stats.RedditCacheHits != n {
+			t.Errorf("expected %d Reddit cache hits, got %d", n, stats.RedditCacheHits)
+		}
+	})
+}
+
 func TestLoad_Save(t *testing.T) {
 	t.Parallel()
 

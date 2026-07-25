@@ -2047,3 +2047,373 @@ func TestExecuteCollect_DryRunNoMemoryMutation(t *testing.T) {
 		t.Errorf("cursors changed during dry-run: %v", mem.SourceCursors())
 	}
 }
+
+func TestResolveCollectSources_Reddit(t *testing.T) {
+	t.Parallel()
+
+	sources, err := resolveCollectSources("reddit")
+	if err != nil {
+		t.Fatalf("resolveCollectSources(reddit) failed: %v", err)
+	}
+	if len(sources) != 1 || sources[0] != "reddit" {
+		t.Errorf("expected [reddit], got %v", sources)
+	}
+}
+
+func TestResolveCollectSources_RedditWithGitHub(t *testing.T) {
+	t.Parallel()
+
+	sources, err := resolveCollectSources("github,reddit")
+	if err != nil {
+		t.Fatalf("resolveCollectSources(github,reddit) failed: %v", err)
+	}
+	if len(sources) != 2 {
+		t.Errorf("expected 2 sources, got %d: %v", len(sources), sources)
+	}
+}
+
+func TestStatsDelta_Reddit(t *testing.T) {
+	t.Parallel()
+
+	before := &domain.ResearchStats{
+		RedditRequests:  10,
+		RedditCacheHits: 5,
+	}
+	after := &domain.ResearchStats{
+		RawSignalsCollected: 10,
+		RawSignalsSkipped:   0,
+		RedditRequests:      25,
+		RedditCacheHits:     12,
+	}
+
+	delta := statsDelta(before, after)
+	if delta.collected != 10 {
+		t.Errorf("expected collected=10, got %d", delta.collected)
+	}
+	if delta.redditRequests != 15 {
+		t.Errorf("expected redditRequests=15, got %d", delta.redditRequests)
+	}
+	if delta.redditCacheHits != 7 {
+		t.Errorf("expected redditCacheHits=7, got %d", delta.redditCacheHits)
+	}
+}
+
+func TestStatsDelta_NoReddit(t *testing.T) {
+	t.Parallel()
+
+	before := &domain.ResearchStats{}
+	after := &domain.ResearchStats{
+		RawSignalsCollected: 5,
+		RedditRequests:      0,
+		RedditCacheHits:     0,
+	}
+
+	delta := statsDelta(before, after)
+	if delta.redditRequests != 0 {
+		t.Errorf("expected redditRequests=0, got %d", delta.redditRequests)
+	}
+	if delta.redditCacheHits != 0 {
+		t.Errorf("expected redditCacheHits=0, got %d", delta.redditCacheHits)
+	}
+}
+
+func TestReportCollectSummary_Reddit(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+	buf := new(strings.Builder)
+	cmd.SetOut(buf)
+
+	delta := collectStatsDelta{
+		collected:       8,
+		skipped:         1,
+		redditRequests:  15,
+		redditCacheHits: 7,
+		sources: []sourceCollectionResult{
+			{name: "reddit", attempted: 9, collected: 8, skipped: 1},
+		},
+	}
+
+	err := reportCollectSummary(cmd, 9, &delta)
+	if err != nil {
+		t.Fatalf("reportCollectSummary failed: %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "Reddit requests: 15") {
+		t.Errorf("expected Reddit requests: 15 in output, got: %s", output)
+	}
+	if !strings.Contains(output, "cache hits: 7") {
+		t.Errorf("expected cache hits: 7 in output, got: %s", output)
+	}
+}
+
+func TestReportCollectSummary_RedditNoRequests(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+	buf := new(strings.Builder)
+	cmd.SetOut(buf)
+
+	delta := collectStatsDelta{
+		collected: 3,
+		skipped:   1,
+		sources: []sourceCollectionResult{
+			{name: "reddit", attempted: 4, collected: 3, skipped: 1},
+		},
+	}
+
+	err := reportCollectSummary(cmd, 3, &delta)
+	if err != nil {
+		t.Fatalf("reportCollectSummary failed: %v", err)
+	}
+
+	output := buf.String()
+	if strings.Contains(output, "Reddit requests") {
+		t.Errorf("unexpected Reddit requests when delta.redditRequests=0: %s", output)
+	}
+	if !strings.Contains(output, "Total new signals: 3") {
+		t.Errorf("expected total line, got: %s", output)
+	}
+}
+
+func TestOrderSourcesDeterministically_RedditLast(t *testing.T) {
+	t.Parallel()
+
+	input := []string{"github", "reddit", "hackernews", "stackexchange"}
+	result := orderSourcesDeterministically(input)
+	expected := []string{"github", "hackernews", "stackexchange", "reddit"}
+	if len(result) != len(expected) {
+		t.Fatalf("expected %v, got %v", expected, result)
+	}
+	for i := range expected {
+		if result[i] != expected[i] {
+			t.Fatalf("expected %v at index %d, got %v", expected, i, result)
+		}
+	}
+}
+
+func TestOrderSourcesDeterministically_RedditOnly(t *testing.T) {
+	t.Parallel()
+
+	result := orderSourcesDeterministically([]string{"reddit"})
+	if len(result) != 1 || result[0] != "reddit" {
+		t.Fatalf("expected [reddit], got %v", result)
+	}
+}
+
+func TestBuildDryRunPlans_Reddit(t *testing.T) {
+	t.Parallel()
+
+	store := storage.New(t.TempDir())
+	mem := memory.New(store)
+
+	cfg := &config.Config{
+		Sources: config.SourcesConfig{
+			Reddit: config.RedditConfig{
+				Enabled:            true,
+				Subreddits:         []string{"golang", "cli"},
+				MaxPostsPerRun:     100,
+				MaxCommentsPerPost: 10,
+				Sort:               "new",
+				Time:               "week",
+			},
+		},
+	}
+
+	beforeStats := mem.GetStats()
+
+	env := &collectEnv{
+		mem:             mem,
+		cfg:             cfg,
+		collectors:      []domain.SourceCollector{},
+		selectedSources: []string{"reddit"},
+		before:          &beforeStats,
+		dryRun:          true,
+		sinceWindow:     30 * 24 * time.Hour,
+	}
+
+	plans := buildDryRunPlans(env, cfg)
+
+	if len(plans) != 1 {
+		t.Fatalf("expected 1 plan, got %d", len(plans))
+	}
+
+	if plans[0].Source != "reddit" {
+		t.Errorf("expected reddit, got %s", plans[0].Source)
+	}
+
+	// Should have 2 targets (2 subreddits).
+	if len(plans[0].Targets) != 2 {
+		t.Errorf("expected 2 targets, got %d: %v", len(plans[0].Targets), plans[0].Targets)
+	}
+
+	// Estimated: 1 OAuth + 2 subreddits + 100 maxPosts = 103.
+	if plans[0].EstimatedReqs != 103 {
+		t.Errorf("expected 103 estimated requests, got %d", plans[0].EstimatedReqs)
+	}
+}
+
+func TestBuildDryRunPlans_RedditDisabled(t *testing.T) {
+	t.Parallel()
+
+	store := storage.New(t.TempDir())
+	mem := memory.New(store)
+
+	cfg := &config.Config{
+		Sources: config.SourcesConfig{
+			Reddit: config.RedditConfig{
+				Enabled:            false,
+				Subreddits:         []string{"test"},
+				MaxPostsPerRun:     100,
+				MaxCommentsPerPost: 0,
+				Sort:               "new",
+				Time:               "week",
+			},
+		},
+	}
+
+	beforeStats := mem.GetStats()
+
+	env := &collectEnv{
+		mem:             mem,
+		cfg:             cfg,
+		collectors:      []domain.SourceCollector{},
+		selectedSources: []string{"reddit"},
+		before:          &beforeStats,
+		dryRun:          true,
+		sinceWindow:     7 * 24 * time.Hour,
+	}
+
+	// Dry-run should still build plans even with disabled config.
+	plans := buildDryRunPlans(env, cfg)
+	if len(plans) != 1 {
+		t.Fatalf("expected 1 plan, got %d", len(plans))
+	}
+	if plans[0].Source != "reddit" {
+		t.Errorf("expected reddit, got %s", plans[0].Source)
+	}
+}
+
+func TestEstimateRedditRequests(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{
+		Sources: config.SourcesConfig{
+			Reddit: config.RedditConfig{
+				Subreddits:     []string{"golang", "python", "rust"},
+				MaxPostsPerRun: 200,
+			},
+		},
+	}
+
+	env := &collectEnv{}
+	reqs := estimateRedditRequests(cfg, env)
+	// 1 OAuth + 3 subreddits + 200 maxPosts = 204.
+	if reqs != 204 {
+		t.Errorf("expected 204 requests, got %d", reqs)
+	}
+}
+
+func TestEstimateRedditRequests_WithEnvMaxItems(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{
+		Sources: config.SourcesConfig{
+			Reddit: config.RedditConfig{
+				Subreddits:     []string{"golang"},
+				MaxPostsPerRun: 200,
+			},
+		},
+	}
+
+	env := &collectEnv{maxItems: 50}
+	reqs := estimateRedditRequests(cfg, env)
+	// 1 OAuth + 1 subreddit + 50 maxPosts = 52.
+	if reqs != 52 {
+		t.Errorf("expected 52 requests, got %d", reqs)
+	}
+}
+
+func TestBuildRedditTargets(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{
+		Sources: config.SourcesConfig{
+			Reddit: config.RedditConfig{
+				Subreddits: []string{"golang", "rust"},
+			},
+		},
+	}
+
+	targets := buildRedditTargets(cfg)
+	if len(targets) != 2 {
+		t.Fatalf("expected 2 targets, got %d: %v", len(targets), targets)
+	}
+	if targets[0] != "subreddit: golang" {
+		t.Errorf("expected 'subreddit: golang', got %q", targets[0])
+	}
+	if targets[1] != "subreddit: rust" {
+		t.Errorf("expected 'subreddit: rust', got %q", targets[1])
+	}
+}
+
+func TestBuildRedditTargets_EmptySubreddits(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{
+		Sources: config.SourcesConfig{
+			Reddit: config.RedditConfig{
+				Subreddits: []string{},
+			},
+		},
+	}
+
+	targets := buildRedditTargets(cfg)
+	if len(targets) != 1 || targets[0] != "default subreddit" {
+		t.Errorf("expected ['default subreddit'], got %v", targets)
+	}
+}
+
+func TestRedditCollectorStats_TrackCollectorStatsHandlesReddit(t *testing.T) {
+	t.Parallel()
+
+	store := storage.New(t.TempDir())
+	mem := memory.New(store)
+
+	collector, err := reddit.New(&reddit.ConfigValues{
+		Enabled:            true,
+		Subreddits:         []string{"test"},
+		MaxPostsPerRun:     10,
+		MaxCommentsPerPost: 5,
+		Sort:               "new",
+		Time:               "week",
+		MaxRequests:        500,
+	}, "test-client-id", "test-client-secret")
+	if err != nil {
+		t.Fatalf("create reddit collector: %v", err)
+	}
+
+	beforeStats := mem.GetStats()
+	env := &collectEnv{
+		mem: mem,
+		before: &beforeStats,
+	}
+
+	// trackCollectorStats should not panic with a Reddit collector.
+	trackCollectorStats(env, collector)
+
+	// Stats should be recorded (requests=0, cacheHits=0 since no calls made).
+	afterStats := mem.GetStats()
+	if afterStats.RedditRequests != 0 {
+		t.Errorf("expected 0 reddit requests, got %d", afterStats.RedditRequests)
+	}
+	if afterStats.RedditCacheHits != 0 {
+		t.Errorf("expected 0 reddit cache hits, got %d", afterStats.RedditCacheHits)
+	}
+	// Ensure other stats were not modified.
+	if afterStats.HackerNewsRequests != 0 {
+		t.Errorf("expected 0 HN requests unchanged, got %d", afterStats.HackerNewsRequests)
+	}
+}
+

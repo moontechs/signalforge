@@ -1,0 +1,27 @@
+{
+  "kind": "Listing",
+  "data": {
+    "after": null,
+    "dist": 1,
+    "children": [
+      {
+        "kind": "t3",
+        "data": {
+          "id": "unicode1",
+          "name": "t3_unicode1",
+          "title": "Post with Unicode: こんにちは世界 — Golang tips 🚀",
+          "selftext": "Emoji test: 🔥 🎉 👨‍💻\nSpecial chars: üñîçødé &amp; <script>alert('xss')</script>",
+          "permalink": "/r/golang/comments/unicode1/post_with_unicode/",
+          "subreddit": "golang",
+          "author": "unicode_user",
+          "score": 42,
+          "num_comments": 7,
+          "created_utc": 1700030000.0,
+          "url": "https://www.reddit.com/r/golang/comments/unicode1/post_with_unicode/",
+          "stickied": false,
+          "over_18": false
+        }
+      }
+    ]
+  }
+}
