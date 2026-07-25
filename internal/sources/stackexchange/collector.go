@@ -9,7 +9,6 @@ import (
 
 	"github.com/moontechs/signalforge/internal/cache"
 	"github.com/moontechs/signalforge/internal/domain"
-	"github.com/moontechs/signalforge/internal/memory"
 )
 
 // Collector fetches questions from configured Stack Exchange sites.
@@ -36,47 +35,42 @@ func (c *Collector) Name() string { return SourceName }
 // WithTransport replaces the API transport, primarily for tests.
 func (c *Collector) WithTransport(t transport) *Collector { c.client.transport = t; return c }
 
-// WithCache attaches response caching and persistent signal memory.
-func (c *Collector) WithCache(value *cache.Cache) *Collector { c.client.WithCache(value); return c }
+// WithCache attaches response caching.
+func (c *Collector) WithCache(value *cache.Cache) { c.client.WithCache(value) }
 
 // Stats returns this collector's most recent run counters.
 func (c *Collector) Stats() Stats { return c.stats }
 
-// processParsedSignals filters parsed signals through dedup and memory checks
-// and appends new ones to the result slice. Returns the updated result and count.
-func (c *Collector) processParsedSignals(parsed []domain.RawSignal, seen map[string]struct{}, mem *memory.DefaultMemory, maxItems int, signals []domain.RawSignal) (result []domain.RawSignal, count int) {
-	items := 0
+// processParsedSignals filters parsed signals through run-local deduplication
+// and appends new ones to the result slice.
+func (c *Collector) processParsedSignals(parsed []domain.RawSignal, seenIDs, seenHashes map[string]struct{}, maxItems int, signals []domain.RawSignal) []domain.RawSignal {
 	for i := range parsed {
 		sig := &parsed[i]
-		if _, ok := seen[sig.ID]; ok {
+		if _, ok := seenIDs[sig.ID]; ok {
 			continue
 		}
-		seen[sig.ID] = struct{}{}
-		if mem != nil && (mem.HasRawSignal(SourceName, sig.SourceID) || mem.HasContentHash(sig.ContentHash)) {
-			continue
+		if sig.ContentHash != "" {
+			if _, ok := seenHashes[sig.ContentHash]; ok {
+				continue
+			}
 		}
-		if maxItems > 0 && items >= maxItems {
+		if maxItems > 0 && len(signals) >= maxItems {
 			break
 		}
 		signals = append(signals, *sig)
-		items++
-		if mem != nil {
-			mem.AddRawSignal(SourceName, sig.SourceID)
-			mem.AddContentHash(sig.ContentHash, sig.ID)
+		seenIDs[sig.ID] = struct{}{}
+		if sig.ContentHash != "" {
+			seenHashes[sig.ContentHash] = struct{}{}
 		}
 	}
-	result = signals
-	count = items
-	return
+	return signals
 }
 
-// collectSite collects questions from one site across pages,
-// filtering through dedup and memory.
-func (c *Collector) collectSite(ctx context.Context, site string, from, to int64, pageSize, maxPages, maxItems int, since time.Time, mem *memory.DefaultMemory) ([]domain.RawSignal, error) {
+// collectSite collects questions from one site across pages and filters them
+// through run-local deduplication.
+func (c *Collector) collectSite(ctx context.Context, site string, from, to int64, pageSize, maxPages, maxItems int, since time.Time, seenIDs, seenHashes map[string]struct{}) ([]domain.RawSignal, error) {
 	var signals []domain.RawSignal
-	items := 0
-	seen := make(map[string]struct{})
-	for page := 1; page <= maxPages && (maxItems <= 0 || items < maxItems); page++ {
+	for page := 1; page <= maxPages && (maxItems <= 0 || len(signals) < maxItems); page++ {
 		if err := ctx.Err(); err != nil {
 			return signals, err
 		}
@@ -92,7 +86,7 @@ func (c *Collector) collectSite(ctx context.Context, site string, from, to int64
 			}
 		}
 		parsed, _ := parseQuestionsWithStats(site, eligible, c.config.MinimumScore, c.config.MinimumViews)
-		signals, items = c.processParsedSignals(parsed, seen, mem, maxItems, signals)
+		signals = c.processParsedSignals(parsed, seenIDs, seenHashes, maxItems, signals)
 		if err != nil {
 			// getQuestions may return a parsed page alongside quota exhaustion;
 			// preserve that page, but report the exhaustion to the caller.
@@ -128,20 +122,17 @@ func (c *Collector) Collect(ctx context.Context, req domain.CollectRequest) ([]d
 	if maxPages <= 0 {
 		maxPages = 1
 	}
-	var mem *memory.DefaultMemory
-	if c.client.cache != nil {
-		mem = memory.New(c.client.cache.Storage())
-		_ = mem.Load()
-	}
 	var signals []domain.RawSignal
 	var errs []error
+	seenIDs := make(map[string]struct{})
+	seenHashes := make(map[string]struct{})
 	before := c.client.Stats()
 	for _, site := range c.config.Sites {
 		if err := ctx.Err(); err != nil {
 			c.updateStats()
 			return signals, err
 		}
-		siteSignals, err := c.collectSite(ctx, site, from, to, pageSize, maxPages, c.config.MaxItemsPerSite, req.Since, mem)
+		siteSignals, err := c.collectSite(ctx, site, from, to, pageSize, maxPages, c.config.MaxItemsPerSite, req.Since, seenIDs, seenHashes)
 		if err != nil {
 			errs = append(errs, err)
 			// collectSite returns partial results alongside errors (e.g. quota exhaustion).
@@ -149,9 +140,6 @@ func (c *Collector) Collect(ctx context.Context, req domain.CollectRequest) ([]d
 			continue
 		}
 		signals = append(signals, siteSignals...)
-	}
-	if mem != nil {
-		_ = mem.Save()
 	}
 	after := c.client.Stats()
 	c.stats = Stats{Requests: after.Requests - before.Requests, CacheHits: after.CacheHits - before.CacheHits}

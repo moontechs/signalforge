@@ -14,62 +14,14 @@ func TestSourceConstants(t *testing.T) {
 	if SourceType != "discussion" {
 		t.Fatalf("SourceType = %q, want %q", SourceType, "discussion")
 	}
-	if SignalIDPrefix != "reddit" {
-		t.Fatalf("SignalIDPrefix = %q, want %q", SignalIDPrefix, "reddit")
-	}
-}
-
-func TestSupportedSortValues(t *testing.T) {
-	t.Parallel()
-
-	expected := []string{"hot", "new", "top", "rising"}
-	if len(SupportedSortValues) != len(expected) {
-		t.Fatalf("SupportedSortValues = %v, want %v", SupportedSortValues, expected)
-	}
-	for i, v := range expected {
-		if SupportedSortValues[i] != v {
-			t.Fatalf("SupportedSortValues[%d] = %q, want %q", i, SupportedSortValues[i], v)
-		}
-	}
-}
-
-func TestSupportedTimeValues(t *testing.T) {
-	t.Parallel()
-
-	expected := []string{"hour", "day", "week", "month", "year", "all"}
-	if len(SupportedTimeValues) != len(expected) {
-		t.Fatalf("SupportedTimeValues = %v, want %v", SupportedTimeValues, expected)
-	}
-	for i, v := range expected {
-		if SupportedTimeValues[i] != v {
-			t.Fatalf("SupportedTimeValues[%d] = %q, want %q", i, SupportedTimeValues[i], v)
-		}
-	}
-}
-
-func TestDefaultSort(t *testing.T) {
-	t.Parallel()
-	if DefaultSort != "new" {
-		t.Fatalf("DefaultSort = %q, want %q", DefaultSort, "new")
-	}
-}
-
-func TestDefaultTime(t *testing.T) {
-	t.Parallel()
-	if DefaultTime != "week" {
-		t.Fatalf("DefaultTime = %q, want %q", DefaultTime, "week")
+	if SignalIDPrefix != "rd" {
+		t.Fatalf("SignalIDPrefix = %q, want %q", SignalIDPrefix, "rd")
 	}
 }
 
 func TestMetadataKeyConstants(t *testing.T) {
 	t.Parallel()
 
-	if MetaKeyCommentParentIDs != "parent_ids" {
-		t.Fatalf("MetaKeyCommentParentIDs = %q, want %q", MetaKeyCommentParentIDs, "parent_ids")
-	}
-	if MetaKeyCommentDepth != "depth" {
-		t.Fatalf("MetaKeyCommentDepth = %q, want %q", MetaKeyCommentDepth, "depth")
-	}
 	if MetaKeyPostScore != "post_score" {
 		t.Fatalf("MetaKeyPostScore = %q, want %q", MetaKeyPostScore, "post_score")
 	}
@@ -81,9 +33,6 @@ func TestMetadataKeyConstants(t *testing.T) {
 	}
 	if MetaKeySubreddit != "subreddit" {
 		t.Fatalf("MetaKeySubreddit = %q, want %q", MetaKeySubreddit, "subreddit")
-	}
-	if MetaKeyListingSort != "listing_sort" {
-		t.Fatalf("MetaKeyListingSort = %q, want %q", MetaKeyListingSort, "listing_sort")
 	}
 }
 
@@ -104,8 +53,8 @@ func TestDeriveScopeDefaultValues(t *testing.T) {
 	if scope.sort != "new" {
 		t.Fatalf("scope.sort = %q, want %q", scope.sort, "new")
 	}
-	if scope.timeFilter != "week" {
-		t.Fatalf("scope.timeFilter = %q, want %q", scope.timeFilter, "week")
+	if scope.timeRange != "all" {
+		t.Fatalf("scope.timeRange = %q, want %q", scope.timeRange, "all")
 	}
 }
 
@@ -115,8 +64,8 @@ func TestDeriveScopeExplicitValues(t *testing.T) {
 	cfg := &ConfigValues{
 		Enabled:            true,
 		Subreddits:         []string{"golang"},
-		Sort:               "top",
-		Time:               "month",
+		Sort:               "TOP",
+		TimeRange:          "MONTH",
 		MaxPostsPerRun:     100,
 		MaxCommentsPerPost: 10,
 		MaxRequests:        300,
@@ -128,8 +77,8 @@ func TestDeriveScopeExplicitValues(t *testing.T) {
 	if scope.sort != "top" {
 		t.Fatalf("scope.sort = %q, want %q", scope.sort, "top")
 	}
-	if scope.timeFilter != "month" {
-		t.Fatalf("scope.timeFilter = %q, want %q", scope.timeFilter, "month")
+	if scope.timeRange != "month" {
+		t.Fatalf("scope.timeRange = %q, want %q", scope.timeRange, "month")
 	}
 	if len(scope.subreddits) != 1 || scope.subreddits[0] != "golang" {
 		t.Fatalf("scope.subreddits = %v, want [golang]", scope.subreddits)
@@ -155,7 +104,7 @@ func TestDeriveScopePreservesSince(t *testing.T) {
 		Enabled:            true,
 		Subreddits:         []string{"golang"},
 		Sort:               "new",
-		Time:               "all",
+		TimeRange:          "all",
 		MaxPostsPerRun:     50,
 		MaxCommentsPerPost: 5,
 		MaxRequests:        100,

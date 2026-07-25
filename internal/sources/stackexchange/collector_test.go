@@ -3,10 +3,14 @@ package stackexchange
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/moontechs/signalforge/internal/cache"
 	"github.com/moontechs/signalforge/internal/domain"
+	"github.com/moontechs/signalforge/internal/memory"
+	"github.com/moontechs/signalforge/internal/storage"
 )
 
 func TestCollector_statsTracking(t *testing.T) {
@@ -35,6 +39,59 @@ func TestCollector_sinceFiltering(t *testing.T) {
 	}
 }
 
+func TestCollectorDoesNotPersistDeduplicationMemory(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	store := storage.New(dir)
+	fake := newFakeTransport()
+	fake.addResponse("https://api.stackexchange.com/2.3/search/advanced*", fakeResponse{
+		statusCode: 200,
+		body:       `{"items":[{"question_id":1,"title":"q","body_markdown":"body","creation_date":1740000000}],"quota_remaining":10}`,
+	})
+	c := New(&ConfigValues{Enabled: true, Sites: []string{"stackoverflow"}}, testClient(fake))
+	c.WithCache(cache.NewCache(store, "stackexchange"))
+
+	got, err := c.Collect(context.Background(), domain.CollectRequest{})
+	if err != nil {
+		t.Fatalf("Collect() error = %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("Collect() returned %d signals, want 1", len(got))
+	}
+	if store.Exists(filepath.Join(dir, "memory.json")) {
+		t.Fatal("collector persisted deduplication memory before the CLI saved raw signals")
+	}
+}
+
+func TestCollectorForceIgnoresPersistentDeduplicationMemory(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	store := storage.New(dir)
+	mem := memory.New(store)
+	mem.AddRawSignal(SourceName, "stackoverflow:1")
+	if err := mem.Save(); err != nil {
+		t.Fatalf("save memory: %v", err)
+	}
+
+	fake := newFakeTransport()
+	fake.addResponse("https://api.stackexchange.com/2.3/search/advanced*", fakeResponse{
+		statusCode: 200,
+		body:       `{"items":[{"question_id":1,"title":"q","body_markdown":"body","creation_date":1740000000}],"quota_remaining":10}`,
+	})
+	c := New(&ConfigValues{Enabled: true, Sites: []string{"stackoverflow"}}, testClient(fake))
+	c.WithCache(cache.NewCache(store, "stackexchange"))
+
+	got, err := c.Collect(context.Background(), domain.CollectRequest{Force: true})
+	if err != nil {
+		t.Fatalf("Collect() error = %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("Collect() returned %d signals, want 1", len(got))
+	}
+}
+
 func TestCollectorMultiSitePaginationAndLimits(t *testing.T) {
 	fake := newFakeTransport()
 	fake.addSequentialResponses(
@@ -51,6 +108,42 @@ func TestCollectorMultiSitePaginationAndLimits(t *testing.T) {
 	}
 	if c.Stats().Requests != 2 {
 		t.Fatalf("requests = %d, want 2", c.Stats().Requests)
+	}
+}
+
+func TestCollectorMaxItemsPerSiteIsCumulativeAcrossPages(t *testing.T) {
+	fake := newFakeTransport()
+	fake.addSequentialResponses(
+		fakeResponse{
+			statusCode: 200,
+			body: `{"items":[
+				{"question_id":1,"title":"eligible","body_markdown":"body","creation_date":1740000000,"score":1},
+				{"question_id":2,"title":"filtered","body_markdown":"body","creation_date":1740000001,"score":0}
+			],"has_more":true,"quota_remaining":10}`,
+		},
+		fakeResponse{
+			statusCode: 200,
+			body: `{"items":[
+				{"question_id":3,"title":"second","body_markdown":"body","creation_date":1740000002,"score":1},
+				{"question_id":4,"title":"over-limit","body_markdown":"body","creation_date":1740000003,"score":1}
+			],"has_more":false,"quota_remaining":9}`,
+		},
+	)
+	c := New(&ConfigValues{
+		Enabled:         true,
+		Sites:           []string{"stackoverflow"},
+		MinimumScore:    1,
+		MaxItemsPerSite: 2,
+		PageSize:        2,
+		MaxPagesPerSite: 2,
+	}, testClient(fake))
+
+	got, err := c.Collect(context.Background(), domain.CollectRequest{})
+	if err != nil {
+		t.Fatalf("Collect() error = %v", err)
+	}
+	if len(got) != 2 || got[0].ID != "se:stackoverflow:1" || got[1].ID != "se:stackoverflow:3" {
+		t.Fatalf("signals = %#v, want question IDs 1 and 3", got)
 	}
 }
 

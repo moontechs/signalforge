@@ -34,11 +34,15 @@ func TestRedditConfigValidate(t *testing.T) {
 		want string
 	}{
 		{"disabled defaults", RedditConfig{}, ""},
-		{"valid opt in", RedditConfig{Enabled: true, Subreddits: []string{"saas"}, MaxPostsPerRun: 1}, ""},
+		{"valid opt in", RedditConfig{Enabled: true, Subreddits: []string{"saas"}, MaxPostsPerRun: 1, Sort: "new", Time: "all"}, ""},
 		{"empty subreddits", RedditConfig{Enabled: true, MaxPostsPerRun: 1}, "at least one"},
 		{"blank subreddit", RedditConfig{Enabled: true, Subreddits: []string{" "}, MaxPostsPerRun: 1}, "subreddits"},
 		{"invalid posts", RedditConfig{Enabled: true, Subreddits: []string{"saas"}}, "max_posts_per_run"},
 		{"invalid comments", RedditConfig{Enabled: true, Subreddits: []string{"saas"}, MaxPostsPerRun: 1, MaxCommentsPerPost: -1}, "max_comments_per_post"},
+		{"empty sort", RedditConfig{Enabled: true, Subreddits: []string{"saas"}, MaxPostsPerRun: 1, Time: "all"}, "sort must not be empty"},
+		{"invalid sort", RedditConfig{Enabled: true, Subreddits: []string{"saas"}, MaxPostsPerRun: 1, Sort: "controversial", Time: "all"}, "unsupported sort"},
+		{"empty time", RedditConfig{Enabled: true, Subreddits: []string{"saas"}, MaxPostsPerRun: 1, Sort: "new"}, "time must not be empty"},
+		{"invalid time", RedditConfig{Enabled: true, Subreddits: []string{"saas"}, MaxPostsPerRun: 1, Sort: "new", Time: "decade"}, "unsupported time"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -62,13 +66,33 @@ func TestConfigValidateIncludesRedditContext(t *testing.T) {
 }
 
 func TestLoadConfigValidatesRedditConfig(t *testing.T) {
-	dir := t.TempDir()
-	data := []byte(`{"sources":{"reddit":{"enabled":true,"subreddits":[],"max_posts_per_run":1}}}`)
-	if err := os.WriteFile(filepath.Join(dir, "config.json"), data, 0o600); err != nil {
-		t.Fatal(err)
+	tests := []struct {
+		name string
+		data string
+		want string
+	}{
+		{
+			name: "missing subreddits",
+			data: `{"sources":{"reddit":{"enabled":true,"subreddits":[],"max_posts_per_run":1}}}`,
+			want: "validate reddit config",
+		},
+		{
+			name: "invalid sort",
+			data: `{"sources":{"reddit":{"enabled":true,"subreddits":["golang"],"max_posts_per_run":1,"sort":"invalid","time":"all"}}}`,
+			want: "unsupported sort",
+		},
 	}
-	if _, err := LoadConfig(dir); err == nil || !strings.Contains(err.Error(), "validate reddit config") {
-		t.Fatalf("LoadConfig() = %v", err)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(tt.data), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := LoadConfig(dir); err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("LoadConfig() = %v, want %q", err, tt.want)
+			}
+		})
 	}
 }
 
@@ -460,124 +484,6 @@ func TestDefaultConfigRedditDefaults(t *testing.T) {
 	}
 }
 
-func TestRedditConfigValidate(t *testing.T) {
-	t.Parallel()
-	valid := DefaultConfig().Sources.Reddit
-	valid.Enabled = true
-	valid.Subreddits = []string{"golang"}
-
-	tests := []struct {
-		name    string
-		cfg     RedditConfig
-		wantErr string
-	}{
-		{
-			name: "valid enabled",
-			cfg:  valid,
-		},
-		{
-			name: "disabled is valid",
-			cfg: func() RedditConfig {
-				cfg := valid
-				cfg.Enabled = false
-				return cfg
-			}(),
-		},
-		{
-			name: "no subreddits",
-			cfg: func() RedditConfig {
-				cfg := valid
-				cfg.Subreddits = []string{}
-				return cfg
-			}(),
-			wantErr: "at least one subreddit",
-		},
-		{
-			name: "empty subreddit in list",
-			cfg: func() RedditConfig {
-				cfg := valid
-				cfg.Subreddits = []string{" "}
-				return cfg
-			}(),
-			wantErr: "empty values",
-		},
-		{
-			name: "invalid max posts",
-			cfg: func() RedditConfig {
-				cfg := valid
-				cfg.MaxPostsPerRun = 0
-				return cfg
-			}(),
-			wantErr: "max_posts_per_run",
-		},
-		{
-			name: "invalid max comments",
-			cfg: func() RedditConfig {
-				cfg := valid
-				cfg.MaxCommentsPerPost = -1
-				return cfg
-			}(),
-			wantErr: "max_comments_per_post",
-		},
-		{
-			name: "empty sort",
-			cfg: func() RedditConfig {
-				cfg := valid
-				cfg.Sort = ""
-				return cfg
-			}(),
-			wantErr: "sort must not be empty",
-		},
-		{
-			name: "invalid sort",
-			cfg: func() RedditConfig {
-				cfg := valid
-				cfg.Sort = "controversial"
-				return cfg
-			}(),
-			wantErr: "unsupported sort",
-		},
-		{
-			name: "empty time",
-			cfg: func() RedditConfig {
-				cfg := valid
-				cfg.Time = ""
-				return cfg
-			}(),
-			wantErr: "time must not be empty",
-		},
-		{
-			name: "invalid time",
-			cfg: func() RedditConfig {
-				cfg := valid
-				cfg.Time = "decade"
-				return cfg
-			}(),
-			wantErr: "unsupported time",
-		},
-	}
-
-	for _, tc := range tests {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			err := tc.cfg.Validate()
-			if tc.wantErr == "" {
-				if err != nil {
-					t.Fatalf("expected no error, got %v", err)
-				}
-				return
-			}
-			if err == nil {
-				t.Fatalf("expected error containing %q", tc.wantErr)
-			}
-			if !strings.Contains(err.Error(), tc.wantErr) {
-				t.Fatalf("expected error containing %q, got %v", tc.wantErr, err)
-			}
-		})
-	}
-}
-
 func TestValidRedditSortValues(t *testing.T) {
 	t.Parallel()
 
@@ -666,24 +572,6 @@ func TestIsValidRedditTime(t *testing.T) {
 				t.Fatalf("IsValidRedditTime(%q) = %v, want %v", tc.time, got, tc.want)
 			}
 		})
-	}
-}
-
-func TestLoadConfigValidatesRedditConfig(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.json")
-	data := `{"sources":{"reddit":{"enabled":true,"subreddits":["golang"],"sort":"invalid"}}}`
-	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-
-	_, err := LoadConfig(dir)
-	if err == nil {
-		t.Fatal("expected validation error")
-	}
-	if !strings.Contains(err.Error(), "unsupported sort") {
-		t.Fatalf("expected sort validation error, got %v", err)
 	}
 }
 

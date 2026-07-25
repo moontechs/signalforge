@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -38,7 +39,8 @@ type collectionScope struct {
 }
 
 func deriveScope(cfg *ConfigValues, since time.Time) collectionScope {
-	sort, timeRange := cfg.Sort, cfg.TimeRange
+	sort := strings.ToLower(strings.TrimSpace(cfg.Sort))
+	timeRange := strings.ToLower(strings.TrimSpace(cfg.TimeRange))
 	if sort == "" {
 		sort = "new"
 	}
