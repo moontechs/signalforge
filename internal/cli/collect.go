@@ -463,7 +463,7 @@ func executeCollect(cmd *cobra.Command, env *collectEnv) error {
 
 	for _, collector := range env.collectors {
 		req := buildCollectRequest(env, collector)
-		signals, err := collector.Collect(cmd.Context(), req)
+		signals, collectErr := collector.Collect(cmd.Context(), req)
 
 		// Track pre-dedup attempt count for per-source stats.
 		sr := sourceCollectionResult{
@@ -472,16 +472,29 @@ func executeCollect(cmd *cobra.Command, env *collectEnv) error {
 		}
 
 		signals = deduplicateSignals(signals, env)
-		sr.collected = len(signals)
-		sr.skipped = sr.attempted - sr.collected
-		totalSignals += len(signals)
+		sr.skipped = sr.attempted - len(signals)
+		savedSignals, persistErr := persistSignals(env, signals, collectErr == nil)
+		sr.collected = len(savedSignals)
+		totalSignals += len(savedSignals)
 		trackCollectorStats(env, collector)
-		recordSignals(env, signals)
+		recordContentHashes(env, savedSignals)
+		// A collector can return incomplete signals alongside an error. Keep the
+		// successfully written payloads, but leave them eligible for a retry that
+		// can replace them with complete data. Their content hashes are still
+		// recorded so another source cannot persist the same payload.
+		if collectErr == nil {
+			recordSourceIDs(env, savedSignals)
+		}
 
-		if err != nil {
+		if collectErr != nil || persistErr != nil {
 			sr.failed = true
-			sr.err = err
-			collectErrs = append(collectErrs, fmt.Errorf("%s collection: %w", collector.Name(), err))
+			sr.err = errors.Join(collectErr, persistErr)
+			if collectErr != nil {
+				collectErrs = append(collectErrs, fmt.Errorf("%s collection: %w", collector.Name(), collectErr))
+			}
+			if persistErr != nil {
+				collectErrs = append(collectErrs, fmt.Errorf("%s persistence: %w", collector.Name(), persistErr))
+			}
 		} else {
 			persistCursor(env, collector)
 		}
@@ -505,6 +518,46 @@ func executeCollect(cmd *cobra.Command, env *collectEnv) error {
 		return fmt.Errorf("collection completed with errors: %w", err)
 	}
 	return nil
+}
+
+// persistSignals atomically writes collected signal payloads before their
+// deduplication state is recorded in memory.
+func persistSignals(env *collectEnv, signals []domain.RawSignal, overwriteExisting bool) ([]domain.RawSignal, error) {
+	if len(signals) == 0 {
+		return nil, nil
+	}
+	if env.store == nil {
+		return nil, errors.New("signal storage is not configured")
+	}
+
+	saved := make([]domain.RawSignal, 0, len(signals))
+	var persistErrs []error
+	for i := range signals {
+		signal := &signals[i]
+		if strings.TrimSpace(signal.ID) == "" {
+			persistErrs = append(persistErrs, errors.New("save raw signal: signal ID must not be empty"))
+			continue
+		}
+
+		// Hash the logical ID so collector-owned IDs cannot introduce path
+		// separators while repeated collection of the same signal overwrites
+		// the same file.
+		filename := storage.ContentHash(signal.ID) + ".json"
+		path := filepath.Join(env.store.BaseDir(), "raw-signals", filename)
+		// Error-bearing collector results can contain incomplete payloads. Keep
+		// newly discovered partial signals, but never replace an already
+		// persisted complete signal until the collector finishes successfully.
+		if !overwriteExisting && env.store.Exists(path) {
+			continue
+		}
+		if err := env.store.SaveJSON(path, signal); err != nil {
+			persistErrs = append(persistErrs, fmt.Errorf("save raw signal %q: %w", signal.ID, err))
+			continue
+		}
+		saved = append(saved, *signal)
+	}
+
+	return saved, errors.Join(persistErrs...)
 }
 
 // buildCollectRequest constructs a CollectRequest for the given collector from the environment.
@@ -543,11 +596,26 @@ func deduplicateSignals(signals []domain.RawSignal, env *collectEnv) []domain.Ra
 		return signals
 	}
 	filtered := make([]domain.RawSignal, 0, len(signals))
+	seenSourceIDs := make(map[string]struct{}, len(signals))
+	seenContentHashes := make(map[string]struct{}, len(signals))
 	for i := range signals {
 		if env.mem.HasRawSignal(signals[i].Source, signals[i].SourceID) || env.mem.HasContentHash(signals[i].ContentHash) {
 			continue
 		}
+		sourceID := signals[i].Source + "\x00" + signals[i].SourceID
+		if _, exists := seenSourceIDs[sourceID]; exists {
+			continue
+		}
+		if signals[i].ContentHash != "" {
+			if _, exists := seenContentHashes[signals[i].ContentHash]; exists {
+				continue
+			}
+		}
 		filtered = append(filtered, signals[i])
+		seenSourceIDs[sourceID] = struct{}{}
+		if signals[i].ContentHash != "" {
+			seenContentHashes[signals[i].ContentHash] = struct{}{}
+		}
 	}
 	return filtered
 }
@@ -581,10 +649,16 @@ func persistCursor(env *collectEnv, collector domain.SourceCollector) {
 	}
 }
 
-// recordSignals adds all signals to the persistent memory.
-func recordSignals(env *collectEnv, signals []domain.RawSignal) {
+// recordSourceIDs marks successfully collected source records as complete.
+func recordSourceIDs(env *collectEnv, signals []domain.RawSignal) {
 	for i := range signals {
 		env.mem.AddRawSignal(signals[i].Source, signals[i].SourceID)
+	}
+}
+
+// recordContentHashes adds persisted signal content hashes to memory.
+func recordContentHashes(env *collectEnv, signals []domain.RawSignal) {
+	for i := range signals {
 		if signals[i].ContentHash != "" {
 			env.mem.AddContentHash(signals[i].ContentHash, signals[i].ID)
 		}
@@ -786,8 +860,8 @@ func buildRedditCollector(cfg *config.Config, store *storage.Storage) (*reddit.C
 		MaxPostsPerRun:     cfg.Sources.Reddit.MaxPostsPerRun,
 		MaxCommentsPerPost: cfg.Sources.Reddit.MaxCommentsPerPost,
 		MaxRequests:        cfg.Limits.MaxRedditRequests,
-		Sort:               "new",
-		TimeRange:          "all",
+		Sort:               cfg.Sources.Reddit.Sort,
+		TimeRange:          cfg.Sources.Reddit.Time,
 		ClientID:           clientID,
 		ClientSecret:       clientSecret,
 	}

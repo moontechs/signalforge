@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/spf13/cobra"
 
@@ -47,6 +48,63 @@ type pipelineEnv struct {
 	since   string
 	dryRun  bool
 	force   bool
+}
+
+const pipelineCollectStateFilename = "pipeline-collect-state.json"
+
+type pipelineCollectState struct {
+	Sources  []string `json:"sources"`
+	Since    string   `json:"since"`
+	Complete bool     `json:"complete"`
+}
+
+func desiredPipelineCollectState(env *pipelineEnv, complete bool) (pipelineCollectState, error) {
+	sources, err := resolveCollectSources(env.sources)
+	if err != nil {
+		return pipelineCollectState{}, fmt.Errorf("resolve pipeline sources: %w", err)
+	}
+	slices.Sort(sources)
+
+	since, err := parseSinceWindow(env.since)
+	if err != nil {
+		return pipelineCollectState{}, fmt.Errorf("parse pipeline since window: %w", err)
+	}
+
+	return pipelineCollectState{
+		Sources:  sources,
+		Since:    since.String(),
+		Complete: complete,
+	}, nil
+}
+
+func pipelineCollectComplete(env *pipelineEnv) bool {
+	want, err := desiredPipelineCollectState(env, true)
+	if err != nil {
+		return false
+	}
+
+	var got pipelineCollectState
+	path := filepath.Join(env.store.BaseDir(), pipelineCollectStateFilename)
+	if err := env.store.LoadJSON(path, &got); err != nil {
+		return false
+	}
+	if !got.Complete || got.Since != want.Since || !slices.Equal(got.Sources, want.Sources) {
+		return false
+	}
+	files, err := env.store.ListFiles("raw-signals", ".json")
+	return err == nil && len(files) > 0
+}
+
+func savePipelineCollectState(env *pipelineEnv, complete bool) error {
+	state, err := desiredPipelineCollectState(env, complete)
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(env.store.BaseDir(), pipelineCollectStateFilename)
+	if err := env.store.SaveJSON(path, &state); err != nil {
+		return fmt.Errorf("save pipeline collect state: %w", err)
+	}
+	return nil
 }
 
 func runPipeline(cmd *cobra.Command, _ []string) error {
@@ -99,12 +157,9 @@ func executePipeline(cmd *cobra.Command, env *pipelineEnv) error {
 		dataCheck func(*pipelineEnv) bool
 	}{
 		{
-			name: "collect",
-			run:  runPipelineCollect,
-			dataCheck: func(env *pipelineEnv) bool {
-				files, err := env.store.ListFiles("raw-signals", ".json")
-				return err == nil && len(files) > 0
-			},
+			name:      "collect",
+			run:       runPipelineCollect,
+			dataCheck: pipelineCollectComplete,
 		},
 		{
 			name: "classify",
@@ -183,16 +238,33 @@ func runPipelineCollect(cmd *cobra.Command, env *pipelineEnv) (string, error) {
 	// Read the pipeline-level force flag.
 	force, _ := cmd.Flags().GetBool("force")
 
+	// Mark the requested collection incomplete before any fallible setup or
+	// collection work. A later pipeline invocation must retry unless every
+	// requested collector and persistence operation succeeds.
+	if err := savePipelineCollectState(env, false); err != nil {
+		return "", err
+	}
+
 	collectEnv, err := setupCollectEnv(env.sources, env.since, "", 0, "", force, false, false)
 	if err != nil {
 		return "", fmt.Errorf("setup collect: %w", err)
 	}
+
+	// Keep every pipeline stage on the same in-memory state. Otherwise the
+	// classify stage can save the pipeline's stale copy over collection updates.
+	collectEnv.store = env.store
+	collectEnv.mem = env.mem
+	beforeStats := env.mem.GetStats()
+	collectEnv.before = &beforeStats
 
 	// Count signals before collection.
 	beforeFiles, _ := env.store.ListFiles("raw-signals", ".json")
 	beforeCount := len(beforeFiles)
 
 	if err := executeCollect(cmd, collectEnv); err != nil {
+		return "", err
+	}
+	if err := savePipelineCollectState(env, true); err != nil {
 		return "", err
 	}
 
