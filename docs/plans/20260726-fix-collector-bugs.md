@@ -2,13 +2,13 @@
 
 ### Task 1: Make `--max-items` override source defaults in GitHub and Hacker News
 
-- [ ] Modify `internal/sources/github/collector.go` and `internal/sources/github/types.go` so `domain.CollectRequest.MaxItems` is the effective per-run cap when it is greater than zero; otherwise retain `GitHubConfig.MaxItemsPerRun`.
-- [ ] Pass the effective GitHub cap into `deriveScope`, ensuring REST issue pagination, GraphQL discussion pagination, and final combined-result truncation all use the same request-aware value.
-- [ ] Preserve `--max-items 0` semantics: use the configured source default rather than treating zero as "collect nothing."
-- [ ] Modify `internal/sources/hackernews/collector.go` and `internal/sources/hackernews/types.go` so `deriveScope` accepts `req.MaxItems` and applies the same override/fallback behavior.
-- [ ] Keep the existing HN final sort-before-truncate behavior, but ensure its truncation uses the CLI-provided cap when present.
-- [ ] Extend GitHub collector tests to cover a nonzero request cap overriding a larger config cap, plus a zero request cap falling back to config.
-- [ ] Extend HN collector/type tests with the same override and fallback cases, using enough eligible fake stories to prove the returned signal count is capped.
+- [x] Modify `internal/sources/github/collector.go` and `internal/sources/github/types.go` so `domain.CollectRequest.MaxItems` is the effective per-run cap when it is greater than zero; otherwise retain `GitHubConfig.MaxItemsPerRun`.
+- [x] Pass the effective GitHub cap into `deriveScope`, ensuring REST issue pagination, GraphQL discussion pagination, and final combined-result truncation all use the same request-aware value.
+- [x] Preserve `--max-items 0` semantics: use the configured source default rather than treating zero as "collect nothing."
+- [x] Modify `internal/sources/hackernews/collector.go` and `internal/sources/hackernews/types.go` so `deriveScope` accepts `req.MaxItems` and applies the same override/fallback behavior.
+- [x] Keep the existing HN final sort-before-truncate behavior, but ensure its truncation uses the CLI-provided cap when present.
+- [x] Extend GitHub collector tests to cover a nonzero request cap overriding a larger config cap, plus a zero request cap falling back to config.
+- [x] Extend HN collector/type tests with the same override and fallback cases, using enough eligible fake stories to prove the returned signal count is capped.
 
 ### Task 2: Track and persist GitHub request and cache-hit statistics
 

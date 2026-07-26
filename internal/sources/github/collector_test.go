@@ -239,6 +239,20 @@ func TestDeriveScope_EmptyValues(t *testing.T) {
 	}
 }
 
+func TestDeriveScope_RequestMaxItemsOverridesConfig(t *testing.T) {
+	scope := deriveScope(&configValues{MaxItemsPerRun: 100}, nil, nil, nil, 3, 0, "")
+	if scope.maxItems != 3 {
+		t.Fatalf("maxItems = %d, want 3", scope.maxItems)
+	}
+}
+
+func TestDeriveScope_ZeroRequestMaxItemsUsesConfig(t *testing.T) {
+	scope := deriveScope(&configValues{MaxItemsPerRun: 100}, nil, nil, nil, 0, 0, "")
+	if scope.maxItems != 100 {
+		t.Fatalf("maxItems = %d, want 100", scope.maxItems)
+	}
+}
+
 // TestErrorTypes verifies the custom error types work as expected.
 func TestErrorTypes(t *testing.T) {
 	t.Parallel()

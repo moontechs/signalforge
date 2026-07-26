@@ -140,7 +140,7 @@ func (c *Collector) Collect(ctx context.Context, req domain.CollectRequest) ([]d
 		c.config.Repositories,
 		c.config.Labels,
 		c.config.Languages,
-		c.config.MaxItemsPerRun,
+		req.MaxItems,
 		c.config.MaxCommentsPerItem,
 		sinceStr,
 	)
