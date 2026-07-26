@@ -20,8 +20,8 @@
 
 ### Task 1: Wire Discussion collection into collector.go Collect()
 
-- [ ] Inspect `discussions.go` to find the exported function to call (likely `fetchDiscussions(ctx, *githubClient, *collectionScope)`)
-- [ ] In `collector.go Collect()`, after the Issues fetch section and before the combined results section, add:
+- [x] Inspect `discussions.go` to find the exported function to call (likely `fetchDiscussions(ctx, *githubClient, *collectionScope)`)
+- [x] In `collector.go Collect()`, after the Issues fetch section and before the combined results section, add:
   ```go
   // If discussions are enabled and we have repos, fetch discussions.
   var discussions []rawDiscussionSignal
@@ -34,9 +34,9 @@
       }
   }
   ```
-- [ ] Add the discussion signals to the combined results alongside issues
-- [ ] Preserve existing: `signals = signals[:scope.maxItems]` truncation applies to combined list
-- [ ] Ensure `c.storeStatsDelta(beforeStats)` is called after all collection steps
+- [x] Add the discussion signals to the combined results alongside issues
+- [x] Preserve existing: `signals = signals[:scope.maxItems]` truncation applies to combined list
+- [x] Ensure `c.storeStatsDelta(beforeStats)` is called after all collection steps
 
 ### Task 2: Test coverage for Discussion collection
 
