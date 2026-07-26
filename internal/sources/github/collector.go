@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/moontechs/signalforge/internal/domain"
@@ -33,6 +34,9 @@ type Collector struct {
 	transport transport
 	client    *githubClient
 	now       func() time.Time
+	mu        sync.Mutex
+	requests  int
+	cacheHits int
 }
 
 // requestLimits holds the per-run request cap.
@@ -70,10 +74,35 @@ func New(cfg *CollectorConfig) (*Collector, error) {
 		transport: transport,
 		now:       time.Now,
 		client:    nil,
+		mu:        sync.Mutex{},
 	}
 
 	c.client = newClient(transport, cfg.MaxRequests)
 	return c, nil
+}
+
+// Stats holds request and cache-hit counts from the last collection.
+type Stats struct {
+	Requests  int
+	CacheHits int
+}
+
+// Stats returns the per-run request and cache-hit counts.
+func (c *Collector) Stats() Stats {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return Stats{Requests: c.requests, CacheHits: c.cacheHits}
+}
+
+// AddCacheHits records deduplication hits found by the collection pipeline.
+// The CLI performs persistent-memory deduplication after Collect returns.
+func (c *Collector) AddCacheHits(count int) {
+	if count <= 0 {
+		return
+	}
+	c.mu.Lock()
+	c.cacheHits += count
+	c.mu.Unlock()
 }
 
 // domainCollectorConfig is the public configuration type accepted by New.
@@ -145,6 +174,7 @@ func (c *Collector) Collect(ctx context.Context, req domain.CollectRequest) ([]d
 		sinceStr,
 	)
 
+	beforeRequests := c.client.requestCountValue()
 	var signals []domain.RawSignal
 	var errs []error
 	collectedAt := c.now()
@@ -186,6 +216,10 @@ func (c *Collector) Collect(ctx context.Context, req domain.CollectRequest) ([]d
 	if scope.maxItems > 0 && len(signals) > scope.maxItems {
 		signals = signals[:scope.maxItems]
 	}
+	c.mu.Lock()
+	c.requests = c.client.requestCountValue() - beforeRequests
+	c.cacheHits = 0
+	c.mu.Unlock()
 
 	// 5. Return combined results with partial errors.
 	if len(errs) > 0 {

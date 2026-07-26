@@ -34,12 +34,11 @@ GitHub collection collects signals but `memory.json` shows `github_requests=0`, 
 - `internal/sources/github/collector.go`
 - `internal/sources/github/collector_test.go`
 
-- [ ] Add `cacheHits int` counter field to `Collector` struct
-- [ ] In `Collect()` method, increment `cacheHits` each time `HasRawSignal()` returns true (deduplication hit)
-- [ ] In `Collect()` method, increment `cacheHits` each time `HasContentHash()` returns true (cache hit)
-- [ ] At end of `Collect()`, call `m.AddGitHubCacheHits(cacheHits)` same line as `AddGitHubRequests`
-- [ ] Write unit test verifying cache hit counting works
-- [ ] Verify: `go test ./internal/sources/github/...` passes
+- [x] Add `cacheHits int` counter field to `Collector` struct
+- [x] Record persistent-memory deduplication hits through `Collector.AddCacheHits()` (HasRawSignal/HasContentHash checks live in the CLI in this architecture)
+- [x] Track per-run GitHub request counts and expose them with `Collector.Stats()` for the CLI stats pipeline
+- [x] Write unit tests verifying cache-hit counting and per-run reset behavior
+- [x] Verify: `go test ./internal/sources/github/...` passes
 
 ### Task 3: Fix stats persistence — always save stats
 **Files:**
