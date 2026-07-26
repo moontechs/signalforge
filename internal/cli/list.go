@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/moontechs/signalforge/internal/config"
+	"github.com/moontechs/signalforge/internal/domain"
 	"github.com/moontechs/signalforge/internal/storage"
 )
 
@@ -128,14 +129,28 @@ func listItems(store *storage.Storage, subDir string, limit, offset int) ([]stri
 	items := make([]string, 0, len(files))
 	for _, f := range files {
 		name := filepath.Base(f)
-		// Try to read basic info from the file.
+		id := strings.TrimSuffix(name, ".json")
+
+		// Try to parse as RawSignal for detailed output.
+		var signal domain.RawSignal
+		if err := store.LoadJSON(f, &signal); err == nil && signal.Source != "" {
+			title := signal.Title
+			if len(title) > 80 {
+				title = title[:80] + "..."
+			}
+			items = append(items, fmt.Sprintf("%s  source: %s  title: %q  url: %s  created: %s",
+				id, signal.Source, title, signal.URL, signal.CreatedAt.Format(time.RFC3339)))
+			continue
+		}
+
+		// Fall back to basic file info.
 		info, err := os.Stat(f)
 		if err != nil {
 			items = append(items, name+" (unreadable)")
 			continue
 		}
 		items = append(items, fmt.Sprintf("%s  (modified: %s, size: %d bytes)",
-			strings.TrimSuffix(name, ".json"),
+			id,
 			info.ModTime().Format(time.RFC3339),
 			info.Size(),
 		))

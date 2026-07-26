@@ -29,11 +29,11 @@ Current output: `0000be33...  (modified: 2026-07-25T22:23:37Z, size: 2379 bytes)
 
 ### Task 2: Improve signal listing output
 
-- [ ] Import `encoding/json` and `github.com/moontechs/signalforge/internal/domain` in `list.go`
-- [ ] In `listItems()`, after getting file path, read and parse JSON into `domain.RawSignal`
-- [ ] Format output as: `ID  source: {Source}  title: "{Title[:80]}..."  url: {URL}  created: {CreatedAt.Format(time.RFC3339)}`
-- [ ] If JSON parse fails or file not a signal, fall back to current format (ID + modified + size)
-- [ ] Keep limit/offset logic unchanged
+- [x] Import `encoding/json` and `github.com/moontechs/signalforge/internal/domain` in `list.go`
+- [x] In `listItems()`, after getting file path, read and parse JSON into `domain.RawSignal`
+- [x] Format output as: `ID  source: {Source}  title: "{Title[:80]}..."  url: {URL}  created: {CreatedAt.Format(time.RFC3339)}`
+- [x] If JSON parse fails or file not a signal, fall back to current format (ID + modified + size)
+- [x] Keep limit/offset logic unchanged
 
 ### Task 3: Test coverage
 
