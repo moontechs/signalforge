@@ -37,9 +37,9 @@ Current output: `0000be33...  (modified: 2026-07-25T22:23:37Z, size: 2379 bytes)
 
 ### Task 3: Test coverage
 
-- [ ] Add `TestList_RawSignalsAlias` — verify `raw-signals` type accepted
-- [ ] Add `TestList_SignalDetailFields` — verify source, title, URL, created_at in output
-- [ ] Add `TestList_SignalJsonParseError` — verify fallback for non-signal JSON files
+- [x] Add `TestList_RawSignalsAlias` — verify `raw-signals` type accepted
+- [x] Add `TestList_SignalDetailFields` — verify source, title, URL, created_at in output
+- [x] Add `TestList_SignalJsonParseError` — verify fallback for non-signal JSON files
 
 ### Task 4: Regression validation
 
