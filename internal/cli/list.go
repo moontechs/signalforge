@@ -65,7 +65,14 @@ func init() {
 
 func listAll(cmd *cobra.Command, store *storage.Storage, limit, offset int) error {
 	anyItems := false
+	// Deduplicate by subDir to avoid showing same directory twice
+	// (e.g., "signals" and "raw-signals" both map to "raw-signals" dir)
+	seenDirs := make(map[string]string) // subDir -> typeName for header
 	for typeName, subDir := range validTypes {
+		if _, exists := seenDirs[subDir]; exists {
+			continue // already shown this directory
+		}
+		seenDirs[subDir] = typeName
 		items, err := listItems(store, subDir, limit, offset)
 		if err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "Warning: cannot list %s: %v\n", typeName, err)
