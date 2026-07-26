@@ -25,17 +25,17 @@
 
 ### Task 3: Ensure GitHub Discussions have an executable collection path
 
-- [ ] **Important context**: `internal/sources/github/discussions.go` already exists in the repo. Inspect it first — it may be a partial implementation, a stub, or dead code. Do NOT recreate it.
-- [ ] Inspect `internal/sources/github/collector.go` to find where Issue collection is wired but Discussion collection is missing (e.g., missing call to `collectDiscussions()` or `collectDiscussions` never invoked in `Collect()` method).
-- [ ] If `discussions.go` exists but is incomplete: complete the implementation (GraphQL query, pagination, response parsing into RawSignal). If it exists and is complete but unconnected: wire it into `collector.go`.
-- [ ] Make the repository-target requirement explicit: GitHub Discussions require one or more `sources.github.repositories` entries because the GraphQL `repository { discussions }` query is repository-scoped. Retain global REST issue search when repositories are omitted.
-- [ ] Add a config validation error: when `SearchDiscussions: true` and `repositories` is empty, return a clear error explaining that a repository list is required for Discussion collection.
-- [ ] Preserve valid Issues-only configurations without repositories by applying the new repository requirement only when `SearchDiscussions` is enabled AND repositories is empty.
-- [ ] Ensure `buildGitHubCollector` (in `internal/cli/collect.go`) continues to forward `SearchDiscussions` and configured repositories unchanged into `github.CollectorConfig`.
-- [ ] Add configuration tests for: Discussions enabled with repositories succeeds; Discussions enabled without repositories fails with the actionable error; Issues-only global search remains valid.
-- [ ] Add a CLI/collector integration test configured with `SearchIssues: true`, `SearchDiscussions: true`, and a repository target; register REST and GraphQL fake responses; assert persisted output contains both `github_issue` and `github_discussion` signals.
-- [ ] Add a Discussions-only integration test to ensure GraphQL collection is not dependent on a successful REST Issues response.
-- [ ] Verify max-item tests cover a mixed Issue/Discussion run so the requested cap is honored without suppressing the GraphQL collection path.
+- [x] **Important context**: `internal/sources/github/discussions.go` already exists in the repo. Inspect it first — it may be a partial implementation, a stub, or dead code. Do NOT recreate it.
+- [x] Inspect `internal/sources/github/collector.go` to find where Issue collection is wired but Discussion collection is missing (e.g., missing call to `collectDiscussions()` or `collectDiscussions` never invoked in `Collect()` method).
+- [x] If `discussions.go` exists but is incomplete: complete the implementation (GraphQL query, pagination, response parsing into RawSignal). If it exists and is complete but unconnected: wire it into `collector.go`.
+- [x] Make the repository-target requirement explicit: GitHub Discussions require one or more `sources.github.repositories` entries because the GraphQL `repository { discussions }` query is repository-scoped. Retain global REST issue search when repositories are omitted.
+- [x] Add a config validation error: when `SearchDiscussions: true` and `repositories` is empty, return a clear error explaining that a repository list is required for Discussion collection.
+- [x] Preserve valid Issues-only configurations without repositories by applying the new repository requirement only when `SearchDiscussions` is enabled AND repositories is empty.
+- [x] Ensure `buildGitHubCollector` (in `internal/cli/collect.go`) continues to forward `SearchDiscussions` and configured repositories unchanged into `github.CollectorConfig`.
+- [x] Add configuration tests for: Discussions enabled with repositories succeeds; Discussions enabled without repositories fails with the actionable error; Issues-only global search remains valid.
+- [x] Add a CLI/collector integration test configured with `SearchIssues: true`, `SearchDiscussions: true`, and a repository target; register REST and GraphQL fake responses; assert persisted output contains both `github_issue` and `github_discussion` signals.
+- [x] Add a Discussions-only integration test to ensure GraphQL collection is not dependent on a successful REST Issues response.
+- [x] Verify max-item tests cover a mixed Issue/Discussion run so the requested cap is honored without suppressing the GraphQL collection path.
 
 ### Task 4: Run regression and quality validation
 
