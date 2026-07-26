@@ -43,8 +43,8 @@ Current output: `0000be33...  (modified: 2026-07-25T22:23:37Z, size: 2379 bytes)
 
 ### Task 4: Regression validation
 
-- [ ] `go test ./internal/cli/... -v -count=1`
-- [ ] `go test ./... -count=1`
-- [ ] `go vet ./...` and `golangci-lint run ./...`
-- [ ] `go build ./cmd/signalforge/`
-- [ ] **All git commands use `--no-verify`**
+- [x] `go test ./internal/cli/... -v -count=1`
+- [x] `go test ./... -count=1`
+- [x] `go vet ./...` and `golangci-lint run ./...`
+- [x] `go build ./cmd/signalforge/`
+- [x] **All git commands use `--no-verify`**
