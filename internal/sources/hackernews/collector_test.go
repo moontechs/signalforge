@@ -727,3 +727,79 @@ func TestCollector_stats(t *testing.T) {
 		t.Fatalf("expected 2 requests, got %d", stats.Requests)
 	}
 }
+
+// TestCollector_requestMaxItemsOverridesConfig verifies that req.MaxItems overrides
+// a larger config MaxItemsPerRun.
+func TestCollector_requestMaxItemsOverridesConfig(t *testing.T) {
+	t.Parallel()
+	fake := newFakeTransport()
+
+	// One feed with 10 eligible stories.
+	fake.addResponse("https://hacker-news.firebaseio.com/v0/newstories.json",
+		fakeResponse{statusCode: 200, body: `[1,2,3,4,5,6,7,8,9,10]`})
+
+	for id := 1; id <= 10; id++ {
+		body := fmt.Sprintf(
+			`{"id":%d,"type":"story","by":"u","time":1700000000,"title":"Story %d","url":"https://x.com/%d","score":50,"descendants":0}`,
+			id, id, id,
+		)
+		fake.addResponse(fmt.Sprintf("https://hacker-news.firebaseio.com/v0/item/%d.json", id),
+			fakeResponse{statusCode: 200, body: body})
+	}
+
+	c := testCollector(t, &ConfigValues{
+		Enabled:            true,
+		Feeds:              []string{"newstories"},
+		MaxItemsPerRun:     100, // large config default
+		MaxCommentsPerItem: 0,
+		MinimumScore:       1, // all stories eligible
+		MaxRequests:        500,
+	}, fake)
+
+	// req.MaxItems=3 should override config's 100.
+	signals, err := c.Collect(context.Background(), domain.CollectRequest{MaxItems: 3})
+	if err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+	if len(signals) != 3 {
+		t.Fatalf("expected 3 signals (request cap), got %d", len(signals))
+	}
+}
+
+// TestCollector_zeroRequestMaxItemsUsesConfig verifies that zero req.MaxItems falls
+// back to config MaxItemsPerRun.
+func TestCollector_zeroRequestMaxItemsUsesConfig(t *testing.T) {
+	t.Parallel()
+	fake := newFakeTransport()
+
+	// One feed with 10 eligible stories.
+	fake.addResponse("https://hacker-news.firebaseio.com/v0/newstories.json",
+		fakeResponse{statusCode: 200, body: `[1,2,3,4,5,6,7,8,9,10]`})
+
+	for id := 1; id <= 10; id++ {
+		body := fmt.Sprintf(
+			`{"id":%d,"type":"story","by":"u","time":1700000000,"title":"Story %d","url":"https://x.com/%d","score":50,"descendants":0}`,
+			id, id, id,
+		)
+		fake.addResponse(fmt.Sprintf("https://hacker-news.firebaseio.com/v0/item/%d.json", id),
+			fakeResponse{statusCode: 200, body: body})
+	}
+
+	c := testCollector(t, &ConfigValues{
+		Enabled:            true,
+		Feeds:              []string{"newstories"},
+		MaxItemsPerRun:     3, // config cap
+		MaxCommentsPerItem: 0,
+		MinimumScore:       1, // all stories eligible
+		MaxRequests:        500,
+	}, fake)
+
+	// req.MaxItems=0 should fall back to config's 3.
+	signals, err := c.Collect(context.Background(), domain.CollectRequest{MaxItems: 0})
+	if err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+	if len(signals) != 3 {
+		t.Fatalf("expected 3 signals (config cap), got %d", len(signals))
+	}
+}

@@ -10,6 +10,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/moontechs/signalforge/internal/storage"
 )
 
 // ---- Fake transport implementation ----.
@@ -822,5 +824,93 @@ func TestClient_RateLimitUpdate(t *testing.T) {
 	expectedReset := time.Unix(1735689600, 0)
 	if !c.restReset.Equal(expectedReset) {
 		t.Fatalf("expected reset %v, got %v", expectedReset, c.restReset)
+	}
+}
+
+// TestClient_CacheHitCounter verifies that cache hits are counted when a fresh
+// cache entry is returned, and that outbound requests are not counted as cache hits.
+func TestClient_CacheHitCounter(t *testing.T) {
+	t.Parallel()
+	store := storage.New(t.TempDir())
+	fake := newFakeTransport()
+
+	searchResp := ghSearchResponse{
+		TotalCount: 1,
+		Items: []ghIssue{
+			{ID: 42, Number: 1, Title: "Cached", Body: "Body"},
+		},
+	}
+	searchBody, _ := json.Marshal(searchResp)
+	searchURL := "https://api.github.com/search/issues?q=is%3Aissue+is%3Aopen&sort=updated&direction=asc&per_page=100&page=1"
+	fake.addResponse(searchURL, fakeResponse{
+		statusCode: 200,
+		headers:    map[string]string{"ETag": `W/"cache1"`},
+		body:       string(searchBody),
+	})
+
+	c := testClient(fake)
+	c.WithCache(store)
+
+	// First call: fresh response, no cache hit yet.
+	var result ghSearchResponse
+	_, err := c.doJSONRequest(t.Context(), &requestOptions{
+		Method:   "GET",
+		Path:     "/search/issues?q=is%3Aissue+is%3Aopen&sort=updated&direction=asc&per_page=100&page=1",
+		CacheKey: "search:test",
+	}, &result)
+	if err != nil {
+		t.Fatalf("first request failed: %v", err)
+	}
+	stats := c.Stats()
+	if stats.Requests != 1 {
+		t.Fatalf("expected 1 request, got %d", stats.Requests)
+	}
+	if stats.CacheHits != 0 {
+		t.Fatalf("expected 0 cache hits, got %d", stats.CacheHits)
+	}
+
+	// Second call: should hit the disk cache.
+	fake.resetCallCount()
+	result = ghSearchResponse{}
+	_, err = c.doJSONRequest(t.Context(), &requestOptions{
+		Method:   "GET",
+		Path:     "/search/issues?q=is%3Aissue+is%3Aopen&sort=updated&direction=asc&per_page=100&page=1",
+		CacheKey: "search:test",
+	}, &result)
+	if err != nil {
+		t.Fatalf("second request failed: %v", err)
+	}
+	stats = c.Stats()
+	// Cache hit means no new request, but cache hit count goes up.
+	if stats.Requests != 1 {
+		t.Fatalf("expected 1 request (no change), got %d", stats.Requests)
+	}
+	if stats.CacheHits != 1 {
+		t.Fatalf("expected 1 cache hit, got %d", stats.CacheHits)
+	}
+}
+
+// TestClient_Stats verifies that Stats returns current request/cache-hit counts.
+func TestClient_Stats(t *testing.T) {
+	t.Parallel()
+	c := testClient(newFakeTransport())
+
+	stats := c.Stats()
+	if stats.Requests != 0 {
+		t.Fatalf("expected 0 requests, got %d", stats.Requests)
+	}
+	if stats.CacheHits != 0 {
+		t.Fatalf("expected 0 cache hits, got %d", stats.CacheHits)
+	}
+
+	c.incrementRequestCount()
+	c.incrementCacheHits()
+
+	stats = c.Stats()
+	if stats.Requests != 1 {
+		t.Fatalf("expected 1 request, got %d", stats.Requests)
+	}
+	if stats.CacheHits != 1 {
+		t.Fatalf("expected 1 cache hit, got %d", stats.CacheHits)
 	}
 }

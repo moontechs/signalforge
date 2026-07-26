@@ -257,6 +257,17 @@ func (m *DefaultMemory) AddGitHubRequests(count int) {
 	m.mem.Stats.GitHubRequests += count
 }
 
+// AddGitHubCacheHits increments the GitHub cache hit count.
+func (m *DefaultMemory) AddGitHubCacheHits(count int) {
+	if count <= 0 {
+		return
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.mem.Stats.GitHubCacheHits += count
+}
+
 // AddHNRequests increments the HackerNews request count.
 func (m *DefaultMemory) AddHNRequests(count int) {
 	if count <= 0 {

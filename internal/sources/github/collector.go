@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/moontechs/signalforge/internal/domain"
@@ -33,6 +34,9 @@ type Collector struct {
 	transport transport
 	client    *githubClient
 	now       func() time.Time
+	mu        sync.Mutex
+	requests  int
+	cacheHits int
 }
 
 // requestLimits holds the per-run request cap.
@@ -140,7 +144,7 @@ func (c *Collector) Collect(ctx context.Context, req domain.CollectRequest) ([]d
 		c.config.Repositories,
 		c.config.Labels,
 		c.config.Languages,
-		c.config.MaxItemsPerRun,
+		req.MaxItems,
 		c.config.MaxCommentsPerItem,
 		sinceStr,
 	)
@@ -148,6 +152,9 @@ func (c *Collector) Collect(ctx context.Context, req domain.CollectRequest) ([]d
 	var signals []domain.RawSignal
 	var errs []error
 	collectedAt := c.now()
+
+	// Record client stats before collection to compute delta.
+	beforeStats := c.client.Stats()
 
 	// 1. Fetch issues (REST).
 	if scope.searchIssues {
@@ -187,7 +194,10 @@ func (c *Collector) Collect(ctx context.Context, req domain.CollectRequest) ([]d
 		signals = signals[:scope.maxItems]
 	}
 
-	// 5. Return combined results with partial errors.
+	// 5. Store per-run stats delta.
+	c.storeStatsDelta(beforeStats)
+
+	// 6. Return combined results with partial errors.
 	if len(errs) > 0 {
 		return signals, fmt.Errorf("github collector: %w", errors.Join(errs...))
 	}
@@ -248,6 +258,27 @@ func parseDiscussions(discussions []graphQLDiscussionNode, scope *collectionScop
 	}
 
 	return signals
+}
+
+// Stats returns the per-run request and cache-hit counts from the last collection.
+func (c *Collector) Stats() Stats {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return Stats{Requests: c.requests, CacheHits: c.cacheHits}
+}
+
+// storeStatsDelta computes the delta of client stats since beforeStats and
+// stores it as the per-run request/cache-hit counts.
+func (c *Collector) storeStatsDelta(beforeStats Stats) {
+	afterStats := c.client.Stats()
+	delta := Stats{
+		Requests:  afterStats.Requests - beforeStats.Requests,
+		CacheHits: afterStats.CacheHits - beforeStats.CacheHits,
+	}
+	c.mu.Lock()
+	c.requests = delta.Requests
+	c.cacheHits = delta.CacheHits
+	c.mu.Unlock()
 }
 
 // ensure interface compliance.

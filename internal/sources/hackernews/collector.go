@@ -101,7 +101,7 @@ func (c *Collector) Stats() Stats {
 //  7. Apply max-items cap
 //  8. Return results with any partial errors joined
 func (c *Collector) Collect(ctx context.Context, req domain.CollectRequest) ([]domain.RawSignal, error) {
-	scope := deriveScope(&c.config, req.Since)
+	scope := deriveScope(&c.config, req.Since, req.MaxItems)
 
 	// Record client stats before collection to compute delta.
 	beforeStats := c.client.Stats()

@@ -15,8 +15,11 @@ func TestDefaultConfigGitHubDefaults(t *testing.T) {
 	if !cfg.Sources.GitHub.Enabled {
 		t.Fatal("expected github source to be enabled by default")
 	}
-	if !cfg.Sources.GitHub.SearchIssues || !cfg.Sources.GitHub.SearchDiscussions {
-		t.Fatal("expected github collector to search issues and discussions by default")
+	if !cfg.Sources.GitHub.SearchIssues {
+		t.Fatal("expected github collector to search issues by default")
+	}
+	if cfg.Sources.GitHub.SearchDiscussions {
+		t.Fatal("expected github collector to not search discussions by default (requires repos)")
 	}
 	if cfg.Sources.GitHub.MaxItemsPerRun != 500 {
 		t.Fatalf("expected max items per run 500, got %d", cfg.Sources.GitHub.MaxItemsPerRun)
@@ -139,6 +142,38 @@ func TestGitHubConfigValidate(t *testing.T) {
 				return cfg
 			}(),
 			wantErr: "at least one",
+		},
+		{
+			name: "discussions enabled with repos succeeds",
+			cfg: func() GitHubConfig {
+				cfg := valid
+				cfg.SearchIssues = false
+				cfg.SearchDiscussions = true
+				cfg.Repositories = []string{"owner/repo"}
+				return cfg
+			}(),
+			wantErr: "",
+		},
+		{
+			name: "discussions enabled without repos fails",
+			cfg: func() GitHubConfig {
+				cfg := valid
+				cfg.SearchDiscussions = true
+				cfg.Repositories = nil
+				return cfg
+			}(),
+			wantErr: "repositories must be specified",
+		},
+		{
+			name: "issues-only without repos remains valid",
+			cfg: func() GitHubConfig {
+				cfg := valid
+				cfg.SearchIssues = true
+				cfg.SearchDiscussions = false
+				cfg.Repositories = nil
+				return cfg
+			}(),
+			wantErr: "",
 		},
 		{
 			name: "invalid repo format",

@@ -80,7 +80,7 @@ func TestDeriveScope(t *testing.T) {
 	}
 
 	now := time.Date(2025, 1, 15, 0, 0, 0, 0, time.UTC)
-	scope := deriveScope(cfg, now)
+	scope := deriveScope(cfg, now, 0)
 
 	if len(scope.feeds) != 2 {
 		t.Fatalf("expected 2 feeds, got %d", len(scope.feeds))
@@ -117,7 +117,7 @@ func TestDeriveScopeDefault(t *testing.T) {
 		MaxRequests:        1000,
 	}
 
-	scope := deriveScope(cfg, time.Time{})
+	scope := deriveScope(cfg, time.Time{}, 0)
 
 	if scope.maxItems != 300 {
 		t.Fatalf("maxItems = %d, want 300", scope.maxItems)
@@ -133,5 +133,19 @@ func TestDeriveScopeDefault(t *testing.T) {
 	}
 	if scope.maxRequests != 1000 {
 		t.Fatalf("maxRequests = %d, want 1000", scope.maxRequests)
+	}
+}
+
+func TestDeriveScopeRequestMaxItemsOverridesConfig(t *testing.T) {
+	scope := deriveScope(&ConfigValues{MaxItemsPerRun: 100}, time.Time{}, 3)
+	if scope.maxItems != 3 {
+		t.Fatalf("maxItems = %d, want 3", scope.maxItems)
+	}
+}
+
+func TestDeriveScopeZeroRequestMaxItemsUsesConfig(t *testing.T) {
+	scope := deriveScope(&ConfigValues{MaxItemsPerRun: 100}, time.Time{}, 0)
+	if scope.maxItems != 100 {
+		t.Fatalf("maxItems = %d, want 100", scope.maxItems)
 	}
 }

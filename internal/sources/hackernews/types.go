@@ -112,10 +112,14 @@ type collectionScope struct {
 }
 
 // deriveScope maps ConfigValues + request parameters into a collectionScope.
-func deriveScope(cfg *ConfigValues, since time.Time) collectionScope {
+func deriveScope(cfg *ConfigValues, since time.Time, requestMaxItems int) collectionScope {
+	maxItems := cfg.MaxItemsPerRun
+	if requestMaxItems > 0 {
+		maxItems = requestMaxItems
+	}
 	return collectionScope{
 		feeds:        cfg.Feeds,
-		maxItems:     cfg.MaxItemsPerRun,
+		maxItems:     maxItems,
 		maxComments:  cfg.MaxCommentsPerItem,
 		minimumScore: cfg.MinimumScore,
 		since:        since,

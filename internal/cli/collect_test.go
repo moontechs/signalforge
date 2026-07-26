@@ -2,7 +2,9 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -16,6 +18,7 @@ import (
 	"github.com/moontechs/signalforge/internal/config"
 	"github.com/moontechs/signalforge/internal/domain"
 	"github.com/moontechs/signalforge/internal/memory"
+	"github.com/moontechs/signalforge/internal/sources/github"
 	"github.com/moontechs/signalforge/internal/sources/hackernews"
 	"github.com/moontechs/signalforge/internal/sources/reddit"
 	"github.com/moontechs/signalforge/internal/sources/stackexchange"
@@ -2540,5 +2543,440 @@ func TestRedditCollectorStats_TrackCollectorStatsHandlesReddit(t *testing.T) {
 	// Ensure other stats were not modified.
 	if afterStats.HackerNewsRequests != 0 {
 		t.Errorf("expected 0 HN requests unchanged, got %d", afterStats.HackerNewsRequests)
+	}
+}
+
+func TestStatsDelta_GitHubCacheHits(t *testing.T) {
+	t.Parallel()
+
+	before := &domain.ResearchStats{
+		GitHubRequests:  5,
+		GitHubCacheHits: 2,
+	}
+	after := &domain.ResearchStats{
+		RawSignalsCollected: 20,
+		GitHubRequests:      12,
+		GitHubCacheHits:     7,
+	}
+
+	delta := statsDelta(before, after)
+	if delta.requests != 7 {
+		t.Errorf("expected requests=7, got %d", delta.requests)
+	}
+	if delta.githubCacheHits != 5 {
+		t.Errorf("expected githubCacheHits=5, got %d", delta.githubCacheHits)
+	}
+}
+
+func TestReportCollectSummary_GitHubCacheHits(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+	buf := new(strings.Builder)
+	cmd.SetOut(buf)
+
+	delta := collectStatsDelta{
+		collected:       10,
+		githubCacheHits: 3,
+		requests:        8,
+		sources: []sourceCollectionResult{
+			{name: "github", attempted: 10, collected: 10, skipped: 0},
+		},
+	}
+
+	if err := reportCollectSummary(cmd, 10, &delta); err != nil {
+		t.Fatalf("reportCollectSummary failed: %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "GitHub requests: 8 (cache hits: 3)") {
+		t.Errorf("expected 'GitHub requests: 8 (cache hits: 3)' in output, got: %s", output)
+	}
+}
+
+func TestGitHubCollectorStats_TrackCollectorStatsHandlesGitHub(t *testing.T) {
+	t.Parallel()
+
+	store := storage.New(t.TempDir())
+	mem := memory.New(store)
+
+	collectorCfg := github.CollectorConfig{
+		Enabled:            true,
+		SearchIssues:       true,
+		SearchDiscussions:  false,
+		MaxItemsPerRun:     100,
+		MaxCommentsPerItem: 0,
+		MaxRequests:        500,
+	}
+	collector, err := github.New(&collectorCfg)
+	if err != nil {
+		t.Fatalf("create github collector: %v", err)
+	}
+
+	beforeStats := mem.GetStats()
+	env := &collectEnv{
+		mem:    mem,
+		before: &beforeStats,
+	}
+
+	// trackCollectorStats should not panic with a GitHub collector.
+	trackCollectorStats(env, collector)
+
+	// Stats should be recorded (requests=0, cacheHits=0 since no calls made).
+	afterStats := mem.GetStats()
+	if afterStats.GitHubRequests != 0 {
+		t.Errorf("expected 0 github requests, got %d", afterStats.GitHubRequests)
+	}
+	if afterStats.GitHubCacheHits != 0 {
+		t.Errorf("expected 0 github cache hits, got %d", afterStats.GitHubCacheHits)
+	}
+	// Ensure other stats were not modified.
+	if afterStats.HackerNewsRequests != 0 {
+		t.Errorf("expected 0 HN requests unchanged, got %d", afterStats.HackerNewsRequests)
+	}
+}
+
+func TestGitHubCollectorStats_SaveAndLoadRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	store := storage.New(t.TempDir())
+	mem := memory.New(store)
+
+	// Add some GitHub stats manually.
+	mem.AddGitHubRequests(3)
+	mem.AddGitHubCacheHits(5)
+
+	// Save.
+	if err := mem.Save(); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	// Load into a new memory instance.
+	mem2 := memory.New(store)
+	if err := mem2.Load(); err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	loadedStats := mem2.GetStats()
+	if loadedStats.GitHubRequests != 3 {
+		t.Errorf("expected 3 github requests after reload, got %d", loadedStats.GitHubRequests)
+	}
+	if loadedStats.GitHubCacheHits != 5 {
+		t.Errorf("expected 5 github cache hits after reload, got %d", loadedStats.GitHubCacheHits)
+	}
+}
+
+func TestGitHubCollectorStats_StatsRecordedInSummary(t *testing.T) {
+	t.Parallel()
+
+	store := storage.New(t.TempDir())
+	mem := memory.New(store)
+
+	// Manually increment GitHub stats via memory.
+	mem.AddGitHubRequests(7)
+	mem.AddGitHubCacheHits(3)
+
+	afterStats := mem.GetStats()
+	beforeStats := domain.ResearchStats{}
+
+	delta := statsDelta(&beforeStats, &afterStats)
+	if delta.requests != 7 {
+		t.Errorf("expected requests=7, got %d", delta.requests)
+	}
+	if delta.githubCacheHits != 3 {
+		t.Errorf("expected githubCacheHits=3, got %d", delta.githubCacheHits)
+	}
+
+	// Verify the summary output includes these stats.
+	cmd := &cobra.Command{}
+	buf := new(strings.Builder)
+	cmd.SetOut(buf)
+	delta.sources = []sourceCollectionResult{
+		{name: "github", attempted: 7, collected: 7, skipped: 0},
+	}
+
+	if err := reportCollectSummary(cmd, 7, &delta); err != nil {
+		t.Fatalf("reportCollectSummary failed: %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "GitHub requests: 7 (cache hits: 3)") {
+		t.Errorf("expected 'GitHub requests: 7 (cache hits: 3)' in output, got: %s", output)
+	}
+	if !strings.Contains(output, "github: attempted=7, collected=7, dedup-skipped=0, status=ok") {
+		t.Errorf("expected per-source breakdown, got: %s", output)
+	}
+}
+
+// githubTransportFunc implements the github.transport interface for testing.
+type githubTransportFunc func(req *http.Request) (*http.Response, error)
+
+func (f githubTransportFunc) Do(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+// TestExecuteCollect_GitHubMixedIssuesAndDiscussions verifies that executing
+// a GitHub collector through the CLI path with both Issues and Discussions
+// enabled persists signals of both types.
+func TestExecuteCollect_GitHubMixedIssuesAndDiscussions(t *testing.T) {
+	t.Parallel()
+
+	store := storage.New(t.TempDir())
+	mem := memory.New(store)
+
+	cfg := config.DefaultConfig()
+	cfg.Sources.GitHub.Enabled = true
+	cfg.Sources.GitHub.SearchIssues = true
+	cfg.Sources.GitHub.SearchDiscussions = true
+	cfg.Sources.GitHub.MaxItemsPerRun = 100
+	cfg.Sources.GitHub.MaxCommentsPerItem = 10
+	cfg.Sources.GitHub.Repositories = []string{"owner/repo"}
+	cfg.Sources.GitHub.Languages = nil
+	cfg.Sources.GitHub.Labels = nil
+
+	// Set up a fake transport that serves both REST issues and GraphQL discussions.
+	var transport githubTransportFunc = func(req *http.Request) (*http.Response, error) {
+		url := req.URL.String()
+
+		// REST issues per-repo endpoint.
+		if strings.Contains(url, "/repos/owner/repo/issues") {
+			issues := []map[string]any{
+				{
+					"id": 1001, "number": 1, "title": "Bug report", "body": "Crash on startup",
+					"html_url": "https://github.com/owner/repo/issues/1", "state": "open",
+					"created_at": "2026-06-01T00:00:00Z", "updated_at": "2026-06-02T00:00:00Z",
+					"user":           map[string]any{"login": "user1", "id": 1},
+					"comments":       0,
+					"reactions":      map[string]int{"+1": 3},
+					"repository_url": "https://api.github.com/repos/owner/repo",
+				},
+			}
+			body, _ := json.Marshal(issues)
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(string(body))),
+				Header:     http.Header{"X-RateLimit-Remaining": []string{"4999"}, "X-RateLimit-Reset": []string{"0"}},
+			}, nil
+		}
+
+		// GraphQL endpoint for discussions.
+		if strings.Contains(url, "/graphql") {
+			discResp := map[string]any{
+				"data": map[string]any{
+					"repository": map[string]any{
+						"discussions": map[string]any{
+							"pageInfo": map[string]any{"hasNextPage": false, "endCursor": ""},
+							"nodes": []map[string]any{
+								{
+									"id": "D_kwDOTEST", "number": 5,
+									"title": "Feature request: dark mode", "body": "Would love dark mode",
+									"url":       "https://github.com/owner/repo/discussions/5",
+									"createdAt": "2026-06-01T00:00:00Z", "updatedAt": "2026-06-02T00:00:00Z",
+									"category":    map[string]any{"name": "Ideas", "slug": "ideas"},
+									"labels":      map[string]any{"nodes": []map[string]any{{"name": "enhancement"}}},
+									"comments":    map[string]any{"totalCount": 0, "nodes": []any{}},
+									"upvoteCount": 10,
+								},
+							},
+						},
+					},
+				},
+			}
+			body, _ := json.Marshal(discResp)
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(string(body))),
+				Header:     http.Header{"X-RateLimit-Remaining": []string{"4998"}, "X-RateLimit-Reset": []string{"0"}},
+			}, nil
+		}
+
+		return nil, fmt.Errorf("unexpected URL: %s", url)
+	}
+
+	collector, err := github.New(&github.CollectorConfig{
+		Enabled:            true,
+		SearchIssues:       true,
+		SearchDiscussions:  true,
+		MaxItemsPerRun:     100,
+		MaxCommentsPerItem: 10,
+		Repositories:       []string{"owner/repo"},
+		MaxRequests:        500,
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	collector.WithTransport(transport)
+	collector.WithNow(func() time.Time { return time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC) })
+
+	beforeStats := mem.GetStats()
+
+	env := &collectEnv{
+		store:           store,
+		mem:             mem,
+		cfg:             cfg,
+		collectors:      []domain.SourceCollector{collector},
+		selectedSources: []string{"github"},
+		before:          &beforeStats,
+		sinceWindow:     60 * 24 * time.Hour,
+	}
+
+	cmd := &cobra.Command{}
+	cmd.SetContext(context.Background())
+	buf := new(strings.Builder)
+	cmd.SetOut(buf)
+
+	if err := executeCollect(cmd, env); err != nil {
+		t.Logf("executeCollect returned error (may include partial success): %v", err)
+	}
+
+	// Verify memory was saved.
+	if !store.Exists(filepath.Join(store.BaseDir(), "memory.json")) {
+		t.Fatal("memory.json was not saved")
+	}
+
+	// Verify raw signals contain both issue and discussion types.
+	files, err := store.ListFiles("raw-signals", ".json")
+	if err != nil {
+		t.Fatalf("list files: %v", err)
+	}
+
+	var foundIssue, foundDiscussion bool
+	for _, f := range files {
+		var signal domain.RawSignal
+		if err := store.LoadJSON(f, &signal); err != nil {
+			t.Fatalf("load signal %s: %v", f, err)
+		}
+		if signal.SourceType == "github_issue" {
+			foundIssue = true
+		}
+		if signal.SourceType == "github_discussion" {
+			foundDiscussion = true
+		}
+	}
+
+	if !foundIssue {
+		t.Error("expected at least one github_issue signal in persisted output")
+	}
+	if !foundDiscussion {
+		t.Error("expected at least one github_discussion signal in persisted output")
+	}
+
+	// Verify the summary output includes both types in per-source breakdown.
+	output := buf.String()
+	if !strings.Contains(output, "github: attempted=") {
+		t.Errorf("expected per-source breakdown in summary, got: %s", output)
+	}
+}
+
+// TestExecuteCollect_GitHubDiscussionsOnly verifies that GraphQL collection
+// works independently even when REST issues fail.
+func TestExecuteCollect_GitHubDiscussionsOnly(t *testing.T) {
+	t.Parallel()
+
+	store := storage.New(t.TempDir())
+	mem := memory.New(store)
+
+	cfg := config.DefaultConfig()
+	cfg.Sources.GitHub.Enabled = true
+	cfg.Sources.GitHub.SearchIssues = false
+	cfg.Sources.GitHub.SearchDiscussions = true
+	cfg.Sources.GitHub.MaxItemsPerRun = 100
+	cfg.Sources.GitHub.MaxCommentsPerItem = 0
+	cfg.Sources.GitHub.Repositories = []string{"owner/repo"}
+	cfg.Sources.GitHub.Languages = nil
+	cfg.Sources.GitHub.Labels = nil
+
+	// Only register GraphQL endpoint; Issues endpoint is NOT registered,
+	// which means any REST call will fail with an unexpected URL error.
+	var transport githubTransportFunc = func(req *http.Request) (*http.Response, error) {
+		url := req.URL.String()
+
+		// Only handle GraphQL.
+		if strings.Contains(url, "/graphql") {
+			discResp := map[string]any{
+				"data": map[string]any{
+					"repository": map[string]any{
+						"discussions": map[string]any{
+							"pageInfo": map[string]any{"hasNextPage": false, "endCursor": ""},
+							"nodes": []map[string]any{
+								{
+									"id": "D_kwDODISC1", "number": 1,
+									"title": "Discussion-only test", "body": "This discussion works",
+									"url":       "https://github.com/owner/repo/discussions/1",
+									"createdAt": "2026-06-01T00:00:00Z", "updatedAt": "2026-06-02T00:00:00Z",
+									"category": nil, "labels": nil,
+									"comments":    map[string]any{"totalCount": 0, "nodes": []any{}},
+									"upvoteCount": 3,
+								},
+							},
+						},
+					},
+				},
+			}
+			body, _ := json.Marshal(discResp)
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(string(body))),
+				Header:     http.Header{"X-RateLimit-Remaining": []string{"4999"}, "X-RateLimit-Reset": []string{"0"}},
+			}, nil
+		}
+
+		return nil, fmt.Errorf("unexpected URL: %s", url)
+	}
+
+	collector, err := github.New(&github.CollectorConfig{
+		Enabled:            true,
+		SearchIssues:       false,
+		SearchDiscussions:  true,
+		MaxItemsPerRun:     100,
+		MaxCommentsPerItem: 0,
+		Repositories:       []string{"owner/repo"},
+		MaxRequests:        500,
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	collector.WithTransport(transport)
+	collector.WithNow(func() time.Time { return time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC) })
+
+	beforeStats := mem.GetStats()
+
+	env := &collectEnv{
+		store:           store,
+		mem:             mem,
+		cfg:             cfg,
+		collectors:      []domain.SourceCollector{collector},
+		selectedSources: []string{"github"},
+		before:          &beforeStats,
+		sinceWindow:     60 * 24 * time.Hour,
+	}
+
+	cmd := &cobra.Command{}
+	cmd.SetContext(context.Background())
+	buf := new(strings.Builder)
+	cmd.SetOut(buf)
+
+	if err := executeCollect(cmd, env); err != nil {
+		t.Logf("executeCollect returned error (may include partial success): %v", err)
+	}
+
+	// Verify only discussion signals were persisted.
+	files, err := store.ListFiles("raw-signals", ".json")
+	if err != nil {
+		t.Fatalf("list files: %v", err)
+	}
+
+	if len(files) == 0 {
+		t.Fatal("expected at least one signal to be persisted")
+	}
+
+	for _, f := range files {
+		var signal domain.RawSignal
+		if err := store.LoadJSON(f, &signal); err != nil {
+			t.Fatalf("load signal %s: %v", f, err)
+		}
+		if signal.SourceType != "github_discussion" {
+			t.Errorf("expected github_discussion source type, got %q", signal.SourceType)
+		}
 	}
 }

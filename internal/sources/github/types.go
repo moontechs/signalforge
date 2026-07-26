@@ -28,7 +28,11 @@ type collectionScope struct {
 }
 
 // deriveScope maps GitHubConfig + CollectRequest into a collectionScope.
-func deriveScope(cfg *configValues, repos, labels, languages []string, maxItems, maxComments int, since string) collectionScope {
+func deriveScope(cfg *configValues, repos, labels, languages []string, requestMaxItems, maxComments int, since string) collectionScope {
+	maxItems := cfg.MaxItemsPerRun
+	if requestMaxItems > 0 {
+		maxItems = requestMaxItems
+	}
 	scope := collectionScope{
 		strategy:          0,
 		repos:             nil,
@@ -49,6 +53,12 @@ func deriveScope(cfg *configValues, repos, labels, languages []string, maxItems,
 	}
 
 	return scope
+}
+
+// Stats holds per-run request and cache-hit counters exposed by the collector.
+type Stats struct {
+	Requests  int
+	CacheHits int
 }
 
 // configValues holds the subset of config fields needed by the collector.

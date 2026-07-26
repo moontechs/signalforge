@@ -890,3 +890,159 @@ func TestCollect_InvalidIssueURL(t *testing.T) {
 		t.Fatalf("expected 0 signals for unresolvable URLs, got %d", len(signals))
 	}
 }
+
+// TestCollect_RequestMaxItemsOverridesConfig verifies that req.MaxItems overrides
+// a larger config MaxItemsPerRun.
+func TestCollect_RequestMaxItemsOverridesConfig(t *testing.T) {
+	t.Parallel()
+	fake := newFakeTransport()
+
+	// Per-repo issues endpoint: return 5 issues but request cap is 2.
+	issuesPrefix := "https://api.github.com/repos/o/r/issues?state=open&sort=updated&direction=asc&per_page="
+	issues := []ghIssue{
+		{
+			ID: 11001, Number: 1, Title: "Issue 1", Body: "Body 1",
+			HTMLURL: "https://github.com/o/r/issues/1", State: "open",
+			CreatedAt: t1, UpdatedAt: t2,
+			User: ghUser{Login: "u1"}, Comments: 0,
+			RepoURL: "https://api.github.com/repos/o/r",
+		},
+		{
+			ID: 11002, Number: 2, Title: "Issue 2", Body: "Body 2",
+			HTMLURL: "https://github.com/o/r/issues/2", State: "open",
+			CreatedAt: t1, UpdatedAt: t2,
+			User: ghUser{Login: "u2"}, Comments: 0,
+			RepoURL: "https://api.github.com/repos/o/r",
+		},
+		{
+			ID: 11003, Number: 3, Title: "Issue 3", Body: "Body 3",
+			HTMLURL: "https://github.com/o/r/issues/3", State: "open",
+			CreatedAt: t1, UpdatedAt: t2,
+			User: ghUser{Login: "u3"}, Comments: 0,
+			RepoURL: "https://api.github.com/repos/o/r",
+		},
+		{
+			ID: 11004, Number: 4, Title: "Issue 4", Body: "Body 4",
+			HTMLURL: "https://github.com/o/r/issues/4", State: "open",
+			CreatedAt: t1, UpdatedAt: t2,
+			User: ghUser{Login: "u4"}, Comments: 0,
+			RepoURL: "https://api.github.com/repos/o/r",
+		},
+		{
+			ID: 11005, Number: 5, Title: "Issue 5", Body: "Body 5",
+			HTMLURL: "https://github.com/o/r/issues/5", State: "open",
+			CreatedAt: t1, UpdatedAt: t2,
+			User: ghUser{Login: "u5"}, Comments: 0,
+			RepoURL: "https://api.github.com/repos/o/r",
+		},
+	}
+	issuesBody := issuesListToJSON(issues)
+	fake.addResponse(issuesPrefix+"*", fakeResponse{statusCode: 200, body: string(issuesBody)})
+
+	c := setupCollector(t, &CollectorConfig{
+		Enabled:            true,
+		SearchIssues:       true,
+		SearchDiscussions:  false,
+		MaxItemsPerRun:     100, // large config default
+		MaxCommentsPerItem: 0,
+		Repositories:       []string{"o/r"},
+		MaxRequests:        500,
+	}, fake)
+	c.WithNow(func() time.Time { return collectedAt })
+
+	// req.MaxItems=2 should override config's 100.
+	signals, err := c.Collect(t.Context(), domain.CollectRequest{MaxItems: 2})
+	if err != nil {
+		t.Fatalf("Collect failed: %v", err)
+	}
+	if len(signals) != 2 {
+		t.Fatalf("expected 2 signals (request cap), got %d", len(signals))
+	}
+}
+
+// TestCollector_DiscussionsNoRepos verifies that when SearchDiscussions is enabled
+// but no repos are configured, no GraphQL call is made and an error is surfaced.
+func TestCollector_DiscussionsNoRepos(t *testing.T) {
+	t.Parallel()
+	fake := newFakeTransport()
+
+	c := setupCollector(t, &CollectorConfig{
+		Enabled:            true,
+		SearchIssues:       false,
+		SearchDiscussions:  true,
+		MaxItemsPerRun:     100,
+		MaxCommentsPerItem: 0,
+		Repositories:       nil, // no repos
+		MaxRequests:        500,
+	}, fake)
+	c.WithNow(func() time.Time { return collectedAt })
+
+	signals, err := c.Collect(t.Context(), domain.CollectRequest{})
+	if err != nil {
+		t.Fatalf("unexpected error (no repos should not cause an error): %v", err)
+	}
+	if len(signals) != 0 {
+		t.Fatalf("expected 0 signals with no repos, got %d", len(signals))
+	}
+
+	// Verify no GraphQL call was attempted.
+	stats := c.Stats()
+	if stats.Requests != 0 {
+		t.Fatalf("expected 0 requests (no GraphQL call) with no repos, got %d", stats.Requests)
+	}
+}
+
+// TestCollect_ZeroRequestMaxItemsUsesConfig verifies that zero req.MaxItems falls
+// back to config MaxItemsPerRun.
+func TestCollect_ZeroRequestMaxItemsUsesConfig(t *testing.T) {
+	t.Parallel()
+	fake := newFakeTransport()
+
+	// Per-repo issues endpoint: return 3 issues, config cap is 2.
+	issuesPrefix := "https://api.github.com/repos/o/r/issues?state=open&sort=updated&direction=asc&per_page="
+	issues := []ghIssue{
+		{
+			ID: 12001, Number: 1, Title: "Issue A", Body: "Body A",
+			HTMLURL: "https://github.com/o/r/issues/1", State: "open",
+			CreatedAt: t1, UpdatedAt: t2,
+			User: ghUser{Login: "u1"}, Comments: 0,
+			RepoURL: "https://api.github.com/repos/o/r",
+		},
+		{
+			ID: 12002, Number: 2, Title: "Issue B", Body: "Body B",
+			HTMLURL: "https://github.com/o/r/issues/2", State: "open",
+			CreatedAt: t1, UpdatedAt: t2,
+			User: ghUser{Login: "u2"}, Comments: 0,
+			RepoURL: "https://api.github.com/repos/o/r",
+		},
+		{
+			ID: 12003, Number: 3, Title: "Issue C", Body: "Body C",
+			HTMLURL: "https://github.com/o/r/issues/3", State: "open",
+			CreatedAt: t1, UpdatedAt: t2,
+			User: ghUser{Login: "u3"}, Comments: 0,
+			RepoURL: "https://api.github.com/repos/o/r",
+		},
+	}
+	issuesBody := issuesListToJSON(issues)
+	fake.addResponse(issuesPrefix+"*", fakeResponse{statusCode: 200, body: string(issuesBody)})
+
+	c := setupCollector(t, &CollectorConfig{
+		Enabled:            true,
+		SearchIssues:       true,
+		SearchDiscussions:  false,
+		MaxItemsPerRun:     2, // config cap
+		MaxCommentsPerItem: 0,
+		Repositories:       []string{"o/r"},
+		MaxRequests:        500,
+	}, fake)
+	c.WithNow(func() time.Time { return collectedAt })
+
+	// req.MaxItems=0 should fall back to config's 2.
+	signals, err := c.Collect(t.Context(), domain.CollectRequest{MaxItems: 0})
+	if err != nil {
+		t.Fatalf("Collect failed: %v", err)
+	}
+	if len(signals) != 2 {
+		t.Fatalf("expected 2 signals (config cap), got %d", len(signals))
+	}
+}

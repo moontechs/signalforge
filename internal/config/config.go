@@ -279,7 +279,7 @@ func DefaultConfig() *Config {
 			GitHub: GitHubConfig{
 				Enabled:            true,
 				SearchIssues:       true,
-				SearchDiscussions:  true,
+				SearchDiscussions:  false,
 				MaxItemsPerRun:     500,
 				MaxCommentsPerItem: 20,
 				Repositories:       []string{},
@@ -408,6 +408,11 @@ func (c *GitHubConfig) Validate() error {
 	}
 	if !c.SearchIssues && !c.SearchDiscussions {
 		return errors.New("at least one of search_issues or search_discussions must be enabled")
+	}
+	// Discussions require repository targets because the GraphQL
+	// repository { discussions } query is repository-scoped.
+	if c.SearchDiscussions && len(c.Repositories) == 0 {
+		return errors.New("repositories must be specified when search_discussions is enabled: discussions require at least one owner/name repository target")
 	}
 	for _, repo := range c.Repositories {
 		repo = strings.TrimSpace(repo)
