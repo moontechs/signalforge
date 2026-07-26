@@ -45,6 +45,7 @@ type githubClient struct {
 	userAgent    string
 	retryMax     int
 	requestCount int
+	cacheHits    int
 	requestLimit int
 
 	restRemaining int
@@ -191,6 +192,27 @@ func (c *githubClient) requestCountValue() int {
 	return c.requestCount
 }
 
+// incrementCacheHits increases the cache hit counter.
+func (c *githubClient) incrementCacheHits() {
+	c.statsMutex.Lock()
+	defer c.statsMutex.Unlock()
+	c.cacheHits++
+}
+
+// cacheHitCountValue returns the current cache hit count (thread-safe).
+func (c *githubClient) cacheHitCountValue() int {
+	c.statsMutex.Lock()
+	defer c.statsMutex.Unlock()
+	return c.cacheHits
+}
+
+// Stats returns the current request and cache-hit counters.
+func (c *githubClient) Stats() Stats {
+	c.statsMutex.Lock()
+	defer c.statsMutex.Unlock()
+	return Stats{Requests: c.requestCount, CacheHits: c.cacheHits}
+}
+
 // parseRetryAfter parses the Retry-After header value (seconds or HTTP date).
 func parseRetryAfter(val string, now time.Time) time.Duration {
 	seconds, err := strconv.Atoi(val)
@@ -226,6 +248,7 @@ func (c *githubClient) doRequest(ctx context.Context, opts requestOptions) (*htt
 	if opts.CacheKey != "" && c.cache != nil {
 		if entry, fresh := c.cache.get(opts.CacheKey); fresh {
 			// Cache hit — return cached response without making HTTP request.
+			c.incrementCacheHits()
 			return &http.Response{
 				StatusCode: http.StatusOK,
 				Header:     make(http.Header),

@@ -55,6 +55,12 @@ func deriveScope(cfg *configValues, repos, labels, languages []string, requestMa
 	return scope
 }
 
+// Stats holds per-run request and cache-hit counters exposed by the collector.
+type Stats struct {
+	Requests  int
+	CacheHits int
+}
+
 // configValues holds the subset of config fields needed by the collector.
 type configValues struct {
 	Enabled            bool

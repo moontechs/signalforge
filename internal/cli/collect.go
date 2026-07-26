@@ -622,6 +622,11 @@ func deduplicateSignals(signals []domain.RawSignal, env *collectEnv) []domain.Ra
 
 // trackCollectorStats records source request/cache-hit stats into memory.
 func trackCollectorStats(env *collectEnv, collector domain.SourceCollector) {
+	if ghCol, ok := collector.(*github.Collector); ok {
+		stats := ghCol.Stats()
+		env.mem.AddGitHubRequests(stats.Requests)
+		env.mem.AddGitHubCacheHits(stats.CacheHits)
+	}
 	if hnCol, ok := collector.(*hackernews.Collector); ok {
 		stats := hnCol.Stats()
 		env.mem.AddHNRequests(stats.Requests)
@@ -887,6 +892,7 @@ type collectStatsDelta struct {
 	collected       int
 	skipped         int
 	requests        int
+	githubCacheHits int
 	hnRequests      int
 	hnCacheHits     int
 	seRequests      int
@@ -905,6 +911,7 @@ func statsDelta(before, after *domain.ResearchStats) collectStatsDelta {
 		collected:       after.RawSignalsCollected - before.RawSignalsCollected,
 		skipped:         after.RawSignalsSkipped - before.RawSignalsSkipped,
 		requests:        after.GitHubRequests - before.GitHubRequests,
+		githubCacheHits: after.GitHubCacheHits - before.GitHubCacheHits,
 		hnRequests:      after.HackerNewsRequests - before.HackerNewsRequests,
 		hnCacheHits:     after.HackerNewsCacheHits - before.HackerNewsCacheHits,
 		seRequests:      after.StackExchangeRequests - before.StackExchangeRequests,
@@ -954,8 +961,8 @@ func reportCollectSummary(cmd *cobra.Command, totalSignals int, delta *collectSt
 	}
 
 	// Request stats.
-	if delta.requests > 0 {
-		if _, err := fmt.Fprintf(w, "  GitHub requests: %d\n", delta.requests); err != nil {
+	if delta.requests > 0 || delta.githubCacheHits > 0 {
+		if _, err := fmt.Fprintf(w, "  GitHub requests: %d (cache hits: %d)\n", delta.requests, delta.githubCacheHits); err != nil {
 			return fmt.Errorf("write summary: %w", err)
 		}
 	}

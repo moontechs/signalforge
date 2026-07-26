@@ -2,12 +2,14 @@ package github
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"testing"
 	"time"
 
 	"github.com/moontechs/signalforge/internal/domain"
+	"github.com/moontechs/signalforge/internal/storage"
 )
 
 // TestCollector_New_NotEnabled verifies that New returns ErrNotEnabled when disabled.
@@ -308,4 +310,223 @@ func TestErrorTypes(t *testing.T) {
 func TestInterfaceCompliance(t *testing.T) {
 	t.Parallel()
 	var _ domain.SourceCollector = (*Collector)(nil)
+}
+
+// TestCollector_Stats_Empty verifies Stats returns zeros before any collection.
+func TestCollector_Stats_Empty(t *testing.T) {
+	t.Parallel()
+	c, err := New(&CollectorConfig{
+		Enabled:           true,
+		SearchIssues:      false,
+		SearchDiscussions: false,
+		MaxRequests:       500,
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	stats := c.Stats()
+	if stats.Requests != 0 {
+		t.Fatalf("expected 0 requests, got %d", stats.Requests)
+	}
+	if stats.CacheHits != 0 {
+		t.Fatalf("expected 0 cache hits, got %d", stats.CacheHits)
+	}
+}
+
+// TestCollector_Stats_AfterCollect verifies Stats returns per-run deltas after Collect.
+func TestCollector_Stats_AfterCollect(t *testing.T) {
+	t.Parallel()
+	fake := newFakeTransport()
+
+	// Register a single search response.
+	searchResp := ghSearchResponse{
+		TotalCount: 2,
+		Items: []ghIssue{
+			{ID: 1, Number: 1, Title: "Issue 1", Body: "Body 1",
+				HTMLURL: "https://github.com/o/r/issues/1", State: "open",
+				CreatedAt: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+				UpdatedAt: time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC),
+				User:      ghUser{Login: "u1"}, Comments: 0,
+				RepoURL: "https://api.github.com/repos/o/r",
+			},
+			{ID: 2, Number: 2, Title: "Issue 2", Body: "Body 2",
+				HTMLURL: "https://github.com/o/r/issues/2", State: "open",
+				CreatedAt: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+				UpdatedAt: time.Date(2025, 1, 3, 0, 0, 0, 0, time.UTC),
+				User:      ghUser{Login: "u2"}, Comments: 0,
+				RepoURL: "https://api.github.com/repos/o/r",
+			},
+		},
+	}
+	searchBody, _ := json.Marshal(searchResp)
+	searchURL := "https://api.github.com/search/issues?q=is%3Aissue+is%3Aopen&sort=updated&direction=asc&per_page=100&page=1"
+	fake.addResponse(searchURL, fakeResponse{
+		statusCode: 200,
+		headers:    map[string]string{"X-RateLimit-Remaining": "4999"},
+		body:       string(searchBody),
+	})
+
+	c, err := New(&CollectorConfig{
+		Enabled:            true,
+		SearchIssues:       true,
+		SearchDiscussions:  false,
+		MaxItemsPerRun:     100,
+		MaxCommentsPerItem: 0,
+		MaxRequests:        500,
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	c.WithTransport(fake)
+	c.WithNow(func() time.Time { return time.Date(2025, 1, 15, 0, 0, 0, 0, time.UTC) })
+
+	_, err = c.Collect(t.Context(), domain.CollectRequest{})
+	if err != nil {
+		t.Fatalf("Collect failed: %v", err)
+	}
+
+	// Stats should reflect the delta (1 search request made).
+	stats := c.Stats()
+	if stats.Requests != 1 {
+		t.Fatalf("expected 1 request, got %d", stats.Requests)
+	}
+	if stats.CacheHits != 0 {
+		t.Fatalf("expected 0 cache hits, got %d", stats.CacheHits)
+	}
+}
+
+// TestCollector_Stats_WithCacheHit verifies Stats tracks cache hits correctly.
+func TestCollector_Stats_WithCacheHit(t *testing.T) {
+	t.Parallel()
+	store := storage.New(t.TempDir())
+	fake := newFakeTransport()
+
+	searchResp := ghSearchResponse{
+		TotalCount: 1,
+		Items: []ghIssue{
+			{ID: 10, Number: 1, Title: "Cached issue", Body: "Body",
+				HTMLURL: "https://github.com/o/r/issues/1", State: "open",
+				CreatedAt: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+				UpdatedAt: time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC),
+				User:      ghUser{Login: "u1"}, Comments: 0,
+				RepoURL: "https://api.github.com/repos/o/r",
+			},
+		},
+	}
+	searchBody, _ := json.Marshal(searchResp)
+	searchURL := "https://api.github.com/search/issues?q=is%3Aissue+is%3Aopen&sort=updated&direction=asc&per_page=100&page=1"
+	fake.addResponse(searchURL, fakeResponse{
+		statusCode: 200,
+		headers:    map[string]string{"ETag": `W/"cachetag"`, "X-RateLimit-Remaining": "4999"},
+		body:       string(searchBody),
+	})
+
+	c, err := New(&CollectorConfig{
+		Enabled:            true,
+		SearchIssues:       true,
+		SearchDiscussions:  false,
+		MaxItemsPerRun:     100,
+		MaxCommentsPerItem: 0,
+		MaxRequests:        500,
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	c.WithTransport(fake)
+	c.WithCache(store)
+	c.WithNow(func() time.Time { return time.Date(2025, 1, 15, 0, 0, 0, 0, time.UTC) })
+
+	// First call: 1 outbound request, 0 cache hits.
+	_, err = c.Collect(t.Context(), domain.CollectRequest{})
+	if err != nil {
+		t.Fatalf("first Collect failed: %v", err)
+	}
+	stats := c.Stats()
+	if stats.Requests != 1 {
+		t.Fatalf("expected 1 request, got %d", stats.Requests)
+	}
+	if stats.CacheHits != 0 {
+		t.Fatalf("expected 0 cache hits, got %d", stats.CacheHits)
+	}
+
+	// Second call: request is served from disk cache → 0 requests, 1 cache hit.
+	fake.resetCallCount()
+	// Register 304 for the second call (ETag conditional, will return 304).
+	fake.addResponse(searchURL, fakeResponse{
+		statusCode: 304,
+		headers:    map[string]string{"ETag": `W/"cachetag"`, "X-RateLimit-Remaining": "4998"},
+		body:       "",
+	})
+
+	_, err = c.Collect(t.Context(), domain.CollectRequest{})
+	if err != nil {
+		t.Fatalf("second Collect failed: %v", err)
+	}
+	stats = c.Stats()
+	if stats.CacheHits != 1 {
+		t.Fatalf("expected 1 cache hit, got %d", stats.CacheHits)
+	}
+}
+
+// TestCollector_Stats_ReuseReset verifies that Stats returns per-run deltas,
+// not cumulative values, when a collector instance is reused.
+func TestCollector_Stats_ReuseReset(t *testing.T) {
+	t.Parallel()
+	fake := newFakeTransport()
+
+	searchResp := ghSearchResponse{
+		TotalCount: 1,
+		Items: []ghIssue{
+			{ID: 20, Number: 1, Title: "Issue A", Body: "Body",
+				HTMLURL: "https://github.com/o/r/issues/1", State: "open",
+				CreatedAt: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+				UpdatedAt: time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC),
+				User:      ghUser{Login: "u1"}, Comments: 0,
+				RepoURL: "https://api.github.com/repos/o/r",
+			},
+		},
+	}
+	searchBody, _ := json.Marshal(searchResp)
+	searchURL := "https://api.github.com/search/issues?q=is%3Aissue+is%3Aopen&sort=updated&direction=asc&per_page=100&page=1"
+	fake.addResponse(searchURL, fakeResponse{
+		statusCode: 200,
+		headers:    map[string]string{"X-RateLimit-Remaining": "4999"},
+		body:       string(searchBody),
+	})
+
+	c, err := New(&CollectorConfig{
+		Enabled:            true,
+		SearchIssues:       true,
+		SearchDiscussions:  false,
+		MaxItemsPerRun:     100,
+		MaxCommentsPerItem: 0,
+		MaxRequests:        500,
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	c.WithTransport(fake)
+	c.WithNow(func() time.Time { return time.Date(2025, 1, 15, 0, 0, 0, 0, time.UTC) })
+
+	// Run 1: 1 request.
+	_, err = c.Collect(t.Context(), domain.CollectRequest{})
+	if err != nil {
+		t.Fatalf("collect 1 failed: %v", err)
+	}
+	stats := c.Stats()
+	if stats.Requests != 1 {
+		t.Fatalf("run 1: expected 1 request, got %d", stats.Requests)
+	}
+
+	// Run 2: use same collector, should report only run 2's requests.
+	_, err = c.Collect(t.Context(), domain.CollectRequest{})
+	if err != nil {
+		t.Fatalf("collect 2 failed: %v", err)
+	}
+	stats = c.Stats()
+	// The second call should also make 1 request (no cache, HTTP conditional 304).
+	if stats.Requests != 1 {
+		t.Fatalf("run 2: expected 1 request (per-run delta), got %d", stats.Requests)
+	}
 }

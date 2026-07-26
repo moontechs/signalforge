@@ -16,6 +16,7 @@ import (
 	"github.com/moontechs/signalforge/internal/config"
 	"github.com/moontechs/signalforge/internal/domain"
 	"github.com/moontechs/signalforge/internal/memory"
+	"github.com/moontechs/signalforge/internal/sources/github"
 	"github.com/moontechs/signalforge/internal/sources/hackernews"
 	"github.com/moontechs/signalforge/internal/sources/reddit"
 	"github.com/moontechs/signalforge/internal/sources/stackexchange"
@@ -2540,5 +2541,167 @@ func TestRedditCollectorStats_TrackCollectorStatsHandlesReddit(t *testing.T) {
 	// Ensure other stats were not modified.
 	if afterStats.HackerNewsRequests != 0 {
 		t.Errorf("expected 0 HN requests unchanged, got %d", afterStats.HackerNewsRequests)
+	}
+}
+
+func TestStatsDelta_GitHubCacheHits(t *testing.T) {
+	t.Parallel()
+
+	before := &domain.ResearchStats{
+		GitHubRequests:  5,
+		GitHubCacheHits: 2,
+	}
+	after := &domain.ResearchStats{
+		RawSignalsCollected: 20,
+		GitHubRequests:      12,
+		GitHubCacheHits:     7,
+	}
+
+	delta := statsDelta(before, after)
+	if delta.requests != 7 {
+		t.Errorf("expected requests=7, got %d", delta.requests)
+	}
+	if delta.githubCacheHits != 5 {
+		t.Errorf("expected githubCacheHits=5, got %d", delta.githubCacheHits)
+	}
+}
+
+func TestReportCollectSummary_GitHubCacheHits(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+	buf := new(strings.Builder)
+	cmd.SetOut(buf)
+
+	delta := collectStatsDelta{
+		collected:       10,
+		githubCacheHits: 3,
+		requests:        8,
+		sources: []sourceCollectionResult{
+			{name: "github", attempted: 10, collected: 10, skipped: 0},
+		},
+	}
+
+	if err := reportCollectSummary(cmd, 10, &delta); err != nil {
+		t.Fatalf("reportCollectSummary failed: %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "GitHub requests: 8 (cache hits: 3)") {
+		t.Errorf("expected 'GitHub requests: 8 (cache hits: 3)' in output, got: %s", output)
+	}
+}
+
+func TestGitHubCollectorStats_TrackCollectorStatsHandlesGitHub(t *testing.T) {
+	t.Parallel()
+
+	store := storage.New(t.TempDir())
+	mem := memory.New(store)
+
+	collectorCfg := github.CollectorConfig{
+		Enabled:            true,
+		SearchIssues:       true,
+		SearchDiscussions:  false,
+		MaxItemsPerRun:     100,
+		MaxCommentsPerItem: 0,
+		MaxRequests:        500,
+	}
+	collector, err := github.New(&collectorCfg)
+	if err != nil {
+		t.Fatalf("create github collector: %v", err)
+	}
+
+	beforeStats := mem.GetStats()
+	env := &collectEnv{
+		mem:    mem,
+		before: &beforeStats,
+	}
+
+	// trackCollectorStats should not panic with a GitHub collector.
+	trackCollectorStats(env, collector)
+
+	// Stats should be recorded (requests=0, cacheHits=0 since no calls made).
+	afterStats := mem.GetStats()
+	if afterStats.GitHubRequests != 0 {
+		t.Errorf("expected 0 github requests, got %d", afterStats.GitHubRequests)
+	}
+	if afterStats.GitHubCacheHits != 0 {
+		t.Errorf("expected 0 github cache hits, got %d", afterStats.GitHubCacheHits)
+	}
+	// Ensure other stats were not modified.
+	if afterStats.HackerNewsRequests != 0 {
+		t.Errorf("expected 0 HN requests unchanged, got %d", afterStats.HackerNewsRequests)
+	}
+}
+
+func TestGitHubCollectorStats_SaveAndLoadRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	store := storage.New(t.TempDir())
+	mem := memory.New(store)
+
+	// Add some GitHub stats manually.
+	mem.AddGitHubRequests(3)
+	mem.AddGitHubCacheHits(5)
+
+	// Save.
+	if err := mem.Save(); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	// Load into a new memory instance.
+	mem2 := memory.New(store)
+	if err := mem2.Load(); err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	loadedStats := mem2.GetStats()
+	if loadedStats.GitHubRequests != 3 {
+		t.Errorf("expected 3 github requests after reload, got %d", loadedStats.GitHubRequests)
+	}
+	if loadedStats.GitHubCacheHits != 5 {
+		t.Errorf("expected 5 github cache hits after reload, got %d", loadedStats.GitHubCacheHits)
+	}
+}
+
+func TestGitHubCollectorStats_StatsRecordedInSummary(t *testing.T) {
+	t.Parallel()
+
+	store := storage.New(t.TempDir())
+	mem := memory.New(store)
+
+	// Manually increment GitHub stats via memory.
+	mem.AddGitHubRequests(7)
+	mem.AddGitHubCacheHits(3)
+
+	afterStats := mem.GetStats()
+	beforeStats := domain.ResearchStats{}
+
+	delta := statsDelta(&beforeStats, &afterStats)
+	if delta.requests != 7 {
+		t.Errorf("expected requests=7, got %d", delta.requests)
+	}
+	if delta.githubCacheHits != 3 {
+		t.Errorf("expected githubCacheHits=3, got %d", delta.githubCacheHits)
+	}
+
+	// Verify the summary output includes these stats.
+	cmd := &cobra.Command{}
+	buf := new(strings.Builder)
+	cmd.SetOut(buf)
+	delta.sources = []sourceCollectionResult{
+		{name: "github", attempted: 7, collected: 7, skipped: 0},
+	}
+
+	if err := reportCollectSummary(cmd, 7, &delta); err != nil {
+		t.Fatalf("reportCollectSummary failed: %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "GitHub requests: 7 (cache hits: 3)") {
+		t.Errorf("expected 'GitHub requests: 7 (cache hits: 3)' in output, got: %s", output)
+	}
+	if !strings.Contains(output, "github: attempted=7, collected=7, dedup-skipped=0, status=ok") {
+		t.Errorf("expected per-source breakdown, got: %s", output)
 	}
 }

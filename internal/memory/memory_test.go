@@ -220,6 +220,49 @@ func TestAddGitHubRequests(t *testing.T) {
 	}
 }
 
+func TestAddGitHubCacheHits(t *testing.T) {
+	t.Parallel()
+	m := setupTestMemory(t)
+
+	m.AddGitHubCacheHits(5)
+	stats := m.GetStats()
+	if stats.GitHubCacheHits != 5 {
+		t.Errorf("expected 5 GitHub cache hits, got %d", stats.GitHubCacheHits)
+	}
+
+	// Zero and negative should not change.
+	m.AddGitHubCacheHits(0)
+	m.AddGitHubCacheHits(-3)
+	stats = m.GetStats()
+	if stats.GitHubCacheHits != 5 {
+		t.Errorf("expected still 5 GitHub cache hits, got %d", stats.GitHubCacheHits)
+	}
+
+	// Accumulation.
+	m.AddGitHubCacheHits(3)
+	m.AddGitHubCacheHits(7)
+	stats = m.GetStats()
+	if stats.GitHubCacheHits != 15 {
+		t.Errorf("expected 15 GitHub cache hits, got %d", stats.GitHubCacheHits)
+	}
+
+	// Concurrent safety.
+	var wg sync.WaitGroup
+	n := 50
+	wg.Add(n)
+	for i := 0; i < n; i++ {
+		go func() {
+			defer wg.Done()
+			m.AddGitHubCacheHits(1)
+		}()
+	}
+	wg.Wait()
+	stats = m.GetStats()
+	if stats.GitHubCacheHits != 15+n {
+		t.Errorf("expected %d GitHub cache hits, got %d", 15+n, stats.GitHubCacheHits)
+	}
+}
+
 func TestAddHNRequests(t *testing.T) {
 	t.Parallel()
 

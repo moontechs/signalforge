@@ -12,16 +12,16 @@
 
 ### Task 2: Track and persist GitHub request and cache-hit statistics
 
-- [ ] **Check first**: search `internal/memory/memory.go` for existing `AddGitHubRequests` and `AddGitHubCacheHits` methods. If they exist, use them as-is. If not, create them.
-- [ ] Create `AddGitHubRequests(count int)` and `AddGitHubCacheHits(count int)` methods in `internal/memory/memory.go` if not found above. Mirror the existing pattern: nonpositive-count guard, mutex-protected increment, `m.mem.Stats.GitHubRequests` / `m.mem.Stats.GitHubCacheHits` fields.
-- [ ] Add thread-safe request and cache-hit counters to `internal/sources/github/client.go` (int64 with mutex or atomic).
-- [ ] Increment the GitHub request counter only for actual outbound HTTP requests; do not count a fresh disk-cache response as a request.
-- [ ] Increment the GitHub cache-hit counter when `doRequest` returns a fresh response from the GitHub disk cache.
-- [ ] Expose a `Stats()` method from `internal/sources/github/collector.go` that returns per-run deltas (requestsSinceReset, cacheHitsSinceReset), matching the HN collector's `Stats` contract and avoiding cumulative values when a collector instance is reused.
-- [ ] Update `internal/cli/collect.go` `trackCollectorStats` (or equivalent) to recognize `*github.Collector`, call its `Stats()` method, and then call `mem.AddGitHubRequests(stats.Requests)` and `mem.AddGitHubCacheHits(stats.CacheHits)`.
-- [ ] Add memory tests for `AddGitHubRequests` and `AddGitHubCacheHits`, including zero and negative values remaining no-ops, and concurrent safety.
-- [ ] Add GitHub client/collector tests that distinguish outbound requests from fresh cache hits and verify returned per-run stats.
-- [ ] Add CLI collection tests that execute a GitHub collector path with controlled stats, save memory, reload it, and assert `github_requests` and `github_cache_hits` are persisted and included in collection-summary deltas.
+- [x] **Check first**: search `internal/memory/memory.go` for existing `AddGitHubRequests` and `AddGitHubCacheHits` methods. If they exist, use them as-is. If not, create them.
+- [x] Create `AddGitHubRequests(count int)` and `AddGitHubCacheHits(count int)` methods in `internal/memory/memory.go` if not found above. Mirror the existing pattern: nonpositive-count guard, mutex-protected increment, `m.mem.Stats.GitHubRequests` / `m.mem.Stats.GitHubCacheHits` fields.
+- [x] Add thread-safe request and cache-hit counters to `internal/sources/github/client.go` (int64 with mutex or atomic).
+- [x] Increment the GitHub request counter only for actual outbound HTTP requests; do not count a fresh disk-cache response as a request.
+- [x] Increment the GitHub cache-hit counter when `doRequest` returns a fresh response from the GitHub disk cache.
+- [x] Expose a `Stats()` method from `internal/sources/github/collector.go` that returns per-run deltas (requestsSinceReset, cacheHitsSinceReset), matching the HN collector's `Stats` contract and avoiding cumulative values when a collector instance is reused.
+- [x] Update `internal/cli/collect.go` `trackCollectorStats` (or equivalent) to recognize `*github.Collector`, call its `Stats()` method, and then call `mem.AddGitHubRequests(stats.Requests)` and `mem.AddGitHubCacheHits(stats.CacheHits)`.
+- [x] Add memory tests for `AddGitHubRequests` and `AddGitHubCacheHits`, including zero and negative values remaining no-ops, and concurrent safety.
+- [x] Add GitHub client/collector tests that distinguish outbound requests from fresh cache hits and verify returned per-run stats.
+- [x] Add CLI collection tests that execute a GitHub collector path with controlled stats, save memory, reload it, and assert `github_requests` and `github_cache_hits` are persisted and included in collection-summary deltas.
 
 ### Task 3: Ensure GitHub Discussions have an executable collection path
 
