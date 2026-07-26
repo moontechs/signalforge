@@ -40,11 +40,11 @@
 
 ### Task 2: Test coverage for Discussion collection
 
-- [ ] Add `TestCollector_DiscussionsOnly` — config with `SearchIssues: false`, `SearchDiscussions: true`, repo target; fake GraphQL response; verify discussion signals returned with `source_type: github_discussion`
-- [ ] Add `TestCollector_IssueAndDiscussion` — both enabled; verify both types present in combined results
-- [ ] Add `TestCollector_DiscussionsDisabled` — `SearchDiscussions: false`; verify no GraphQL call
-- [ ] Add `TestCollector_DiscussionsNoRepos` — `SearchDiscussions: true`, no repos; verify error returned (config validation handles this, but test the boundary)
-- [ ] Add to integration test: fake REST + GraphQL responses; verify both issue and discussion RawSignals persisted
+- [x] Add `TestCollector_DiscussionsOnly` — config with `SearchIssues: false`, `SearchDiscussions: true`, repo target; fake GraphQL response; verify discussion signals returned with `source_type: github_discussion`
+- [x] Add `TestCollector_IssueAndDiscussion` — both enabled; verify both types present in combined results
+- [x] Add `TestCollector_DiscussionsDisabled` — `SearchDiscussions: false`; verify no GraphQL call
+- [x] Add `TestCollector_DiscussionsNoRepos` — `SearchDiscussions: true`, no repos; verify error returned (config validation handles this, but test the boundary)
+- [x] Add to integration test: fake REST + GraphQL responses; verify both issue and discussion RawSignals persisted
 
 ### Task 3: Regression validation
 

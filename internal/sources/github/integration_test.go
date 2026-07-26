@@ -960,6 +960,38 @@ func TestCollect_RequestMaxItemsOverridesConfig(t *testing.T) {
 	}
 }
 
+// TestCollector_DiscussionsNoRepos verifies that when SearchDiscussions is enabled
+// but no repos are configured, no GraphQL call is made and an error is surfaced.
+func TestCollector_DiscussionsNoRepos(t *testing.T) {
+	t.Parallel()
+	fake := newFakeTransport()
+
+	c := setupCollector(t, &CollectorConfig{
+		Enabled:            true,
+		SearchIssues:       false,
+		SearchDiscussions:  true,
+		MaxItemsPerRun:     100,
+		MaxCommentsPerItem: 0,
+		Repositories:       nil, // no repos
+		MaxRequests:        500,
+	}, fake)
+	c.WithNow(func() time.Time { return collectedAt })
+
+	signals, err := c.Collect(t.Context(), domain.CollectRequest{})
+	if err != nil {
+		t.Fatalf("unexpected error (no repos should not cause an error): %v", err)
+	}
+	if len(signals) != 0 {
+		t.Fatalf("expected 0 signals with no repos, got %d", len(signals))
+	}
+
+	// Verify no GraphQL call was attempted.
+	stats := c.Stats()
+	if stats.Requests != 0 {
+		t.Fatalf("expected 0 requests (no GraphQL call) with no repos, got %d", stats.Requests)
+	}
+}
+
 // TestCollect_ZeroRequestMaxItemsUsesConfig verifies that zero req.MaxItems falls
 // back to config MaxItemsPerRun.
 func TestCollect_ZeroRequestMaxItemsUsesConfig(t *testing.T) {
