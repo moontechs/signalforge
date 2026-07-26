@@ -243,6 +243,8 @@ func (m *DefaultMemory) IncrementStat(field string) {
 		m.mem.Stats.IdeasCreated++
 	case "duplicate_ideas":
 		m.mem.Stats.DuplicateIdeas++
+	case "github_cache_hits":
+		m.mem.Stats.GitHubCacheHits++
 	}
 }
 
@@ -255,6 +257,17 @@ func (m *DefaultMemory) AddGitHubRequests(count int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.mem.Stats.GitHubRequests += count
+}
+
+// AddGitHubCacheHits increments the GitHub cache-hit count.
+func (m *DefaultMemory) AddGitHubCacheHits(count int) {
+	if count <= 0 {
+		return
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.mem.Stats.GitHubCacheHits += count
 }
 
 // AddHNRequests increments the HackerNews request count.

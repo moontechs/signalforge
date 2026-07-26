@@ -179,6 +179,7 @@ func TestIncrementStat(t *testing.T) {
 		{"jobs_created", func(s domain.ResearchStats) int { return s.JobsCreated }},
 		{"ideas_created", func(s domain.ResearchStats) int { return s.IdeasCreated }},
 		{"duplicate_ideas", func(s domain.ResearchStats) int { return s.DuplicateIdeas }},
+		{"github_cache_hits", func(s domain.ResearchStats) int { return s.GitHubCacheHits }},
 	}
 
 	for _, tt := range tests {
@@ -191,6 +192,65 @@ func TestIncrementStat(t *testing.T) {
 
 	// Unknown field should not panic.
 	m.IncrementStat("unknown_field")
+}
+
+func TestAddGitHubCacheHits(t *testing.T) {
+	t.Parallel()
+
+	t.Run("basic increment", func(t *testing.T) {
+		t.Parallel()
+		m := setupTestMemory(t)
+		m.AddGitHubCacheHits(5)
+		if got := m.GetStats().GitHubCacheHits; got != 5 {
+			t.Errorf("expected 5 GitHub cache hits, got %d", got)
+		}
+	})
+
+	t.Run("zero no change", func(t *testing.T) {
+		t.Parallel()
+		m := setupTestMemory(t)
+		m.AddGitHubCacheHits(0)
+		if got := m.GetStats().GitHubCacheHits; got != 0 {
+			t.Errorf("expected 0 GitHub cache hits, got %d", got)
+		}
+	})
+
+	t.Run("negative no change", func(t *testing.T) {
+		t.Parallel()
+		m := setupTestMemory(t)
+		m.AddGitHubCacheHits(-3)
+		if got := m.GetStats().GitHubCacheHits; got != 0 {
+			t.Errorf("expected 0 GitHub cache hits, got %d", got)
+		}
+	})
+
+	t.Run("accumulation", func(t *testing.T) {
+		t.Parallel()
+		m := setupTestMemory(t)
+		m.AddGitHubCacheHits(3)
+		m.AddGitHubCacheHits(7)
+		if got := m.GetStats().GitHubCacheHits; got != 10 {
+			t.Errorf("expected 10 GitHub cache hits, got %d", got)
+		}
+	})
+
+	t.Run("concurrent safety", func(t *testing.T) {
+		t.Parallel()
+		m := setupTestMemory(t)
+		const n = 100
+		var wg sync.WaitGroup
+		wg.Add(n)
+		for i := 0; i < n; i++ {
+			go func() {
+				defer wg.Done()
+				m.AddGitHubCacheHits(1)
+			}()
+		}
+		wg.Wait()
+		if got := m.GetStats().GitHubCacheHits; got != n {
+			t.Errorf("expected %d GitHub cache hits, got %d", n, got)
+		}
+	})
 }
 
 func TestAddGitHubRequests(t *testing.T) {
