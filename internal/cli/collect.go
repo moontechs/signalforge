@@ -477,6 +477,11 @@ func executeCollect(cmd *cobra.Command, env *collectEnv) error {
 		sr.collected = len(savedSignals)
 		totalSignals += len(savedSignals)
 		trackCollectorStats(env, collector)
+		// Persist source statistics even when the collector returned no signals.
+		// Request counts are valid independently of signal persistence.
+		if err := env.mem.Save(); err != nil {
+			persistErr = errors.Join(persistErr, fmt.Errorf("save collection stats: %w", err))
+		}
 		recordContentHashes(env, savedSignals)
 		// A collector can return incomplete signals alongside an error. Keep the
 		// successfully written payloads, but leave them eligible for a retry that
@@ -622,6 +627,11 @@ func deduplicateSignals(signals []domain.RawSignal, env *collectEnv) []domain.Ra
 
 // trackCollectorStats records source request/cache-hit stats into memory.
 func trackCollectorStats(env *collectEnv, collector domain.SourceCollector) {
+	if ghCol, ok := collector.(*github.Collector); ok {
+		stats := ghCol.Stats()
+		env.mem.AddGitHubRequests(stats.Requests)
+		env.mem.AddGitHubCacheHits(stats.CacheHits)
+	}
 	if hnCol, ok := collector.(*hackernews.Collector); ok {
 		stats := hnCol.Stats()
 		env.mem.AddHNRequests(stats.Requests)
