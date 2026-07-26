@@ -93,6 +93,39 @@ func TestCollector_WithNow(t *testing.T) {
 	}
 }
 
+func TestCollector_AddCacheHits(t *testing.T) {
+	t.Parallel()
+	c, err := New(&CollectorConfig{Enabled: true})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	c.AddCacheHits(2)
+	c.AddCacheHits(0)
+	c.AddCacheHits(-1)
+	c.AddCacheHits(3)
+
+	if got := c.Stats().CacheHits; got != 5 {
+		t.Fatalf("cache hits = %d, want 5", got)
+	}
+}
+
+func TestCollector_Collect_StatsResetPerRun(t *testing.T) {
+	t.Parallel()
+	c, err := New(&CollectorConfig{Enabled: true})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	c.AddCacheHits(4)
+
+	if _, err := c.Collect(t.Context(), domain.CollectRequest{}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := c.Stats().CacheHits; got != 0 {
+		t.Fatalf("cache hits after collection = %d, want 0", got)
+	}
+}
+
 // TestCollector_Collect_Empty verifies that Collect returns empty results.
 // when both sources are disabled.
 func TestCollector_Collect_Empty(t *testing.T) {

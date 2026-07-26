@@ -16,6 +16,7 @@ import (
 	"github.com/moontechs/signalforge/internal/config"
 	"github.com/moontechs/signalforge/internal/domain"
 	"github.com/moontechs/signalforge/internal/memory"
+	"github.com/moontechs/signalforge/internal/sources/github"
 	"github.com/moontechs/signalforge/internal/sources/hackernews"
 	"github.com/moontechs/signalforge/internal/sources/reddit"
 	"github.com/moontechs/signalforge/internal/sources/stackexchange"
@@ -2540,5 +2541,31 @@ func TestRedditCollectorStats_TrackCollectorStatsHandlesReddit(t *testing.T) {
 	// Ensure other stats were not modified.
 	if afterStats.HackerNewsRequests != 0 {
 		t.Errorf("expected 0 HN requests unchanged, got %d", afterStats.HackerNewsRequests)
+	}
+}
+
+func TestGitHubStatsPersistWhenNoSignals(t *testing.T) {
+	t.Parallel()
+	store := storage.New(t.TempDir())
+	mem := memory.New(store)
+	collector, err := github.New(&github.CollectorConfig{Enabled: true})
+	if err != nil {
+		t.Fatalf("create github collector: %v", err)
+	}
+	collector.AddCacheHits(3)
+	env := &collectEnv{mem: mem}
+
+	// A run can produce no signals while still having valid source statistics.
+	trackCollectorStats(env, collector)
+	if err := mem.Save(); err != nil {
+		t.Fatalf("save memory: %v", err)
+	}
+
+	loaded := memory.New(store)
+	if err := loaded.Load(); err != nil {
+		t.Fatalf("load memory: %v", err)
+	}
+	if got := loaded.GetStats().GitHubCacheHits; got != 3 {
+		t.Fatalf("persisted github cache hits = %d, want 3", got)
 	}
 }
