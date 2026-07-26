@@ -39,13 +39,13 @@
 
 ### Task 4: Run regression and quality validation
 
-- [ ] Format all modified Go files with `gofmt`.
-- [ ] Run focused GitHub, Hacker News, memory, config, and CLI tests with cache disabled.
-- [ ] Run the complete test suite: `go test ./... -count=1`.
-- [ ] Run `go vet ./...` and `golangci-lint run ./...`.
-- [ ] Run `go build ./cmd/signalforge/` to verify binary compiles.
-- [ ] Confirm `signalforge collect --sources github --max-items 1 --dry-run` reports the requested cap and that a configured GitHub Discussions run requires repository targets before making network calls.
-- [ ] **Important**: All `git commit` and `git push` commands MUST use `--no-verify` to bypass the pre-push hook (golangci-lint may temporarily fail). Examples:
+- [x] Format all modified Go files with `gofmt`.
+- [x] Run focused GitHub, Hacker News, memory, config, and CLI tests with cache disabled.
+- [x] Run the complete test suite: `go test ./... -count=1`.
+- [x] Run `go vet ./...` and `golangci-lint run ./...`.
+- [x] Run `go build ./cmd/signalforge/` to verify binary compiles.
+- [x] Confirm `signalforge collect --sources github --max-items 1 --dry-run` reports the requested cap and that a configured GitHub Discussions run requires repository targets before making network calls.
+- [x] **Important**: All `git commit` and `git push` commands MUST use `--no-verify` to bypass the pre-push hook (golangci-lint may temporarily fail). Examples:
   - `git add -A && git commit -m "..." --no-verify`
   - `git push -u origin HEAD --no-verify`
 

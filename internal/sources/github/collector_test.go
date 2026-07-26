@@ -343,14 +343,16 @@ func TestCollector_Stats_AfterCollect(t *testing.T) {
 	searchResp := ghSearchResponse{
 		TotalCount: 2,
 		Items: []ghIssue{
-			{ID: 1, Number: 1, Title: "Issue 1", Body: "Body 1",
+			{
+				ID: 1, Number: 1, Title: "Issue 1", Body: "Body 1",
 				HTMLURL: "https://github.com/o/r/issues/1", State: "open",
 				CreatedAt: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
 				UpdatedAt: time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC),
 				User:      ghUser{Login: "u1"}, Comments: 0,
 				RepoURL: "https://api.github.com/repos/o/r",
 			},
-			{ID: 2, Number: 2, Title: "Issue 2", Body: "Body 2",
+			{
+				ID: 2, Number: 2, Title: "Issue 2", Body: "Body 2",
 				HTMLURL: "https://github.com/o/r/issues/2", State: "open",
 				CreatedAt: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
 				UpdatedAt: time.Date(2025, 1, 3, 0, 0, 0, 0, time.UTC),
@@ -405,7 +407,8 @@ func TestCollector_Stats_WithCacheHit(t *testing.T) {
 	searchResp := ghSearchResponse{
 		TotalCount: 1,
 		Items: []ghIssue{
-			{ID: 10, Number: 1, Title: "Cached issue", Body: "Body",
+			{
+				ID: 10, Number: 1, Title: "Cached issue", Body: "Body",
 				HTMLURL: "https://github.com/o/r/issues/1", State: "open",
 				CreatedAt: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
 				UpdatedAt: time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC),
@@ -478,7 +481,8 @@ func TestCollector_Stats_ReuseReset(t *testing.T) {
 	searchResp := ghSearchResponse{
 		TotalCount: 1,
 		Items: []ghIssue{
-			{ID: 20, Number: 1, Title: "Issue A", Body: "Body",
+			{
+				ID: 20, Number: 1, Title: "Issue A", Body: "Body",
 				HTMLURL: "https://github.com/o/r/issues/1", State: "open",
 				CreatedAt: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
 				UpdatedAt: time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC),

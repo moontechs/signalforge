@@ -900,31 +900,36 @@ func TestCollect_RequestMaxItemsOverridesConfig(t *testing.T) {
 	// Per-repo issues endpoint: return 5 issues but request cap is 2.
 	issuesPrefix := "https://api.github.com/repos/o/r/issues?state=open&sort=updated&direction=asc&per_page="
 	issues := []ghIssue{
-		{ID: 11001, Number: 1, Title: "Issue 1", Body: "Body 1",
+		{
+			ID: 11001, Number: 1, Title: "Issue 1", Body: "Body 1",
 			HTMLURL: "https://github.com/o/r/issues/1", State: "open",
 			CreatedAt: t1, UpdatedAt: t2,
 			User: ghUser{Login: "u1"}, Comments: 0,
 			RepoURL: "https://api.github.com/repos/o/r",
 		},
-		{ID: 11002, Number: 2, Title: "Issue 2", Body: "Body 2",
+		{
+			ID: 11002, Number: 2, Title: "Issue 2", Body: "Body 2",
 			HTMLURL: "https://github.com/o/r/issues/2", State: "open",
 			CreatedAt: t1, UpdatedAt: t2,
 			User: ghUser{Login: "u2"}, Comments: 0,
 			RepoURL: "https://api.github.com/repos/o/r",
 		},
-		{ID: 11003, Number: 3, Title: "Issue 3", Body: "Body 3",
+		{
+			ID: 11003, Number: 3, Title: "Issue 3", Body: "Body 3",
 			HTMLURL: "https://github.com/o/r/issues/3", State: "open",
 			CreatedAt: t1, UpdatedAt: t2,
 			User: ghUser{Login: "u3"}, Comments: 0,
 			RepoURL: "https://api.github.com/repos/o/r",
 		},
-		{ID: 11004, Number: 4, Title: "Issue 4", Body: "Body 4",
+		{
+			ID: 11004, Number: 4, Title: "Issue 4", Body: "Body 4",
 			HTMLURL: "https://github.com/o/r/issues/4", State: "open",
 			CreatedAt: t1, UpdatedAt: t2,
 			User: ghUser{Login: "u4"}, Comments: 0,
 			RepoURL: "https://api.github.com/repos/o/r",
 		},
-		{ID: 11005, Number: 5, Title: "Issue 5", Body: "Body 5",
+		{
+			ID: 11005, Number: 5, Title: "Issue 5", Body: "Body 5",
 			HTMLURL: "https://github.com/o/r/issues/5", State: "open",
 			CreatedAt: t1, UpdatedAt: t2,
 			User: ghUser{Login: "u5"}, Comments: 0,
@@ -964,19 +969,22 @@ func TestCollect_ZeroRequestMaxItemsUsesConfig(t *testing.T) {
 	// Per-repo issues endpoint: return 3 issues, config cap is 2.
 	issuesPrefix := "https://api.github.com/repos/o/r/issues?state=open&sort=updated&direction=asc&per_page="
 	issues := []ghIssue{
-		{ID: 12001, Number: 1, Title: "Issue A", Body: "Body A",
+		{
+			ID: 12001, Number: 1, Title: "Issue A", Body: "Body A",
 			HTMLURL: "https://github.com/o/r/issues/1", State: "open",
 			CreatedAt: t1, UpdatedAt: t2,
 			User: ghUser{Login: "u1"}, Comments: 0,
 			RepoURL: "https://api.github.com/repos/o/r",
 		},
-		{ID: 12002, Number: 2, Title: "Issue B", Body: "Body B",
+		{
+			ID: 12002, Number: 2, Title: "Issue B", Body: "Body B",
 			HTMLURL: "https://github.com/o/r/issues/2", State: "open",
 			CreatedAt: t1, UpdatedAt: t2,
 			User: ghUser{Login: "u2"}, Comments: 0,
 			RepoURL: "https://api.github.com/repos/o/r",
 		},
-		{ID: 12003, Number: 3, Title: "Issue C", Body: "Body C",
+		{
+			ID: 12003, Number: 3, Title: "Issue C", Body: "Body C",
 			HTMLURL: "https://github.com/o/r/issues/3", State: "open",
 			CreatedAt: t1, UpdatedAt: t2,
 			User: ghUser{Login: "u3"}, Comments: 0,

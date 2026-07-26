@@ -2753,7 +2753,7 @@ func TestExecuteCollect_GitHubMixedIssuesAndDiscussions(t *testing.T) {
 			}
 			body, _ := json.Marshal(issues)
 			return &http.Response{
-				StatusCode: 200,
+				StatusCode: http.StatusOK,
 				Body:       io.NopCloser(strings.NewReader(string(body))),
 				Header:     http.Header{"X-RateLimit-Remaining": []string{"4999"}, "X-RateLimit-Reset": []string{"0"}},
 			}, nil
@@ -2784,7 +2784,7 @@ func TestExecuteCollect_GitHubMixedIssuesAndDiscussions(t *testing.T) {
 			}
 			body, _ := json.Marshal(discResp)
 			return &http.Response{
-				StatusCode: 200,
+				StatusCode: http.StatusOK,
 				Body:       io.NopCloser(strings.NewReader(string(body))),
 				Header:     http.Header{"X-RateLimit-Remaining": []string{"4998"}, "X-RateLimit-Reset": []string{"0"}},
 			}, nil
@@ -2805,7 +2805,7 @@ func TestExecuteCollect_GitHubMixedIssuesAndDiscussions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	collector.WithTransport(githubTransportFunc(transport))
+	collector.WithTransport(transport)
 	collector.WithNow(func() time.Time { return time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC) })
 
 	beforeStats := mem.GetStats()
@@ -2915,7 +2915,7 @@ func TestExecuteCollect_GitHubDiscussionsOnly(t *testing.T) {
 			}
 			body, _ := json.Marshal(discResp)
 			return &http.Response{
-				StatusCode: 200,
+				StatusCode: http.StatusOK,
 				Body:       io.NopCloser(strings.NewReader(string(body))),
 				Header:     http.Header{"X-RateLimit-Remaining": []string{"4999"}, "X-RateLimit-Reset": []string{"0"}},
 			}, nil
@@ -2936,7 +2936,7 @@ func TestExecuteCollect_GitHubDiscussionsOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	collector.WithTransport(githubTransportFunc(transport))
+	collector.WithTransport(transport)
 	collector.WithNow(func() time.Time { return time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC) })
 
 	beforeStats := mem.GetStats()

@@ -199,13 +199,6 @@ func (c *githubClient) incrementCacheHits() {
 	c.cacheHits++
 }
 
-// cacheHitCountValue returns the current cache hit count (thread-safe).
-func (c *githubClient) cacheHitCountValue() int {
-	c.statsMutex.Lock()
-	defer c.statsMutex.Unlock()
-	return c.cacheHits
-}
-
 // Stats returns the current request and cache-hit counters.
 func (c *githubClient) Stats() Stats {
 	c.statsMutex.Lock()
