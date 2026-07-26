@@ -24,8 +24,8 @@ Current output: `0000be33...  (modified: 2026-07-25T22:23:37Z, size: 2379 bytes)
 
 ### Task 1: Add `raw-signals` alias
 
-- [ ] In `validTypes` map, add `"raw-signals": "raw-signals"` entry
-- [ ] Also add alias to help text: "signals (raw-signals)"
+- [x] In `validTypes` map, add `"raw-signals": "raw-signals"` entry
+- [x] Also add alias to help text: "signals (raw-signals)"
 
 ### Task 2: Improve signal listing output
 

@@ -15,11 +15,12 @@ import (
 
 // Valid types for list/show commands.
 var validTypes = map[string]string{
-	"signals":  "raw-signals",
-	"clusters": "clusters",
-	"jobs":     "jobs",
-	"ideas":    "ideas",
-	"runs":     "runs",
+	"signals":     "raw-signals",
+	"raw-signals": "raw-signals",
+	"clusters":    "clusters",
+	"jobs":        "jobs",
+	"ideas":       "ideas",
+	"runs":        "runs",
 }
 
 // ListCmd represents the signalforge list command.
@@ -28,7 +29,7 @@ var ListCmd = &cobra.Command{
 	Short: "List items from storage",
 	Long: `Lists items stored in the SignalForge data directory.
 
-Supported types: signals, clusters, jobs, ideas, runs, all
+Supported types: signals (raw-signals), clusters, jobs, ideas, runs, all
 
 Use 'signalforge list all' to show everything.`,
 	Args: cobra.ExactArgs(1),
@@ -49,7 +50,7 @@ Use 'signalforge list all' to show everything.`,
 
 		subDir, ok := validTypes[itemType]
 		if !ok {
-			return fmt.Errorf("unsupported type: %s (supported: signals, clusters, jobs, ideas, runs, all)", itemType)
+			return fmt.Errorf("unsupported type: %s (supported: signals (raw-signals), clusters, jobs, ideas, runs, all)", itemType)
 		}
 
 		return listType(cmd, store, itemType, subDir, limit, offset)
