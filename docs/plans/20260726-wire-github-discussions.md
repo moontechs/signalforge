@@ -48,12 +48,12 @@
 
 ### Task 3: Regression validation
 
-- [ ] Run `go test ./internal/sources/github/... -v -count=1`
-- [ ] Run `go test ./internal/cli/... -v -count=1`
-- [ ] Run `go test ./... -count=1`
-- [ ] Run `go vet ./...` and `golangci-lint run ./...`
-- [ ] Run `go build ./cmd/signalforge/`
-- [ ] **All `git commit` and `git push` MUST use `--no-verify`**
+- [x] Run `go test ./internal/sources/github/... -v -count=1`
+- [x] Run `go test ./internal/cli/... -v -count=1`
+- [x] Run `go test ./... -count=1`
+- [x] Run `go vet ./...` and `golangci-lint run ./...`
+- [x] Run `go build ./cmd/signalforge/`
+- [x] **All `git commit` and `git push` MUST use `--no-verify`**
 
 ## Validation Commands
 
