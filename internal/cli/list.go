@@ -10,16 +10,18 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/moontechs/signalforge/internal/config"
+	"github.com/moontechs/signalforge/internal/domain"
 	"github.com/moontechs/signalforge/internal/storage"
 )
 
 // Valid types for list/show commands.
 var validTypes = map[string]string{
-	"signals":  "raw-signals",
-	"clusters": "clusters",
-	"jobs":     "jobs",
-	"ideas":    "ideas",
-	"runs":     "runs",
+	"signals":     "raw-signals",
+	"raw-signals": "raw-signals",
+	"clusters":    "clusters",
+	"jobs":        "jobs",
+	"ideas":       "ideas",
+	"runs":        "runs",
 }
 
 // ListCmd represents the signalforge list command.
@@ -28,7 +30,7 @@ var ListCmd = &cobra.Command{
 	Short: "List items from storage",
 	Long: `Lists items stored in the SignalForge data directory.
 
-Supported types: signals, clusters, jobs, ideas, runs, all
+Supported types: signals (raw-signals), clusters, jobs, ideas, runs, all
 
 Use 'signalforge list all' to show everything.`,
 	Args: cobra.ExactArgs(1),
@@ -49,7 +51,7 @@ Use 'signalforge list all' to show everything.`,
 
 		subDir, ok := validTypes[itemType]
 		if !ok {
-			return fmt.Errorf("unsupported type: %s (supported: signals, clusters, jobs, ideas, runs, all)", itemType)
+			return fmt.Errorf("unsupported type: %s (supported: signals (raw-signals), clusters, jobs, ideas, runs, all)", itemType)
 		}
 
 		return listType(cmd, store, itemType, subDir, limit, offset)
@@ -63,7 +65,14 @@ func init() {
 
 func listAll(cmd *cobra.Command, store *storage.Storage, limit, offset int) error {
 	anyItems := false
+	// Deduplicate by subDir to avoid showing same directory twice
+	// (e.g., "signals" and "raw-signals" both map to "raw-signals" dir)
+	seenDirs := make(map[string]string) // subDir -> typeName for header
 	for typeName, subDir := range validTypes {
+		if _, exists := seenDirs[subDir]; exists {
+			continue // already shown this directory
+		}
+		seenDirs[subDir] = typeName
 		items, err := listItems(store, subDir, limit, offset)
 		if err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "Warning: cannot list %s: %v\n", typeName, err)
@@ -127,14 +136,28 @@ func listItems(store *storage.Storage, subDir string, limit, offset int) ([]stri
 	items := make([]string, 0, len(files))
 	for _, f := range files {
 		name := filepath.Base(f)
-		// Try to read basic info from the file.
+		id := strings.TrimSuffix(name, ".json")
+
+		// Try to parse as RawSignal for detailed output.
+		var signal domain.RawSignal
+		if err := store.LoadJSON(f, &signal); err == nil && signal.Source != "" {
+			title := signal.Title
+			if len(title) > 80 {
+				title = title[:80] + "..."
+			}
+			items = append(items, fmt.Sprintf("%s  source: %s  title: %q  url: %s  created: %s",
+				id, signal.Source, title, signal.URL, signal.CreatedAt.Format(time.RFC3339)))
+			continue
+		}
+
+		// Fall back to basic file info.
 		info, err := os.Stat(f)
 		if err != nil {
 			items = append(items, name+" (unreadable)")
 			continue
 		}
 		items = append(items, fmt.Sprintf("%s  (modified: %s, size: %d bytes)",
-			strings.TrimSuffix(name, ".json"),
+			id,
 			info.ModTime().Format(time.RFC3339),
 			info.Size(),
 		))
